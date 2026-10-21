@@ -12,8 +12,9 @@ import {
   mergeTakeoffImport as mergeJs,
 } from "../../web/src/lib/importTakeoff.js";
 import { UserError } from "./format.ts";
-import { sanitizeApprovals, type Session, type Shape, type Condition, type Markup, type Rfi, type TakeoffProposal, type ConditionEditProposal } from "./session.ts";
+import { sanitizeApprovals, type Session, type Shape, type Condition, type Markup, type Rfi, type TakeoffProposal, type ConditionEditProposal, type CableRun } from "./session.ts";
 import type { Rule } from "../../web/src/lib/rules.ts";
+import { sanitizeCableRuns } from "../../web/src/lib/cable.js";
 
 // untyped canvas JS — typed facades state the contract at the boundary
 const parseTakeoffImport = parseJs as unknown as (text: string) => Record<string, unknown>;
@@ -71,6 +72,11 @@ export async function importTakeoff(session: Session, filePath: string) {
   // (the session's current proposal is untouched by an import).
   session.proposals = (Array.isArray(payload.proposals) ? payload.proposals as TakeoffProposal[] : []).filter((p) => p && typeof p === "object" && typeof p.id === "string");
   session.conditionEditProposals = (Array.isArray(payload.condition_edit_proposals) ? payload.condition_edit_proposals as ConditionEditProposal[] : []).filter((p) => p && typeof p === "object" && typeof p.id === "string");
+  // cable runs (Division 27): transport, not minting — the merge appended
+  // unseen ids; the same load gate the canvas hydrate runs. A run whose
+  // shapes sit on a sheet this session never loaded (a stitched composite)
+  // arrives intact and resolves as broken with that reason — never dropped.
+  session.cableRuns = sanitizeCableRuns(payload.cable_runs) as CableRun[];
   // scales: mergeTakeoffImport already applied "the session's calibration wins
   // per sheet" — adopt the merged rows onto sheets this document actually has
   for (const row of (payload.sheets as { sheet_id: string; units_per_px: number; scale_source?: string; scale_confirmed?: boolean }[]) ?? []) {

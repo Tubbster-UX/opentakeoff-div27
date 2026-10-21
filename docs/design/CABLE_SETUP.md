@@ -1,6 +1,6 @@
 # OpenTakeoff Division 27 Cable Setup — Design Spec
 
-Oct 20, 2026 · @Alexavier
+Oct 20, 2026 · @Alexavier · decisions recorded Oct 21, 2026 (see "Decisions" at the end; the plan in [CABLE_SETUP_PLAN.md](CABLE_SETUP_PLAN.md) carries the code check)
 
 ## Purpose, scope and non-goals
 
@@ -67,7 +67,7 @@ Access control door vertical has no starting value and must be entered before th
 
 ### Telecom room marker
 
-A point per TR with a `name` (MDF, IDF-1, TR-2) and the sheet it sits on. Stored as a count shape on a condition flagged `role: "tr"`, so it reuses existing placement, provenance and undo.
+A point per TR with a name (MDF, IDF-1, TR-2) and the sheet it sits on. Stored as a count shape on a condition flagged `role: "tr"`, so it reuses existing placement, provenance and undo. **Decision:** the name is the shape's existing `label` field (the canvas label field and MCP `edit_shape { label }` set it); see the side effect under Decisions.
 
 ### Run
 
@@ -96,7 +96,7 @@ Each linked run produces one pull, its cable count, and a cable length built onl
 \text{location}_{LF} = \text{per cable}_{LF} \times \text{cables} \qquad \text{order}_{LF} = \text{location}_{LF} \times (1 + \text{waste})
 ```
 
-Pulls = count of linked runs. Cables = sum of cables across runs. Full precision is kept in storage and in Excel cells; rounding is display only.
+Pulls = count of linked runs. Cables = sum of cables across runs. Full precision is kept in storage and in Excel cells; rounding is display only. **As built:** a measured length is stored to 0.01 ft by the engine (every shape's `computed.perimeter_lf` is rounded at commit); the cable math keeps full precision from there. Route LF reads each segment's **plan** length (`plan_lf ?? perimeter_lf`): a segment that carries the engine's rise/drop legs (#441) is read without them, the run notes it, and the report, `list_runs` and the Cable summary row warn that the regular report's leg-inclusive LF for that condition is not a cable length. The condition's ×N multiplier applies to pulls, cables and cable LF together in the Cable summary; the Cable runs sheet stays unmultiplied and carries a Multiplier column.
 
 ### Worked examples (these become unit tests)
 
@@ -116,7 +116,7 @@ Runs inherit the engine's existing scale gate and provenance rules; nothing here
 - **Stitched sheets.** A route traced across a stitched match line is one segment, as today.
 - **Unstitched sheets.** A run may list segments from several sheets (a device on the second floor homing to a first-floor TR). Each segment is measured at its own sheet's scale. The engine's rule that one trace can't span two grouped sheets stays in force.
 - **Device and TR on different sheets.** Allowed; the link is by ID, not by geometry.
-- **Agent-made runs** land as pencil proposals, like any agent shape, and are treated in totals exactly as the engine already treats unaccepted agent shapes (verify which that is). Accepting a run does not accept its route segments; each keeps its own review status.
+- **Agent-made runs** land as pencil proposals, like any agent shape, and are treated in totals exactly as the engine already treats unaccepted agent shapes. **Verified:** unaccepted agent shapes COUNT in every total and are disclosed, never excluded; pending runs therefore count too, with a review status per run, a "Pending runs" column on the Cable summary and a pending-run count on the marked-set cover. Accepting a run does not accept its route segments; each keeps its own review status.
 - **Deleting a linked shape** marks the run broken and lists it as unlinked. It never silently drops the run or its length.
 
 ## Report and export output
@@ -131,14 +131,18 @@ The Excel export gains two sheets built for a bid workbook to reference directly
 | Device type | — |
 | Cable type | — |
 | TR | — |
+| Device EA | EA |
 | Pulls | EA |
 | Cables | EA |
 | Measured route LF | LF |
 | Cable LF (net) | LF |
 | Cable LF (order, with waste) | LF |
 | Unlinked devices | EA |
+| Pending runs | EA |
 
-**Cable runs** (one row per run): run ID, condition, device type, cable type, TR, sheet(s), route LF, vertical, loop at device, loop at TR, per-cable LF, cables, location LF, review status.
+Device EA sits beside Pulls so an unlinked device shows as a gap, in addition to the Unlinked list. The cable tabs, columns and report blocks appear **only when a cable condition exists**, so a document that never used the feature exports byte-for-byte as before.
+
+**Cable runs** (one row per run): run ID, condition, device type, cable type, TR, sheet(s), route LF, vertical, loop at device, loop at TR, per-cable LF, cables, location LF, multiplier, status (linked / withheld / broken with its reason), review status.
 
 **In-app Report** shows the Cable summary table and an Unlinked list with a link that puts each item on screen.
 
@@ -158,7 +162,7 @@ Reuse existing verbs wherever possible and add the minimum new ones; the repo's 
 | `unlink_run` | New | Removes a run; shapes stay |
 | `takeoff_summary` / `export_takeoff` / `export_report` | Extended | Include the cable summary and runs |
 
-`link_run` refuses, with an actionable message, when a route ID is not a measured linear shape, a sheet is unscaled, the device condition lacks a required value, or the TR ID is not a TR marker. An agent cannot submit a length; it can only link shapes that already carry measured geometry.
+`link_run` refuses, with an actionable message, when a route ID is not a measured linear shape, a sheet is unscaled, the device condition lacks a required value, the TR ID is not a TR marker, or the device is already linked (one pull per location). An agent cannot submit a length; it can only link shapes that already carry measured geometry. A run whose route segment sits on a stitched surface (`stitch:<uid>`) survives MCP import → export → import with its stored length intact and is reported broken with a stated reason (stitches never round-trip through MCP), never dropped or zeroed.
 
 ## Canvas UI
 
@@ -200,10 +204,18 @@ All cable math lives in one pure library with no React or DOM, imported by both 
 
 Work happens on a branch in a private fork. Nothing is pushed upstream or opened as a PR without Alexavier's go-ahead.
 
-## Open decisions for Alexavier
+## Decisions
 
-Three calls change what gets built; everything else in this spec is settled.
+Recorded from the plan review on Oct 21, 2026. The three spec decisions were left blank in the review reply and were taken at the plan's stated defaults; say so if any should flip.
 
-- [ ] **Access control door vertical.** Enter a starting value, or keep it blank and required per job.
-- [ ] **Shared trunk segments.** Allow one traced segment to belong to many runs (trace a corridor trunk once, branch to each device), or require one full route per location as in the current Bluebeam method. Shared segments save tracing; they also make a wrong trunk wrong for every run on it.
-- [ ] **Private fork or upstream.** Keep it in a private fork, or open an RFC issue with the maintainer first and contribute it back under their CLA.
+- [x] **Access control door vertical.** Blank and required per job (the plan's default). Its runs are withheld with the stated reason until a vertical is entered.
+- [x] **Shared trunk segments.** Allowed: one traced segment may belong to many runs (the plan's default; nothing in the data model prevents it and a refusal needs a rule not yet chosen). Route LF is counted per run, so a shared trunk's length appears in every run that uses it, which is the physical truth for cable. A wrong trunk is wrong for every run on it.
+- [x] **Private fork or upstream.** Stay in the fork; no upstream push or PR either way until Alexavier says so.
+- [x] **TR name field.** The shape's existing `label`. Side effect, documented in FEATURES.md: the Report's group-by-label view and the workbook's floor × room tab show a bucket per TR name carrying the TR condition's EA.
+- [x] **×N multiplier.** Applies to pulls, cables and cable LF together in the Cable summary; the Cable runs sheet stays unmultiplied with a Multiplier column.
+- [x] **Conditional tabs, columns and blocks.** Cable output appears only when a cable condition exists; old documents export byte-for-byte.
+- [x] **Route LF.** Plan length only (`plan_lf ?? perimeter_lf`), legs ignored; a warning in the report, `list_runs` and the run note whenever a segment sits on a linear condition with nonzero rise or drop.
+- [x] **Pending agent runs.** Count, as the engine counts pending shapes; "Pending runs" on the Cable summary, a pending-run count on the marked-set cover.
+- [x] **MCP version.** 0.9.98 → 0.9.99 across all seven fields (the fork's CI guard).
+- [x] **Undo.** Link and unlink are undoable; cable-setup field edits follow the condition editor's existing convention (not undoable), like roll goods.
+- [x] **Branch.** `claude/div27-cable-setup-c6t9wu` on the fork.

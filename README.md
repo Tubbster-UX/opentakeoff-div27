@@ -5,7 +5,7 @@
 **The measurement engine for building plans—built so an AI agent can drive it, and so an estimator wants to.**
 
 A takeoff is the act of measuring quantities off a construction drawing. OpenTakeoff does it
-two ways over one engine: **<!--tool-count-->53<!--/tool-count--> MCP tools** for an agent, and a browser canvas for a person.
+two ways over one engine: **<!--tool-count-->56<!--/tool-count--> MCP tools** for an agent, and a browser canvas for a person.
 Agents and people share the takeoff document and quantity calculations. Each sheet carries
 its calibration; measurements carry geometry, method and authorship. Recalibration updates
 quantities together, incompatible imports report scale conflicts, and agent measurements
@@ -29,7 +29,7 @@ carry an explicit review status. See the [Phase 1 test guide](docs/PHASE_1_TESTI
 
 **Watch it:** [an autonomous agent runs a takeoff, live, no cuts (2:47)](https://youtu.be/e--kXxSGv7Y) · [hospital finish plan → report in about a minute (1:14)](https://youtu.be/cNDpPkTLY1k) · [canvas walkthrough (1:10)](https://youtu.be/aHiW8H2TSBs) · [One-Click Area (0:51)](https://youtu.be/YIjWZ-BAhLE)
 
-> **One-Click Area is temporarily gated.** The flood engine is being re-validated against a wider plan corpus. Until that finishes the One-Click tool is off the canvas rail (`O` reports the gate) and the `one_click` / `detect_rooms` MCP verbs are **not registered** (a default build ships <!--tool-count-->53<!--/tool-count--> tools). Trace rooms with **Area** (`A`) in the canvas and `measure_polygon` over MCP; every other tool, sweep and derivation is unchanged. A build lifts the gate with `VITE_ONE_CLICK=1` (canvas) / `OPENTAKEOFF_ONE_CLICK=1` (server). Sections and videos below that show One-Click describe the engine as it returns — see [`docs/design/ONE_CLICK_GATE.md`](docs/design/ONE_CLICK_GATE.md).
+> **One-Click Area is temporarily gated.** The flood engine is being re-validated against a wider plan corpus. Until that finishes the One-Click tool is off the canvas rail (`O` reports the gate) and the `one_click` / `detect_rooms` MCP verbs are **not registered** (a default build ships <!--tool-count-->56<!--/tool-count--> tools). Trace rooms with **Area** (`A`) in the canvas and `measure_polygon` over MCP; every other tool, sweep and derivation is unchanged. A build lifts the gate with `VITE_ONE_CLICK=1` (canvas) / `OPENTAKEOFF_ONE_CLICK=1` (server). Sections and videos below that show One-Click describe the engine as it returns — see [`docs/design/ONE_CLICK_GATE.md`](docs/design/ONE_CLICK_GATE.md).
 
 <br/>
 
@@ -84,7 +84,7 @@ otherwise, and nothing an autonomous agent could call.
 OpenTakeoff is that engine, with two front ends sharing geometry and quantity modules:
 
 - **Review cleanup**—agents can edit annotation text with undo while preserving geometry and review; RFI-linked notes require browser review. Scope warnings distinguish numeric edge residue from real small overlaps.
-- **A stdio MCP server**—`npx -y opentakeoff-mcp`, <!--tool-count-->53<!--/tool-count--> tools, on the
+- **A stdio MCP server**—`npx -y opentakeoff-mcp`, <!--tool-count-->56<!--/tool-count--> tools, on the
   [official MCP registry](https://registry.modelcontextprotocol.io). An agent opens a plan,
   reads the title block, sets the scale, traces the rooms to their wall faces (the flood engine
   stays gated), checks its own work on a rendered overlay, and hands back a marked-up planset PDF.
@@ -145,6 +145,12 @@ second use is not a side effect; see [the data layer](#the-data-layer--why-this-
   gets the schedule row with a citation per cell, across continuation sheets, rotated headers,
   and multi-building keys: `sheet_graph` / `resolve_tag` / `find_schedule`
   ([#87](https://github.com/Kentucky-ai/opentakeoff/issues/87))
+- **Division 27 cable runs** (headless in this build)—opt a count condition into a cable setup,
+  flag a telecom-room condition, trace routes with the Linear tool or `measure_line`, and
+  `link_run` joins device → route → TR: per cable LF from the measured route plus the setup's
+  vertical and service loops, pulls and cables per location, waste on the order figure only, no
+  routing factor and nothing estimated. Cable summary and runs ride the report, CSV and
+  workbook ([design](docs/design/CABLE_SETUP.md))
 - **Roll goods**—opt a condition into broadloom or sheet material and the engine figures the
   seams: lanes, multi-roll splits, cuts drawn to scale over their rooms in cutting order, a
   to-scale roll diagram with drag-to-reorder, and order footage beside the measured quantities
@@ -539,6 +545,7 @@ key) or an **Anthropic-style** one, plus a vision-capable model id.
 | **Conditions** | Color + CAD hatch per finish, waste %, ×N multiplier, wall height, border thickness, schedule import, browser-wide library |
 | **Supporting Materials** | Labor + subfloor type, coverage rate × basis (incl. figured seam LF) → rounded order quantities, trowel/roller presets, grout calculator |
 | **Roll goods** | Per-condition roll setup → lanes, seams, multi-roll splits, to-scale cuts with drag-to-reorder nesting, Roll Order LF + Rolls + figured Seam LF on every export |
+| **Division 27 cable runs** | Per-condition cable setup + TR markers → runs that link a device to its measured route and TR; pulls, cables and cable LF (net and with waste) per condition × TR, a per-run sheet and an unlinked list on the report, CSV and workbook; MCP `link_run` / `list_runs` / `unlink_run` (canvas tools follow) |
 | **Multi-sheet** | Sheets tree with title-block sheet numbers, sheet gallery, tabs and side-by-side groups, Regroup, levels, **stitching across a match line**, PDF layer roles |
 | **Search and copy** | Search every sheet's text from the gallery, **Copy text** from a box or a whole sheet, and read a scanned sheet on-device (OCR, labelled wherever it's used) |
 | **Report** | Per-condition Floor/Wall/Border SF, LF, EA, SY with and without waste, plus the combined buy list; columns, grouping, saved templates |
@@ -548,7 +555,7 @@ key) or an **Anthropic-style** one, plus a vision-capable model id.
 | **Voice** | Push-to-talk takeoff commands, recognized on-device in WebAssembly; audio never leaves the browser — gated off the toolbar by default (`VITE_COMMAND_BOX=1`) |
 | **View** | Light or **dark (negative print)**—sheet pixels inverted at draw time, exports follow |
 | **Storage** | IndexedDB + localStorage—client-only, nothing uploaded |
-| **MCP server** | <!--tool-count-->53<!--/tool-count--> tools + browsable sheet resources on stdio, multi-document sessions ([`mcp/`](mcp/README.md)) |
+| **MCP server** | <!--tool-count-->56<!--/tool-count--> tools + browsable sheet resources on stdio, multi-document sessions ([`mcp/`](mcp/README.md)) |
 | **Provenance** | Every shape records its scale, its method, its confidence, and whether a person or an agent made it |
 | **Capture (opt-in)** | Bundled [capture server](capture/README.md) banks each contributed takeoff as (geometry → label) training rows |
 | **Deploy** | One static build—Netlify, Vercel, GitHub Pages, Cloudflare Pages, S3, any static host |

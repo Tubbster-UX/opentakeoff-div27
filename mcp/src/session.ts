@@ -68,6 +68,10 @@ import { sanitizeApprovals as sanitizeApprovalsJs, applyApprovalCommand as apply
 import { nextRfiNumber, liveRfis } from "../../web/src/lib/rfi.js";
 import { conditionTotals, grandTotals, sheetTotals, reportJson } from "../../web/src/lib/totals.js";
 import { hasRollSetup, mintRollSetup, computeRollTakeoff, rollReportRows, seamLfByShape } from "../../web/src/lib/rollTakeoff.js";
+// Division 27 cable runs (docs/design/CABLE_SETUP.md) — the ONE pure cable
+// library, shared with the canvas: setup defaults and validation, run
+// resolution, the summary rollups and the refusal texts all live there.
+import { hasCableSetup, mintCableSetup, isDeviceType, mintCableRun, computeCableTakeoff, cableReportBlock, linkRunRefusal, cableSetupProblems as cableSetupProblemsJs } from "../../web/src/lib/cable.js";
 import { gridPxPerFoot, drawGrid, drawShapes, drawMarks, type Ctx2D, type ToCanvas, type ViewMarks } from "./view.ts";
 
 // Conditions and snap behavior minted here are identical to the browser's
@@ -89,6 +93,27 @@ const nowIso = (): string => new Date().toISOString();
 
 export const ANN_SCHEMA = TAKEOFF_SCHEMA;
 
+/** What computeCableTakeoff (web/src/lib/cable.js) hands back — typed at the
+ * boundary; the JS module is the authority on the row shapes. */
+export interface CableTakeoff {
+  resolved: {
+    runs: {
+      id: string; status: "linked" | "withheld" | "broken"; condition_id: string | null; finish_tag: string; device_type: string; cable_type: string;
+      device_shape_ids: string[]; route_shape_ids: string[]; tr_id: string; tr_name: string; sheet_ids: string[];
+      route_lf: number; vertical_ft: number | null; loop_device_ft: number | null; loop_tr_ft: number | null;
+      per_cable_lf: number | null; cables: number | null; location_lf: number | null;
+      review: "pending" | "accepted" | "human"; pending: boolean; reason?: string; reasons?: string[]; notes?: string[]; leg_warning?: true;
+    }[];
+    unlinked: { devices: Record<string, unknown>[]; routes: Record<string, unknown>[] };
+    warnings: string[];
+  };
+  summary: { rows: (Record<string, unknown> & { condition_id: string })[]; by_tr: Record<string, unknown>[]; by_cable_type: Record<string, unknown>[]; totals: Record<string, number>; warnings: string[] };
+  byCond: Map<string, Record<string, number>>;
+}
+const cableSetupProblemsOf = (c: Condition): string[] => cableSetupProblemsJs(c.cable_setup) as string[];
+// the JS module's report block, typed at the boundary (sheetLabel is optional there)
+const cableBlock = cableReportBlock as unknown as (t: CableTakeoff | null, sheetLabel?: (k: string) => string) => Record<string, unknown> | null;
+
 /** The takeoff document as buildTakeoffDocument writes it. Optional keys are
  * the app's additive, omit-when-empty fields; `units` is absent for imperial. */
 export interface TakeoffDocument extends Record<string, unknown> {
@@ -103,6 +128,7 @@ export interface TakeoffDocument extends Record<string, unknown> {
   approvals?: Approval[];
   proposals?: TakeoffProposal[];
   condition_edit_proposals?: ConditionEditProposal[];
+  cable_runs?: CableRun[];
   sheet_group: unknown[];
   last_group: unknown[];
   sheet_tabs: unknown[];
@@ -160,7 +186,30 @@ export interface ConditionEditFields {
 }
 
 /** The knobs edit_condition writes — one type, three call sites. */
-export type ConditionKnobPatch = { waste_pct?: number; multiplier?: number; height_ft?: number; rise_ft?: number; drop_ft?: number; roll_setup?: Record<string, unknown> | null };
+export type ConditionKnobPatch = { waste_pct?: number; multiplier?: number; height_ft?: number; rise_ft?: number; drop_ft?: number; roll_setup?: Record<string, unknown> | null; cable_setup?: Record<string, unknown> | null; role?: "tr" | null };
+
+/** A Division 27 cable setup on a count condition (web/src/lib/cable.js
+ * mintCableSetup) — the opt-in that makes a condition a device condition. */
+export interface CableSetup extends Record<string, unknown> {
+  device_type: string;
+  cables_per_location: number;
+  cable_type: string;
+  vertical_ft: number | null;
+  loop_device_ft: number | null;
+  loop_tr_ft: number | null;
+}
+
+/** A cable run: one device location → its route segments, in order → the TR
+ * it homes to. Stores NO length — every length resolves from the referenced
+ * shapes at read time. `provenance` follows the shape-origin vocabulary. */
+export interface CableRun {
+  id: string;
+  device_shape_ids: string[];
+  route_shape_ids: string[];
+  tr_id: string;
+  cables_override?: number;
+  provenance: { method: string; actor?: "agent"; reviewed?: boolean; created_at?: string; author?: string };
+}
 
 /** A condition-edit proposal (#365): a diff against a condition held as
  * pending. Nothing about the condition changes until the estimator accepts
@@ -199,6 +248,12 @@ export interface Condition {
    * condition roll goods — material class + the packing engine's spec fields,
    * exactly the object the canvas persists (web/src/lib/rollTakeoff.js). */
   roll_setup?: Record<string, unknown>;
+  /** Division 27 cable opt-in (docs/design/CABLE_SETUP.md): presence of a
+   * setup with a device_type makes a count condition a DEVICE condition. */
+  cable_setup?: CableSetup;
+  /** "tr" flags a count condition whose markers are telecom rooms (TR / MDF /
+   * IDF) — the run origins link_run homes to. */
+  role?: "tr";
   materials: MaterialRow[];
 }
 
@@ -639,7 +694,11 @@ export type JournalPayload =
   | { op: "delete"; tool: string; removed: { shape: Shape; index: number }[] }
   | { op: "materials"; tool: string; condition_id: string; before: MaterialRow[]; dropped_before?: string[];
       family?: { condition_id: string; before: MaterialRow[]; dropped_before?: string[] }[] }
-  | { op: "condition"; tool: string; condition_id: string; before: { waste_pct: number; multiplier: number; height_ft?: number; rise_ft?: number; drop_ft?: number; roll_setup?: Record<string, unknown> } }
+  | { op: "condition"; tool: string; condition_id: string; before: { waste_pct: number; multiplier: number; height_ft?: number; rise_ft?: number; drop_ft?: number; roll_setup?: Record<string, unknown>; cable_setup?: CableSetup; role?: "tr" } }
+  // cable runs (Division 27): link mints one record, unlink removes one —
+  // each its own step, the inverse exact (the approvals-family precedent)
+  | { op: "run_link"; tool: string; id: string }
+  | { op: "run_unlink"; tool: string; run: CableRun; index: number }
   | { op: "duplicate_condition"; tool: string; condition_id: string; parent_id: string; parent_had_family: boolean }
   | { op: "split_condition"; tool: string; condition_id: string; before: { variant_of?: string; materials?: unknown; materials_dropped?: string[] } }
   | { op: "approval"; tool: string; inverse: ApprovalCommand }
@@ -711,6 +770,9 @@ export class Session {
    * import_takeoff as transport. */
   proposals: TakeoffProposal[] = [];
   conditionEditProposals: ConditionEditProposal[] = [];
+  /** Cable runs (Division 27): device → route → TR links. Ride export_takeoff /
+   * import_takeoff as the additive `cable_runs` key. */
+  cableRuns: CableRun[] = [];
   /** The proposal new agent commits attach to — the newest open one, or
    * null when none is open (commits then land un-batched, exactly as before
    * #365). */
@@ -769,6 +831,7 @@ export class Session {
       this.rfis = [];
       this.proposals = [];
       this.conditionEditProposals = [];
+      this.cableRuns = [];
       this.currentProposalId = null;
       this.file = null;
       this.filePath = null;
@@ -3776,8 +3839,12 @@ export class Session {
     // scope collision (#366): shared floor across the whole takeoff, ALWAYS a
     // number — the one that has to read zero before a total means anything
     const scope = this.scopeCollisions();
+    // cable (Division 27): the summary rollups ride only when a cable
+    // condition or a run exists — a flooring session's reply is unchanged
+    const cableT = this.cableTakeoff();
     return {
       conditions: lean, totals: grandTotals(rows),
+      ...(cableT ? { cable: { rows: cableT.summary.rows, by_tr: cableT.summary.by_tr, by_cable_type: cableT.summary.by_cable_type, totals: cableT.summary.totals, unlinked_devices: cableT.resolved.unlinked.devices.length, unlinked_routes: cableT.resolved.unlinked.routes.length, warnings: cableT.summary.warnings } } : {}),
       shared_floor_sf: scope.shared_floor_sf,
       ...(scope.unmeasured.length ? { shared_floor_unmeasured: scope.unmeasured } : {}),
       ...(unconfirmed.length ? { scale_unconfirmed: unconfirmed } : {}),
@@ -4162,11 +4229,32 @@ export class Session {
         c.roll_setup = { ...base, ...given, material };
       }
     }
+    // Division 27 cable setup — the roll_setup rule again: a fresh opt-in or
+    // a device-type change starts from that type's starting values (the
+    // canvas picker does the same), a same-type partial edit patches the
+    // existing setup, null opts out. waste_pct is never touched here: the
+    // spec's starting waste is a UI pre-fill, and an agent states it.
+    if (opts.cable_setup !== undefined) {
+      if (opts.cable_setup === null) {
+        delete c.cable_setup;
+      } else {
+        const given = Object.fromEntries(Object.entries(opts.cable_setup).filter(([, v]) => v !== undefined));
+        const prevType = c.cable_setup?.device_type;
+        const type = (given.device_type as string | undefined) ?? prevType;
+        if (!isDeviceType(type)) throw new UserError(`cable_setup.device_type is required on a fresh opt-in — one of wall_outlet, wap, camera, access_door, ceiling_other, custom.`);
+        const base = hasCableSetup(c) && type === prevType ? (c.cable_setup as object) : (mintCableSetup(type) as object);
+        c.cable_setup = { ...base, ...given, device_type: type } as CableSetup;
+      }
+    }
+    if (opts.role !== undefined) {
+      if (opts.role === null) delete c.role;
+      else c.role = "tr";
+    }
   }
 
   editCondition(tag: string, opts: ConditionKnobPatch) {
-    if (opts.waste_pct === undefined && opts.multiplier === undefined && opts.height_ft === undefined && opts.rise_ft === undefined && opts.drop_ft === undefined && opts.roll_setup === undefined) {
-      throw new UserError("Nothing to change — pass at least one of waste_pct, multiplier, height_ft, rise_ft, drop_ft, roll_setup.");
+    if (opts.waste_pct === undefined && opts.multiplier === undefined && opts.height_ft === undefined && opts.rise_ft === undefined && opts.drop_ft === undefined && opts.roll_setup === undefined && opts.cable_setup === undefined && opts.role === undefined) {
+      throw new UserError("Nothing to change — pass at least one of waste_pct, multiplier, height_ft, rise_ft, drop_ft, roll_setup, cable_setup, role.");
     }
     const c = this.conditions.find((x) => x.finish_tag === tag);
     if (!c) {
@@ -4176,6 +4264,8 @@ export class Session {
     const before = {
       waste_pct: c.waste_pct, multiplier: c.multiplier, height_ft: c.height_ft, rise_ft: c.rise_ft, drop_ft: c.drop_ft,
       roll_setup: c.roll_setup ? structuredClone(c.roll_setup) : undefined,
+      cable_setup: c.cable_setup ? structuredClone(c.cable_setup) : undefined,
+      role: c.role,
     };
     this.applyConditionKnobs(c, opts);
     this.record({ op: "condition", tool: "edit_condition", condition_id: c.id, before });
@@ -4193,6 +4283,15 @@ export class Session {
       const rows = conditionTotals([c], this.shapes) as Record<string, unknown>[];
       roll = (rollReportRows(byCond, rows) as Record<string, unknown>[])[0];
     }
+    // cable (Division 27): echo the setup, its open problems, and the
+    // condition's figured summary row(s) so an agent learns at once whether
+    // the condition's runs count — a withheld reason here is the next move
+    let cable: Record<string, unknown> | undefined;
+    if (hasCableSetup(c)) {
+      const t = this.cableTakeoff();
+      const rows = t ? t.summary.rows.filter((r) => r.condition_id === c.id) : [];
+      cable = { problems: cableSetupProblemsOf(c), rows };
+    }
     return {
       condition: tag, condition_id: c.id, waste_pct: c.waste_pct, multiplier: c.multiplier,
       ...(c.height_ft !== undefined ? { height_ft: c.height_ft } : {}),
@@ -4200,7 +4299,96 @@ export class Session {
       ...(c.drop_ft !== undefined ? { drop_ft: c.drop_ft } : {}),
       ...(c.roll_setup ? { roll_setup: c.roll_setup } : {}),
       ...(roll ? { roll } : {}),
+      ...(c.cable_setup ? { cable_setup: c.cable_setup } : {}),
+      ...(c.role ? { role: c.role } : {}),
+      ...(cable ? { cable } : {}),
     };
+  }
+
+  // ── Division 27 cable runs (docs/design/CABLE_SETUP.md) ─────────────────
+  // The library does the work; this is the plumbing: the session's scale
+  // answer per sheet, the refusal → UserError, the journal, the wire shapes.
+
+  /** uppFor / scaleReason as resolveCableRuns wants them. A sheet this
+   * session has not loaded (a stitched composite, `stitch:<uid>`, never
+   * round-trips through MCP) has no scale answer here: its runs resolve as
+   * broken with that reason, their stored length kept, never zeroed. */
+  private cableInputs() {
+    return {
+      uppFor: (sheetId: string) => this.sheets.get(sheetId)?.upp ?? null,
+      scaleReason: (sheetId: string) => {
+        const s = this.sheets.get(sheetId);
+        return s ? this.scaleGate(s) : `sheet ${sheetId} is not loaded in this session (a stitched surface does not round-trip through MCP — link it in the canvas)`;
+      },
+    };
+  }
+
+  /** The whole cable takeoff figured once — null when no condition carries a
+   * cable setup and no run exists, so a flooring session pays nothing. */
+  private cableTakeoff() {
+    return computeCableTakeoff(this.conditions, this.shapes, this.cableRuns, this.cableInputs()) as CableTakeoff | null;
+  }
+
+  /** link_run: one device location, its route segments in order, the TR it
+   * homes to. Refuses (nothing minted) when a route id is not a measured
+   * linear shape, a sheet is unscaled, the device condition lacks a required
+   * value, the TR id is not a TR marker, or the device is already linked. An
+   * agent cannot submit a length — only shape ids that carry measured
+   * geometry. Lands pending (provenance.reviewed false), like every agent
+   * shape; counts in totals exactly as pending shapes do, and says so. */
+  linkRun(opts: { device_shape_ids: string[]; route_shape_ids: string[]; tr_id: string; cables_override?: number }) {
+    if (!this.docs.size) throw new UserError("No plan loaded — call load_plan first.");
+    const refusal = (linkRunRefusal as unknown as (o: typeof opts, c: Condition[], s: Shape[], r: CableRun[], i: ReturnType<Session["cableInputs"]>) => string | null)(opts, this.conditions, this.shapes, this.cableRuns, this.cableInputs());
+    if (refusal) throw new UserError(`Can't link that run: ${refusal}`);
+    const run = mintCableRun({ ...opts, provenance: { method: "manual", actor: "agent" } }) as CableRun;
+    this.cableRuns.push(run);
+    this.record({ op: "run_link", tool: "link_run", id: run.id });
+    const t = this.cableTakeoff()!;
+    const r = t.resolved.runs.find((x) => x.id === run.id)!;
+    return {
+      run_id: run.id, status: r.status, condition: r.finish_tag, device_type: r.device_type, cable_type: r.cable_type,
+      tr: r.tr_name || r.tr_id, sheets: r.sheet_ids,
+      route_lf: round2(r.route_lf), vertical_ft: r.vertical_ft, loop_device_ft: r.loop_device_ft, loop_tr_ft: r.loop_tr_ft,
+      per_cable_lf: round2(r.per_cable_lf as number), cables: r.cables, location_lf: round2(r.location_lf as number),
+      reviewed: false,
+      ...(r.notes ? { notes: r.notes } : {}),
+      note: "Pending human review (it counts in totals, as every pending agent shape does). Lengths resolve from the linked shapes: a recalibration or an edit re-flows this run; deleting a linked shape breaks it, listed under unlinked.",
+    };
+  }
+
+  /** list_runs: every run resolved (linked / withheld / broken with reason),
+   * the unlinked devices and routes, the leg warnings, and the summary. */
+  listRuns() {
+    const t = this.cableTakeoff();
+    if (!t) return { runs: [], unlinked: { devices: [], routes: [] }, warnings: [], summary: null, count: 0, note: "No condition carries a cable_setup and no run exists — set one with edit_condition { cable_setup } first." };
+    const block = cableBlock(t) as { unlinked: Record<string, unknown>; warnings: string[] };
+    return {
+      runs: t.resolved.runs.map((r) => ({
+        run_id: r.id, status: r.status, condition: r.finish_tag, device_type: r.device_type, cable_type: r.cable_type,
+        tr: r.tr_name || r.tr_id, tr_id: r.tr_id, device_shape_ids: r.device_shape_ids, route_shape_ids: r.route_shape_ids, sheets: r.sheet_ids,
+        route_lf: round2(r.route_lf),
+        ...(r.status === "linked" ? { vertical_ft: r.vertical_ft, loop_device_ft: r.loop_device_ft, loop_tr_ft: r.loop_tr_ft, per_cable_lf: round2(r.per_cable_lf as number), cables: r.cables, location_lf: round2(r.location_lf as number) } : {}),
+        review: r.review,
+        ...(r.reason ? { reason: r.reason } : {}),
+        ...(r.notes ? { notes: r.notes } : {}),
+      })),
+      unlinked: block.unlinked,
+      warnings: block.warnings,
+      summary: { rows: t.summary.rows, by_tr: t.summary.by_tr, by_cable_type: t.summary.by_cable_type, totals: t.summary.totals },
+      count: t.resolved.runs.length,
+    };
+  }
+
+  /** unlink_run: remove the record; every shape stays. One undo step. */
+  unlinkRun(id: string) {
+    const i = this.cableRuns.findIndex((r) => r.id === id);
+    if (i < 0) {
+      const known = this.cableRuns.map((r) => r.id);
+      throw new UserError(`No run with id ${JSON.stringify(id)}.${known.length ? ` Known runs: ${known.join(", ")}.` : " Nothing has linked a run yet — link_run first."}`);
+    }
+    const [run] = this.cableRuns.splice(i, 1);
+    this.record({ op: "run_unlink", tool: "unlink_run", run, index: i });
+    return { unlinked: id, run_count: this.cableRuns.length, note: "The device, route and TR shapes stay committed; only the link is gone. undo_last re-seats it." };
   }
 
   /**
@@ -4358,8 +4546,18 @@ export class Session {
           else c.drop_ft = e.before.drop_ft;
           if (e.before.roll_setup === undefined) delete c.roll_setup;
           else c.roll_setup = e.before.roll_setup;
+          if (e.before.cable_setup === undefined) delete c.cable_setup;
+          else c.cable_setup = e.before.cable_setup;
+          if (e.before.role === undefined) delete c.role;
+          else c.role = e.before.role;
           this.reflowLinears(c);
         }
+        undone.push({ seq: e.seq, op: e.op, tool: e.tool, shapes: 0 });
+      } else if (e.op === "run_link") {
+        this.cableRuns = this.cableRuns.filter((r) => r.id !== e.id);
+        undone.push({ seq: e.seq, op: e.op, tool: e.tool, shapes: 0 });
+      } else if (e.op === "run_unlink") {
+        this.cableRuns.splice(Math.min(e.index, this.cableRuns.length), 0, e.run);
         undone.push({ seq: e.seq, op: e.op, tool: e.tool, shapes: 0 });
       } else if (e.op === "duplicate_condition") {
         // a twin is removed whole — and the family_id the mint may have stamped on the PARENT
@@ -4969,6 +5167,7 @@ export class Session {
       approvals: this.approvals,
       proposals: this.proposals,
       condition_edit_proposals: this.conditionEditProposals,
+      cable_runs: this.cableRuns,
     }) as TakeoffDocument;
   }
 
@@ -5000,8 +5199,13 @@ export class Session {
       // carries every pending diff beside them — additive, present only when
       // any exist, so the document is byte-identical otherwise
       proposedConditionEdits: this.proposedConditionEdits(),
+      // cable (Division 27): present only when a cable takeoff exists
+      cable: cableBlock(this.cableTakeoff(), (k: string) => this.sheets.get(k)?.sheetNumber || k),
     });
   }
+
+  /** The cable takeoff the marked set's cover tallies (pulls, pending, unlinked). */
+  cableForMarkedSet() { return this.cableTakeoff(); }
 
   // ── the sheet graph (#87) ─────────────────────────────────────────────────
   // Built lazily from every sheet's text spans, cached per document (loadPlan

@@ -27,6 +27,7 @@ import { attrValue } from "./conditionColumns.js";
 import { shapeLabelValue } from "./shapeLabels.js";
 import { compareSheetKeys } from "./sheetKey"; // NOT ./sheets — that module imports pdfjs-dist
 import { hasFields, qtyLabels, resolveNote } from "./noteFields.ts";
+import { cableTables } from "./cable.js";
 
 // Re-export so existing consumers (markedset, snapshotDiff, ReportPanel, tests)
 // keep importing round2 from here; num.js is the single definition.
@@ -392,9 +393,12 @@ export function grandTotals(rows) {
  *   dimensioned column/section to m²/m and RETIRES the SY column (upstream's
  *   metric contract); coverage rates in the materials section stay as entered
  *   (SF/LF-based). "imperial" (default) is byte-identical to the frozen export.
+ * @param {object|null} [cable] computeCableTakeoff() result (lib/cable.js) —
+ *   appends the Cable summary / Cable runs / Unlinked sections; null (every
+ *   project with no cable condition) omits them, byte-identical.
  * @returns {string}
  */
-export function totalsToCsv(rows, projectName = "", bySheet = null, sheetLabel = null, cols = null, ctx = null, byLabel = null, brandName = "OpenTakeoff", units = "imperial") {
+export function totalsToCsv(rows, projectName = "", bySheet = null, sheetLabel = null, cols = null, ctx = null, byLabel = null, brandName = "OpenTakeoff", units = "imperial", cable = null) {
   // the caller passes RAW descriptors; conversion happens here (one site per
   // output) through the same applyUnits seam the report table uses
   const columns = applyUnits(cols || CSV_PROFILE.filter((c) => c.defaultVisible), units, METRIC_CSV_LABELS);
@@ -465,6 +469,25 @@ export function totalsToCsv(rows, projectName = "", bySheet = null, sheetLabel =
     }
   }
 
+  // Division 27 cable schedule (docs/design/CABLE_SETUP.md) — the per-run
+  // cable LF beside the device counts: Cable summary (per condition × TR,
+  // subtotaled by TR and by cable type), Cable runs (one row per run,
+  // unmultiplied, with a Multiplier column), and the Unlinked list. Only
+  // emitted when a cable condition exists, so every other CSV stays
+  // byte-identical. Lengths follow the same unit converter as every section.
+  const cableT = cableTables(cable, { sheetLabel, L, lengthUnit: LU });
+  if (cableT) {
+    for (const w of cableT.warnings) lines.push("", `# ${w}`);
+    lines.push("", "Cable summary");
+    for (const row of cableT.summary) lines.push(row.map(esc).join(","));
+    lines.push("", "Cable runs");
+    for (const row of cableT.runs) lines.push(row.map(esc).join(","));
+    if (cableT.unlinked.length > 1) {
+      lines.push("", "Unlinked");
+      for (const row of cableT.unlinked) lines.push(row.map(esc).join(","));
+    }
+  }
+
   const title = projectName ? `# ${projectName} — ${brandName} report\n` : "";
   return title + lines.join("\n") + "\n";
 }
@@ -487,9 +510,9 @@ export function totalsToCsv(rows, projectName = "", bySheet = null, sheetLabel =
  *   conditionColumns?: Array<{id: string, name: string, values: string[]}>,
  *   attrsByCond?: Map<any, object>|null, shapeLabels?: string[],
  *   byLabel?: Array<{value: string|null, rows: any[]}>, displayUnits?: string,
- *   rollGoods?: any[], proposedConditionEdits?: any[]}} args
+ *   rollGoods?: any[], proposedConditionEdits?: any[], cable?: object|null}} args
  */
-export function reportJson({ projectName = "", rows = [], bySheet = [], scaleInfo = [], markups = [], rfis = [], sheetLabel = null, conditionColumns = [], attrsByCond = null, shapeLabels = [], byLabel = [], displayUnits = "imperial", rollGoods = [], proposedConditionEdits = [] }) {
+export function reportJson({ projectName = "", rows = [], bySheet = [], scaleInfo = [], markups = [], rfis = [], sheetLabel = null, conditionColumns = [], attrsByCond = null, shapeLabels = [], byLabel = [], displayUnits = "imperial", rollGoods = [], proposedConditionEdits = [], cable = null }) {
   const label = (id) => (sheetLabel ? sheetLabel(id) : id);
   const noteQty = qtyLabels(rows || [], displayUnits === "metric" ? "metric" : "imperial");
   // destructuring defaults don't apply to an explicit null, and both values can
@@ -595,6 +618,12 @@ export function reportJson({ projectName = "", rows = [], bySheet = [], scaleInf
     // pending diff sits beside them here until the estimator accepts it. A
     // proposal-free report is byte-identical to a pre-#365 one.
     ...(Array.isArray(proposedConditionEdits) && proposedConditionEdits.length ? { proposed_condition_edits: proposedConditionEdits } : {}),
+    // cable (Division 27, docs/design/CABLE_SETUP.md) is the other
+    // present-only-with-content key: the cable summary (per condition × TR
+    // with subtotals), the per-run rows, the unlinked list and the leg
+    // warnings — lib/cable.js cableReportBlock. A project with no cable
+    // condition writes no key, so its report is byte-identical.
+    ...(cable && typeof cable === "object" ? { cable } : {}),
   };
 }
 

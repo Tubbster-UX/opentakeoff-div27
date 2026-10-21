@@ -12,7 +12,7 @@
 //   core collections are always present, even when empty.
 // - Every additive key (`client_info`, `condition_columns`, `shape_labels`,
 //   `palette`, `approvals`, `proposals`, `condition_edit_proposals`, `rules`,
-//   `stitches`, `sheet_levels`, `layer_overrides`, `provenance_counters`) is
+//   `cable_runs`, `stitches`, `sheet_levels`, `layer_overrides`, `provenance_counters`) is
 //   omitted when empty, so a document that never used the feature is
 //   byte-identical to one written before the feature existed.
 // - `palette` (pinned condition ids) drops ids that no longer resolve.
@@ -25,7 +25,7 @@ const obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
 export const TAKEOFF_DOCUMENT_KEYS = Object.freeze([
   "schema", "project_name", "units", "client_info", "sheets", "conditions", "condition_columns",
   "shape_labels", "palette", "shapes", "markups", "rfis", "approvals", "proposals",
-  "condition_edit_proposals", "rules", "sheet_group", "last_group", "sheet_tabs", "stitches",
+  "condition_edit_proposals", "rules", "cable_runs", "sheet_group", "last_group", "sheet_tabs", "stitches",
   "sheet_levels", "layer_overrides", "provenance_counters",
 ]);
 
@@ -68,6 +68,9 @@ export function buildTakeoffDocument(f = {}) {
     ...(arr(f.proposals).length ? { proposals: f.proposals } : {}),
     ...(arr(f.condition_edit_proposals).length ? { condition_edit_proposals: f.condition_edit_proposals } : {}),
     ...(arr(f.rules).length ? { rules: f.rules } : {}),
+    // Division 27 cable runs (docs/design/CABLE_SETUP.md): device → route
+    // segments → TR links, a record family of their own. Omitted when empty.
+    ...(arr(f.cable_runs).length ? { cable_runs: f.cable_runs } : {}),
     sheet_group: arr(f.sheet_group),
     last_group: arr(f.last_group),
     sheet_tabs: arr(f.sheet_tabs),

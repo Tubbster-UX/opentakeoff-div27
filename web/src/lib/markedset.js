@@ -234,7 +234,7 @@ function invertPixels(cv) {
   ctx.restore();
 }
 
-export async function buildMarkedSetPdf({ projectName, dark, sheets, shapes, markups, approvals = [], rfis: rfisIn = [], conditions, getPage, loadPdfData, company, clientInfo, credit = null, provenance = null, coverTitle = "Marked Set", units = "imperial" }) {
+export async function buildMarkedSetPdf({ projectName, dark, sheets, shapes, markups, approvals = [], rfis: rfisIn = [], conditions, getPage, loadPdfData, company, clientInfo, credit = null, provenance = null, coverTitle = "Marked Set", units = "imperial", cable = null }) {
   // a withdrawn RFI is a tombstone (rfi.js liveRfis): its number stays
   // reserved but it prints nowhere — the schedule keeps the gap. An agent-
   // raised RFI prints exactly like a panel-raised one; who asked is on the
@@ -379,6 +379,15 @@ export async function buildMarkedSetPdf({ projectName, dark, sheets, shapes, mar
     if (apCount.estimator || apCount.agent) {
       metaY -= 12;
       draw(`Approval stamps: ${apCount.estimator} estimator-approved · ${apCount.agent} agent-marked`, { x: 52, y: metaY, size: 9.5, font, color: muted });
+    }
+    // cable runs (Division 27, docs/design/CABLE_SETUP.md) — the pull count
+    // and its pencil share, drawn only when a cable takeoff exists (the
+    // provenance-line convention), so every other export stays byte-identical.
+    const ct = cable?.summary?.totals;
+    if (ct) {
+      metaY -= 12;
+      const n = (v, w) => `${v} ${w}${v === 1 ? "" : "s"}`;
+      draw(`Cable runs: ${n(ct.pulls, "pull")} linked · ${n(ct.pending_runs, "run")} pending review · ${n(ct.unlinked_devices, "unlinked device")}`, { x: 52, y: metaY, size: 9.5, font, color: muted });
     }
     // author attribution (#314) — the legend names who marked the set. Drawn
     // only when a shape carries an author (the provenance-line convention), so

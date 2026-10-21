@@ -175,8 +175,8 @@ Fifty-two tools, in the order an agent tends to reach for them:
   (multi-cut parents rebuild from the pristine snapshot minus survivors—the
   canvas's own delete semantics, ported as the spec)
 - **Revise**—`edit_shape` (all five roles), `edit_materials`,
-  `edit_condition` (waste %, ×N multiplier, `height_ft`, `rise_ft` / `drop_ft` — the vertical legs every linear run adds to its plan length (#441), and the roll-goods
-  `roll_setup` opt-in—the reply echoes the figured order), `delete_shape`,
+  `edit_condition` (waste %, ×N multiplier, `height_ft`, `rise_ft` / `drop_ft` — the vertical legs every linear run adds to its plan length (#441), the roll-goods
+  `roll_setup` opt-in—the reply echoes the figured order—and the Division 27 `cable_setup` opt-in plus the `role: "tr"` flag), `delete_shape`,
   `undo_last`, with `list_shapes` as the mid-session inventory the mutating
   verbs assume you have
 - **Proposals** (#365)—`propose_takeoff` opens a named batch that every
@@ -188,6 +188,18 @@ Fifty-two tools, in the order an agent tends to reach for them:
   estimator's acceptance in the canvas—nothing changes until then, and the
   summary and report carry the diff beside the current values;
   `withdraw_condition_edit` drops it. Design: `design/PROPOSALS.md`
+- **Cable runs** (Division 27, [`design/CABLE_SETUP.md`](design/CABLE_SETUP.md))—`link_run`
+  joins one device marker, its traced route segments in order and the TR marker it homes to;
+  per cable LF = Σ measured route + the condition's vertical and service loops, cables per
+  location from the setup or a per-run override, waste only on the report's order figure. No
+  routing factor and no estimated length: an agent links shapes that already carry measured
+  geometry, and a route on an unscaled sheet, a device condition missing its vertical, or an id
+  that is not the right kind of shape refuses with the next move. `list_runs` resolves every
+  run (linked / withheld / broken, with reasons), lists unlinked devices and routes (excluded
+  from totals, never assigned a length) and rolls the summary up per condition × TR, by TR and
+  by cable type; `unlink_run` removes a link, shapes untouched. `takeoff_summary` and
+  `export_report` carry a `cable` block whenever a cable condition exists; agent-linked runs
+  land pending and count exactly as pending agent shapes do
 - **Scope collision** (#366)—`takeoff_summary.shared_floor_sf` is the floor
   claimed by more than one shape across the takeoff (Σ areas − union, once per
   cell), the number that has to read zero before a total means anything;
@@ -398,7 +410,7 @@ New agent measurements, including `measure_polygon` and `measure_line`, explicit
 
 The [generated tool index](MCP_TOOL_INDEX.md) gives each tool's stage and required
 arguments directly from the running server's schemas. The default surface has
-<!--tool-count-->53<!--/tool-count--> tools; gated tools and the staged opener are listed separately.
+<!--tool-count-->56<!--/tool-count--> tools; gated tools and the staged opener are listed separately.
 
 Use `list_annotations` → `edit_annotation {annotation_id, text}` to shorten or clear
 a note. One `undo_last` restores the text. Geometry, dimension length, links and

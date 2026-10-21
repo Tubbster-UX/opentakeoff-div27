@@ -1,0 +1,279 @@
+// Division 27 cable runs over the wire (docs/design/CABLE_SETUP.md): the
+// edit_condition cable_setup / role path, link_run with every refusal,
+// list_runs, unlink_run + undo_last, the summary and report blocks, the
+// export → import round trip with runs, and a run on a stitched sheet
+// (which this session cannot scale) surviving import → export → import with
+// its stored length intact and reported broken, never dropped or zeroed.
+// Fixtures are the bundled demo plan plus invented shapes.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { readFile, writeFile, mkdtemp } from "node:fs/promises";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { buildServer } from "../server.ts";
+import { Session } from "../src/session.ts";
+
+const PLAN = fileURLToPath(new URL("../../demo/sample-plan.pdf", import.meta.url));
+const KEY = "sample-plan.pdf";
+const UPP = 1 / 36; // 1/4" = 1'-0" at render scale 2.0 — 36 px per foot
+
+async function pair() {
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const server = buildServer(new Session(), { oneClick: false });
+  await server.connect(st);
+  const client = new Client({ name: "cable-test", version: "0.0.0" });
+  await client.connect(ct);
+  return client;
+}
+interface Reply { isError: boolean; data: any }
+async function call(client: Client, name: string, args: Record<string, unknown> = {}): Promise<Reply> {
+  const res: any = await client.callTool({ name, arguments: args });
+  return { isError: !!res.isError, data: JSON.parse(res.content[0].text) };
+}
+const ok = async (client: Client, name: string, args: Record<string, unknown> = {}) => {
+  const r = await call(client, name, args);
+  assert.equal(r.isError, false, `${name}: ${JSON.stringify(r.data)}`);
+  return r.data;
+};
+const refused = async (client: Client, name: string, args: Record<string, unknown>, re: RegExp) => {
+  const r = await call(client, name, args);
+  assert.equal(r.isError, true, `${name} should refuse: ${JSON.stringify(r.data)}`);
+  assert.match(r.data.error, re);
+  return r.data.error as string;
+};
+
+/** A worked session: scale set, a TR marker labeled MDF, two devices, two
+ *  routes of exactly 87.5 ft and 140 ft (3150 px and 5040 px at 36 px/ft). */
+async function worked() {
+  const client = await pair();
+  await ok(client, "load_plan", { path: PLAN });
+  await ok(client, "set_scale", { sheet: KEY, upp: UPP });
+  const tr = await ok(client, "place_count", { sheet: KEY, points: [[200, 200]], condition: "TR" });   // mints the TR condition
+  await ok(client, "edit_condition", { condition: "TR", role: "tr" });
+  await ok(client, "edit_shape", { shape_id: tr.shape_ids[0], label: "MDF" });
+  const w = await ok(client, "place_count", { sheet: KEY, points: [[1000, 1000]], condition: "DATA-1" });
+  const c = await ok(client, "place_count", { sheet: KEY, points: [[1400, 1000]], condition: "CAM-1" });
+  await ok(client, "edit_condition", { condition: "DATA-1", waste_pct: 12, cable_setup: { device_type: "wall_outlet", cables_per_location: 2, cable_type: "CAT6A" } });
+  await ok(client, "edit_condition", { condition: "CAM-1", waste_pct: 12, cable_setup: { device_type: "camera", cable_type: "CAT6" } });
+  const rw = await ok(client, "measure_line", { sheet: KEY, pts: [[200, 300], [3350, 300]], condition: "ROUTE" });
+  const rc = await ok(client, "measure_line", { sheet: KEY, pts: [[200, 400], [5240, 400]], condition: "ROUTE" });
+  assert.deepEqual([rw.length_lf, rc.length_lf], [87.5, 140]);
+  return { client, tr: tr.shape_ids[0] as string, devW: w.shape_ids[0] as string, devC: c.shape_ids[0] as string, rtW: rw.shape_id as string, rtC: rc.shape_id as string };
+}
+
+test("edit_condition cable_setup: a fresh opt-in mints the type's starting values, same-type edits patch, a type change re-mints, null opts out, undo restores", async () => {
+  const client = await pair();
+  await ok(client, "load_plan", { path: PLAN });
+  await ok(client, "place_count", { sheet: KEY, points: [[500, 500]], condition: "WAP-1" });
+  await refused(client, "edit_condition", { condition: "WAP-1", cable_setup: { vertical_ft: 9 } }, /device_type is required on a fresh opt-in/);
+  const on = await ok(client, "edit_condition", { condition: "WAP-1", cable_setup: { device_type: "wap" } });
+  assert.deepEqual(on.cable_setup, { device_type: "wap", cables_per_location: 1, cable_type: "", vertical_ft: 13, loop_device_ft: 20, loop_tr_ft: 10 });
+  assert.equal(on.waste_pct, 0, "waste is never set silently — the 12% starting value is a canvas pre-fill");
+  assert.deepEqual(on.cable, { problems: [], rows: [{ condition_id: on.condition_id, finish_tag: "WAP-1", device_type: "wap", cable_type: "", tr_id: "", tr_name: "", multiplier: 1, waste_pct: 0, ea: 1, pulls: 0, cables: 0, route_lf: 0, cable_lf: 0, cable_lf_order: 0, unlinked_devices: 1, pending_runs: 0, leg_warning: false }] });
+  const patched = await ok(client, "edit_condition", { condition: "WAP-1", cable_setup: { loop_device_ft: 25, cable_type: "CAT6A" } });
+  assert.deepEqual({ v: patched.cable_setup.vertical_ft, l: patched.cable_setup.loop_device_ft, t: patched.cable_setup.cable_type }, { v: 13, l: 25, t: "CAT6A" });
+  const door = await ok(client, "edit_condition", { condition: "WAP-1", cable_setup: { device_type: "access_door" } });
+  assert.deepEqual({ v: door.cable_setup.vertical_ft, l: door.cable_setup.loop_device_ft, t: door.cable_setup.cable_type }, { v: null, l: 15, t: "" }, "a type change starts over from that type's values");
+  assert.match(door.cable.problems[0], /vertical_ft is required/);
+  const off = await ok(client, "edit_condition", { condition: "WAP-1", cable_setup: null });
+  assert.equal(off.cable_setup, undefined);
+  assert.equal(off.cable, undefined);
+  await ok(client, "undo_last", { n: 1 });
+  const back = await ok(client, "export_takeoff", {});
+  assert.equal(back.conditions.find((c: any) => c.finish_tag === "WAP-1").cable_setup.device_type, "access_door", "undo restores the setup verbatim");
+  // role: set, echoed, cleared, undone
+  const tr = await ok(client, "edit_condition", { condition: "WAP-1", role: "tr" });
+  assert.equal(tr.role, "tr");
+  const cleared = await ok(client, "edit_condition", { condition: "WAP-1", role: null });
+  assert.equal(cleared.role, undefined);
+  await ok(client, "undo_last", { n: 1 });
+  assert.equal((await ok(client, "export_takeoff", {})).conditions.find((c: any) => c.finish_tag === "WAP-1").role, "tr");
+});
+
+test("link_run: the spec's worked example over the wire — exact per-cable and location LF, pending, in totals; the report and summary carry it", async () => {
+  const { client, tr, devW, devC, rtW, rtC } = await worked();
+  const w = await ok(client, "link_run", { device_shape_ids: [devW], route_shape_ids: [rtW], tr_id: tr });
+  assert.deepEqual(
+    { status: w.status, tr: w.tr, route: w.route_lf, v: w.vertical_ft, loops: [w.loop_device_ft, w.loop_tr_ft], per: w.per_cable_lf, cables: w.cables, loc: w.location_lf, reviewed: w.reviewed },
+    { status: "linked", tr: "MDF", route: 87.5, v: 23, loops: [10, 10], per: 130.5, cables: 2, loc: 261, reviewed: false },
+  );
+  const c = await ok(client, "link_run", { device_shape_ids: [devC], route_shape_ids: [rtC], tr_id: tr });
+  assert.deepEqual({ per: c.per_cable_lf, loc: c.location_lf }, { per: 178, loc: 178 });
+
+  const runs = await ok(client, "list_runs", {});
+  assert.equal(runs.count, 2);
+  assert.deepEqual(runs.runs.map((r: any) => [r.status, r.review]), [["linked", "pending"], ["linked", "pending"]]);
+  assert.deepEqual(runs.unlinked, { devices: [], routes: [] });
+  assert.deepEqual(runs.warnings, []);
+  assert.deepEqual(
+    { pulls: runs.summary.totals.pulls, cables: runs.summary.totals.cables, net: runs.summary.totals.cable_lf, order: runs.summary.totals.cable_lf_order, pending: runs.summary.totals.pending_runs },
+    { pulls: 2, cables: 3, net: 439, order: 491.68, pending: 2 },
+  );
+  assert.deepEqual(runs.summary.by_tr.map((g: any) => [g.tr_name, g.cables]), [["MDF", 3]]);
+  assert.deepEqual(runs.summary.by_cable_type.map((g: any) => [g.cable_type, g.cable_lf]), [["CAT6A", 261], ["CAT6", 178]]);
+
+  const sum = await ok(client, "takeoff_summary", {});
+  assert.deepEqual({ pulls: sum.cable.totals.pulls, order: sum.cable.totals.cable_lf_order, ud: sum.cable.unlinked_devices }, { pulls: 2, order: 491.68, ud: 0 });
+  const dataRow = sum.conditions.find((r: any) => r.finish_tag === "DATA-1");
+  assert.equal(dataRow.ea, 1, "the device EA is the condition's own count — the cable figures ride beside it");
+
+  const rep = await ok(client, "export_report", {});
+  assert.equal(Object.keys(rep).at(-1), "cable", "the cable block appends last");
+  assert.deepEqual({ pulls: rep.cable.totals.pulls, order: rep.cable.totals.cable_lf_order }, { pulls: 2, order: 491.68 });
+  assert.equal(rep.cable.runs.length, 2);
+  assert.deepEqual(rep.cable.runs.map((r: any) => [r.run_id, r.multiplier, r.review_status]), [[w.run_id, 1, "pending"], [c.run_id, 1, "pending"]]);
+  assert.equal(rep.cable.runs[0].sheets, "A-101", "sheets print by title-block number");
+  assert.equal(rep.roll_goods.length, 0, "the roll block is untouched");
+});
+
+test("link_run refusals: not a linear shape, unscaled sheet, missing vertical, not a TR marker, not a device marker, already linked, bad override — nothing minted", async () => {
+  const { client, tr, devW, devC, rtW } = await worked();
+  await refused(client, "link_run", { device_shape_ids: [devW], route_shape_ids: [devC], tr_id: tr }, /is not a measured linear shape \(it is count\) — trace the route with measure_line/);
+  await refused(client, "link_run", { device_shape_ids: [devW], route_shape_ids: [rtW], tr_id: devC }, /is not a TR marker .* role "tr"/);
+  await refused(client, "link_run", { device_shape_ids: [rtW], route_shape_ids: [rtW], tr_id: tr }, /is not a count marker/);
+  await refused(client, "link_run", { device_shape_ids: [tr], route_shape_ids: [rtW], tr_id: tr }, /condition TR has no cable setup — set cable_setup/);
+  await refused(client, "link_run", { device_shape_ids: [devW], route_shape_ids: ["shp-nope"], tr_id: tr }, /route shape shp-nope does not exist — list_shapes/);
+  const bad: any = await client.callTool({ name: "link_run", arguments: { device_shape_ids: [devW], route_shape_ids: [rtW], tr_id: tr, cables_override: 0 } });
+  assert.ok(bad.isError && /MCP error -32602/.test(bad.content[0].text), "a zero override is a schema violation (int ≥ 1)");
+  // a device condition missing its required value: withheld, with the next move
+  await ok(client, "place_count", { sheet: KEY, points: [[1800, 1000]], condition: "ACS-1" });
+  const d = await ok(client, "edit_condition", { condition: "ACS-1", cable_setup: { device_type: "access_door" } });
+  const dev = (await ok(client, "list_shapes", { condition: "ACS-1" })).shapes[0].id;
+  assert.match(d.cable.problems[0], /vertical_ft is required/);
+  await refused(client, "link_run", { device_shape_ids: [dev], route_shape_ids: [rtW], tr_id: tr }, /ACS-1: vertical_ft is required[\s\S]*edit_condition[\s\S]*no length is ever assumed/);
+  await ok(client, "edit_condition", { condition: "ACS-1", cable_setup: { vertical_ft: 18 } });
+  const linked = await ok(client, "link_run", { device_shape_ids: [dev], route_shape_ids: [rtW], tr_id: tr });
+  assert.equal(linked.per_cable_lf, 87.5 + 18 + 15 + 10);
+  // one pull per location
+  await refused(client, "link_run", { device_shape_ids: [dev], route_shape_ids: [rtW], tr_id: tr }, /already linked by run run-.* — unlink_run it first/);
+  assert.equal((await ok(client, "list_runs", {})).count, 1, "every refusal minted nothing");
+  // the scale gate: a route on a sheet this session has not scaled refuses with the engine's message
+  const two = await pair();
+  await ok(two, "load_plan", { path: PLAN });
+  const payload = await ok(client, "export_takeoff", {});
+  const dir = await mkdtemp(path.join(tmpdir(), "ot-cable-"));
+  const file = path.join(dir, "worked.json");
+  await writeFile(file, JSON.stringify({ ...payload, sheets: [], cable_runs: [] }));   // the shapes without their scale
+  await ok(two, "import_takeoff", { path: file });
+  const ids = (await ok(two, "list_shapes", {})).shapes;
+  const trId = ids.find((s: any) => s.condition === "TR").id, dw = ids.find((s: any) => s.condition === "DATA-1").id, rt = ids.find((s: any) => s.condition === "ROUTE").id;
+  await refused(two, "link_run", { device_shape_ids: [dw], route_shape_ids: [rt], tr_id: trId }, /Set the scale for sample-plan\.pdf first — use set_scale/);
+});
+
+test("unlink_run removes the link only; undo_last re-seats it; the device goes back on the unlinked list meanwhile", async () => {
+  const { client, tr, devW, rtW } = await worked();
+  const w = await ok(client, "link_run", { device_shape_ids: [devW], route_shape_ids: [rtW], tr_id: tr });
+  const gone = await ok(client, "unlink_run", { run_id: w.run_id });
+  assert.deepEqual({ unlinked: gone.unlinked, count: gone.run_count }, { unlinked: w.run_id, count: 0 });
+  const after = await ok(client, "list_runs", {});
+  assert.equal(after.count, 0);
+  assert.deepEqual(after.unlinked.devices.map((d: any) => [d.shape_id, d.reason]), [[devW, "no run links this device"], [(await ok(client, "list_shapes", { condition: "CAM-1" })).shapes[0].id, "no run links this device"]]);
+  assert.equal((await ok(client, "list_shapes", {})).count, 5, "every shape stays");
+  await refused(client, "unlink_run", { run_id: "run-nope" }, /No run with id "run-nope"/);
+  const undone = await ok(client, "undo_last", { n: 1 });
+  assert.equal(undone.steps[0].op, "run_unlink");
+  assert.equal((await ok(client, "list_runs", {})).runs[0].run_id, w.run_id);
+  const undone2 = await ok(client, "undo_last", { n: 1 });
+  assert.equal(undone2.steps[0].op, "run_link");
+  assert.equal((await ok(client, "list_runs", {})).count, 0);
+});
+
+test("a deleted route segment breaks its run (listed with the reason, never dropped); a withheld condition reports its gap", async () => {
+  const { client, tr, devW, rtW } = await worked();
+  const w = await ok(client, "link_run", { device_shape_ids: [devW], route_shape_ids: [rtW], tr_id: tr });
+  await ok(client, "delete_shape", { shape_id: rtW });
+  const runs = await ok(client, "list_runs", {});
+  const r = runs.runs.find((x: any) => x.run_id === w.run_id);
+  assert.deepEqual({ status: r.status, reason: r.reason }, { status: "broken", reason: `route shape ${rtW} was deleted` });
+  assert.equal(runs.summary.totals.pulls, 0);
+  assert.equal(runs.unlinked.devices[0].reason, `its run ${w.run_id} is broken: route shape ${rtW} was deleted`);
+  const rep = await ok(client, "export_report", {});
+  assert.equal(rep.cable.runs.find((x: any) => x.run_id === w.run_id).status, "broken");
+});
+
+test("legs warning: a route segment on a condition with rise/drop reads its plan length only and the report/list_runs warn", async () => {
+  const { client, tr, devW } = await worked();
+  const seg = await ok(client, "measure_line", { sheet: KEY, pts: [[200, 600], [920, 600]], condition: "LEGGY" });   // 20 ft plan
+  await ok(client, "edit_condition", { condition: "LEGGY", rise_ft: 8, drop_ft: 2 });   // re-flows the run to 30 LF (#441)
+  assert.equal(seg.length_lf, 20);
+  assert.equal((await ok(client, "list_shapes", { condition: "LEGGY" })).shapes[0].perimeter_lf, 30);
+  const w = await ok(client, "link_run", { device_shape_ids: [devW], route_shape_ids: [seg.shape_id], tr_id: tr });
+  assert.deepEqual({ route: w.route_lf, per: w.per_cable_lf }, { route: 20, per: 63 });
+  assert.match(w.notes[0], /carries 10 ft of rise\/drop legs — ignored/);
+  const runs = await ok(client, "list_runs", {});
+  assert.match(runs.warnings[0], /Condition LEGGY carries rise\/drop legs/);
+  const rep = await ok(client, "export_report", {});
+  assert.match(rep.cable.warnings[0], /LEGGY/);
+  assert.equal(rep.conditions.find((r: any) => r.finish_tag === "LEGGY").lf, 30, "the regular report keeps the leg-inclusive LF — which the warning names");
+});
+
+test("export_takeoff → import_takeoff round trip carries cable_setup, role and cable_runs; re-import is idempotent; a stitched-sheet run survives intact and reports broken", async () => {
+  const { client, tr, devW, devC, rtW, rtC } = await worked();
+  const w = await ok(client, "link_run", { device_shape_ids: [devW], route_shape_ids: [rtW], tr_id: tr });
+  await ok(client, "link_run", { device_shape_ids: [devC], route_shape_ids: [rtC], tr_id: tr });
+  const payload = await ok(client, "export_takeoff", {});
+  assert.equal(payload.cable_runs.length, 2);
+  assert.deepEqual(Object.keys(payload.cable_runs[0]), ["id", "device_shape_ids", "route_shape_ids", "tr_id", "provenance"]);
+  assert.deepEqual({ a: payload.cable_runs[0].provenance.actor, r: payload.cable_runs[0].provenance.reviewed }, { a: "agent", r: false });
+  assert.equal(payload.conditions.find((c: any) => c.finish_tag === "TR").role, "tr");
+  assert.equal(payload.conditions.find((c: any) => c.finish_tag === "DATA-1").cable_setup.device_type, "wall_outlet");
+  // a run the canvas linked across a stitched composite (sheet_id stitch:<uid>)
+  // — invented here, as the canvas would write it, with its stored length
+  const stitched = {
+    ...payload,
+    shapes: [...payload.shapes,
+      { id: "shp-stitch-dev", sheet_id: "stitch:abc", condition_id: payload.conditions.find((c: any) => c.finish_tag === "DATA-1").id, measure_role: "count", verts_norm: [[0.5, 0.5]], computed: { count: 1 } },
+      { id: "shp-stitch-rt", sheet_id: "stitch:abc", condition_id: payload.conditions.find((c: any) => c.finish_tag === "ROUTE").id, measure_role: "linear", verts_norm: [[0.1, 0.1], [0.9, 0.1]], computed: { area_sf: 0, perimeter_lf: 72.25 } },
+    ],
+    sheets: [...payload.sheets, { sheet_id: "stitch:abc", units_per_px: 0.05 }],
+    cable_runs: [...payload.cable_runs, { id: "run-stitch", device_shape_ids: ["shp-stitch-dev"], route_shape_ids: ["shp-stitch-rt"], tr_id: tr, provenance: { method: "manual", created_at: "2026-10-21T00:00:00.000Z" } }],
+  };
+  const dir = await mkdtemp(path.join(tmpdir(), "ot-cable-"));
+  const file = path.join(dir, "stitched.json");
+  await writeFile(file, JSON.stringify(stitched));
+
+  const two = await pair();
+  await ok(two, "load_plan", { path: PLAN });
+  const imp = await ok(two, "import_takeoff", { path: file });
+  assert.equal(imp.replaced, true);
+  const runs = await ok(two, "list_runs", {});
+  assert.equal(runs.count, 3);
+  const st = runs.runs.find((r: any) => r.run_id === "run-stitch");
+  assert.deepEqual({ status: st.status, route: st.route_lf, review: st.review }, { status: "broken", route: 72.25, review: "human" });
+  assert.match(st.reason, /sheet stitch:abc is not loaded in this session \(a stitched surface does not round-trip through MCP — link it in the canvas\)/);
+  assert.deepEqual({ pulls: runs.summary.totals.pulls, net: runs.summary.totals.cable_lf }, { pulls: 2, net: 439 }, "the two plan-sheet runs count; the stitched one is excluded, not zeroed into them");
+  assert.ok(runs.unlinked.devices.some((d: any) => d.shape_id === "shp-stitch-dev" && /run-stitch is broken/.test(d.reason)));
+  assert.ok(runs.unlinked.routes.some((r: any) => r.shape_id === "shp-stitch-rt" && r.length_lf === 72.25));
+
+  // export → import again: the stitched run and its shape's length are intact
+  const again = await ok(two, "export_takeoff", {});
+  const stRun = again.cable_runs.find((r: any) => r.id === "run-stitch");
+  assert.deepEqual(stRun, stitched.cable_runs[2], "the record round-trips verbatim");
+  assert.equal(again.shapes.find((s: any) => s.id === "shp-stitch-rt").computed.perimeter_lf, 72.25);
+  const file2 = path.join(dir, "again.json");
+  await writeFile(file2, JSON.stringify(again));
+  const re = await ok(two, "import_takeoff", { path: file2 });
+  assert.equal(re.shapes_added, 0, "re-import is idempotent");
+  assert.equal((await ok(two, "list_runs", {})).count, 3, "no duplicate runs");
+  // the wire-written file and the inline payload agree
+  await ok(two, "export_takeoff", { path: path.join(dir, "out.json") });
+  assert.deepEqual(JSON.parse(await readFile(path.join(dir, "out.json"), "utf8")).cable_runs.length, 3);
+  // and the linked plan-sheet run still figures after the round trip
+  assert.equal((await ok(two, "list_runs", {})).runs.find((r: any) => r.run_id === w.run_id).per_cable_lf, 130.5);
+});
+
+test("a session with no cable condition: no cable key in summary, report or export — byte-identical to before the feature", async () => {
+  const client = await pair();
+  await ok(client, "load_plan", { path: PLAN });
+  await ok(client, "set_scale", { sheet: KEY, upp: UPP });
+  await ok(client, "measure_polygon", { sheet: KEY, verts: [[100, 100], [460, 100], [460, 460], [100, 460]], condition: "VCT-1" });
+  assert.equal("cable" in (await ok(client, "takeoff_summary", {})), false);
+  assert.equal("cable" in (await ok(client, "export_report", {})), false);
+  assert.equal("cable_runs" in (await ok(client, "export_takeoff", {})), false);
+  const empty = await ok(client, "list_runs", {});
+  assert.deepEqual({ count: empty.count, summary: empty.summary }, { count: 0, summary: null });
+  assert.match(empty.note, /No condition carries a cable_setup/);
+});

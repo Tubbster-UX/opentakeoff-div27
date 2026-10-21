@@ -87,6 +87,53 @@
         "null"
       ]
     },
+    "cable_setup": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Division 27 cable opt-in on a count condition (web/src/lib/cable.js): device_type, cables_per_location, cable_type, vertical_ft, loop_device_ft, loop_tr_ft. Presence of a device_type makes the condition a device condition; null or absent opts out.",
+      "properties": {
+        "device_type": {
+          "type": "string"
+        },
+        "cables_per_location": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cable_type": {
+          "type": "string"
+        },
+        "vertical_ft": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "loop_device_ft": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "loop_tr_ft": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "role": {
+      "enum": [
+        "tr"
+      ],
+      "description": "\"tr\" flags a count condition whose markers are telecom rooms \u2014 the origins cable runs home to. Absent on every other condition."
+    },
     "tile_setup": {
       "type": [
         "object",

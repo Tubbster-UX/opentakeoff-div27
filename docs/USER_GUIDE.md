@@ -392,6 +392,25 @@ cut edits on shapes are kept but go inert.
 Agents get the same thing headlessly—`roll_setup` is a field on the MCP server's
 `edit_condition`, and the reply echoes the figured order ([§14](#14-ai-settings-and-driving-opentakeoff-from-an-agent)).
 
+### Cable runs — Division 27 (headless in this build)
+
+A count condition can carry a **cable setup**: device type (wall outlet, WAP, camera, access
+control door, other ceiling device, custom), cables per location, cable type, and the vertical
+and service-loop allowances per cable. A second count condition flagged as **telecom rooms**
+holds the TR markers (name each with its label: `MDF`, `IDF-1`). A **run** links one device
+marker to the route you traced with Linear (one or more segments, in order, each measured at
+its own sheet's scale) and the TR it homes to. Per cable LF = the measured route + the vertical
++ both loops; pulls are per location, cables per pull; the condition's waste % applies only to
+the order figure. Nothing is estimated: a device or route with no run, a run whose shape was
+deleted, and a condition missing its vertical are listed as unlinked or withheld and excluded.
+
+In this build the setup, the TR flag and the links are made over MCP (`edit_condition`,
+`link_run`, `list_runs`, `unlink_run` in [`docs/MCP.md`](MCP.md)); the Report's CSV, Excel
+and JSON exports carry the Cable summary, Cable runs and Unlinked tables whenever a cable
+condition exists, and the marked set's cover tallies pulls, pending runs and unlinked devices.
+The canvas setup panel, the Link Run tool and the Runs panel are the next phase of
+[`docs/design/CABLE_SETUP.md`](design/CABLE_SETUP.md).
+
 ### Import from schedule
 
 <img src="img/verify-import-schedule-dialog.png" alt="The Import from schedule dialog on the sample plan's material schedule, scrolled to its end — Wall Protection and Transition rows flagged from description, Ceiling and Other rows unticked, a code already in use locked, Select all and Deselect all in the footer" width="640"/>
@@ -1030,7 +1049,7 @@ What's sent, and only while an agent run you started is going: your goal, the pr
 
 The same engine speaks [MCP](https://modelcontextprotocol.io), one command away:
 `npx -y opentakeoff-mcp` (or the one-click `opentakeoff-mcp.mcpb` bundle for Claude Desktop). **Help → Connect your AI** in the app (also on the opening screen and in the **⋯** menu) has the setup for Claude Desktop, Claude Code, Codex and Cursor with copy buttons, and a first question to ask about the sample plan; [CONNECT.md](CONNECT.md) is the same walk-through. An
-MCP client gets **<!--tool-count-->53<!--/tool-count--> tools** plus browsable sheet resources, over the very same measuring engine,
+MCP client gets **<!--tool-count-->56<!--/tool-count--> tools** plus browsable sheet resources, over the very same measuring engine,
 with the same scale gate and the same provenance receipts:
 
 | Group | Tools |

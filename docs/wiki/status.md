@@ -16,6 +16,7 @@ be measured automatically. Follow its source links before changing behavior.
 | Toolbar command and voice | Gated in the default build; use normal controls and keyboard shortcuts | [User guide](../USER_GUIDE.md#17-voice-and-the-command-box) |
 | TakeoffDocument v1 | Draft schemas, preflight and opt-in repository adapters for a bounded profile; legacy writer format remains | [Protocol](protocol.md) |
 | Annotation cleanup | Text-only MCP edit with undo; RFI-linked notes refuse | [MCP routing](mcp.md) |
+| Division 27 cable runs | Headless: `cable_setup` and `role: "tr"` on conditions, `link_run` / `list_runs` / `unlink_run`, cable blocks on the summary, report, CSV and workbook; lengths come only from measured linear shapes, pending agent runs count and are disclosed; the canvas Link Run tool and Runs panel are not built yet | [Design](../design/CABLE_SETUP.md), [plan](../design/CABLE_SETUP_PLAN.md) |
 | Agent knowledge | Packaged wiki resources and source-generated tool/schema references | [Index](README.md) |
 | Academy interoperability | Incompatibilities inventoried; no adapter or certification bridge claimed | [Academy report](../../protocol/ACADEMY_COMPATIBILITY.md) |
 | Shared work review | Personal layouts/shared review proposal is not merged; do not describe [PR #388](https://github.com/Kentucky-ai/opentakeoff/pull/388) as shipped | [Roadmap](../ROADMAP.md) |

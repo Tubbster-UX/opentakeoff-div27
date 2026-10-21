@@ -177,7 +177,7 @@ rooms share 34 LF of wall would be a wrong number with a machine's confidence be
 
 ## 6. Staged tool exposure
 
-By default every client gets all <!--tool-count-->53<!--/tool-count--> tool schemas on `tools/list`—the flat contract every
+By default every client gets all <!--tool-count-->56<!--/tool-count--> tool schemas on `tools/list`—the flat contract every
 published client already expects.
 
 Fifty-two descriptions is real token weight for a session that may never touch half of them, so the
@@ -270,6 +270,11 @@ next."*
 | *Landed in dense linework (hatching or text).* | the seed landed on a text block or heavy hatch | `view_sheet` a crop, pick open floor, re-seed |
 | a ring not fully inside the parent (`cut_out`) | an edge-crossing cut is a boundary correction, not a hole | fix the parent with `edit_shape` instead |
 | `measure_surface` refuses with no height | wall SF = traced LF × the condition's height | `edit_condition { height_ft }`, then retrace |
+| `link_run`: *… is not a measured linear shape* | a route is a traced length, never a guess | `measure_line` the route and pass that shape id |
+| `link_run`: *… vertical_ft is required* | the device condition's cable setup lacks a required value (an access-control door has no starting vertical) | `edit_condition { cable_setup: { vertical_ft } }`, then link again |
+| `link_run`: *… is not a TR marker* | a run homes to a count marker on a condition flagged `role: "tr"` | `edit_condition { role: "tr" }` on the TR condition, `place_count` the room, `edit_shape { label: "MDF" }` |
+| `link_run`: *device … is already linked* | one pull per location | `unlink_run` the earlier run, or leave it |
+| a `list_runs` run reads *broken* | a linked shape was deleted, or sits on a sheet this session cannot scale (a stitched composite) — its stored length is kept, it is excluded from totals and listed under unlinked | re-trace and `link_run` again, or hand it to the canvas |
 | an export refuses a path | OpenTakeoff didn't write that file, and overwriting it would destroy someone's work | pass `overwrite: true`, or pick another path |
 | a `sweep_schedule_row` key that won't anchor | a fingerprint is never guessed from text alone; a device drawn to its own size and tagged by a leader is counted BY LABEL instead (`anchor: null`, `counted_by: "label"`), and a key that appears only in notes refuses with that reason | read `label_only` and `view_sheet` each placement before pricing it; for a refused key, `find_text` the tag, `view_sheet` the marker, count by hand |
 
@@ -304,7 +309,7 @@ Follow [Geometry from source to review](GEOMETRY_WORKFLOW.md) when tracing a rea
 ## Geometry review cleanup
 
 Use the [generated tool index](MCP_TOOL_INDEX.md) for the
-<!--tool-count-->53<!--/tool-count--> default tools, their stages and required arguments.
+<!--tool-count-->56<!--/tool-count--> default tools, their stages and required arguments.
 The [geometry workflow](GEOMETRY_WORKFLOW.md) is the source-to-handoff route.
 
 - Shorten a note with `list_annotations` then `edit_annotation`; empty text clears

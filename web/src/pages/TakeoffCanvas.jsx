@@ -155,6 +155,9 @@ import RollPanel from "../components/RollPanel.jsx";
 import LayerPanel from "../components/LayerPanel.jsx";
 import { rollColorForType } from "../lib/rollgoods.js";
 import { computeRollTakeoff, seamLfByShape } from "../lib/rollTakeoff.js";
+// Division 27 cable runs (docs/design/CABLE_SETUP.md) — the pure library;
+// the canvas only holds the records, resolves them, and hands the result on.
+import { sanitizeCableRuns, computeCableTakeoff } from "../lib/cable.js";
 // In-canvas takeoff agent — BYO-key tool-use loop (lib/agentLoop) aiming the
 // registry of deterministic tools (lib/agentTools); this file provides the
 // CAPABILITIES those tools close over and the review gate their proposals
@@ -363,6 +366,9 @@ export default function TakeoffCanvas() {
   // Stitches (#161): persisted match-line composites (lib/stitches.ts) — a
   // stitch opens as ONE panel; its members are a render-time concern only.
   const [stitches, setStitches] = useState([]);
+  // Cable runs (Division 27): device → route segments → TR links, persisted as
+  // the additive `cable_runs` key (lib/cable.js sanitizeCableRuns on load).
+  const [cableRuns, setCableRuns] = useState([]);
   const [alignPt, setAlignPt] = useState(null);       // stitch-align first click (stage px) — ephemeral, never persisted
   const [zoneCheck, setZoneCheck] = useState(null);   // ephemeral zone-check region {key, pts (norm)} — never persisted (buildPayload doesn't read it)
   const [zoneExpand, setZoneExpand] = useState(null); // zone panel: condition id with materials expanded
@@ -1518,6 +1524,15 @@ export default function TakeoffCanvas() {
   // what the layout welds.
   const seamCtx = useMemo(() => ({ seamByShape: seamLfByShape(rollByCond) }), [rollByCond]);
 
+  // ── cable runs (Division 27): resolved once per change, null when no condition
+  // carries a cable setup. uppFor answers the scale gate per sheet (stitches
+  // included); lengths come from the shapes' stored plan feet, never estimated.
+  const cableTakeoff = useMemo(
+    () => computeCableTakeoff(conditions, shapes, cableRuns, { uppFor: (k) => uppFor(k) }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- uppFor reads scales (listed) + renderScalesRef pinned to RENDER_SCALE, the roll memo's rule
+    [conditions, shapes, cableRuns, scales]
+  );
+
   // Cut drag (#136) — the self-contained element-drag pattern (the panel-resize
   // handle's): the cut's own <g> opts into pointer events in edit mode, captures
   // the pointer, live-PREVIEWS by writing shape.roll_layout through raw
@@ -2033,6 +2048,8 @@ export default function TakeoffCanvas() {
     // legitimate group of one while its stitch actually exists.
     const loadedStitches = sanitizeStitches(a.stitches, MAX_GROUP);
     setStitches(loadedStitches);
+    // additive `cable_runs` (Division 27) — sanitize-gated like stitches; else-clear
+    setCableRuns(sanitizeCableRuns(a.cable_runs));
     setAlignPt(null);
     // else-clear matters at runtime (snapshot load): a payload without groups/
     // tabs must not inherit the pre-load ones — autosave would persist a hybrid.
@@ -2860,7 +2877,7 @@ export default function TakeoffCanvas() {
     project_name: projectName, units, client_info: clientInfo,
     sheets: Object.entries(scales).map(([sheet_id, units_per_px]) => sheetEntry({ sheet_id, units_per_px, scale_source: scaleSources[sheet_id], scale_confirmed: scaleUnconfirmed[sheet_id] })),
     conditions, condition_columns: conditionColumns, shape_labels: shapeLabels, palette,
-    shapes, markups, rfis, approvals, proposals, condition_edit_proposals: conditionEditProposals, rules,
+    shapes, markups, rfis, approvals, proposals, condition_edit_proposals: conditionEditProposals, rules, cable_runs: cableRuns,
     sheet_group: sheetGroup, last_group: lastGroup, sheet_tabs: openTabs, stitches,
     sheet_levels: sheetLevels, layer_overrides: layerOverrides, provenance_counters: provCounters,
   });
@@ -3095,7 +3112,7 @@ export default function TakeoffCanvas() {
     // state it serializes, so listing buildPayload (a new identity each render)
     // would fire a save on every render instead of only on a real change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shapes, conditions, conditionColumns, shapeLabels, palette, scales, scaleSources, scaleUnconfirmed, markups, approvals, rfis, proposals, conditionEditProposals, rules, provCounters, sheetGroup, sheetLevels, layerOverrides, lastGroup, openTabs, stitches, projectName, clientInfo, units]);
+  }, [shapes, conditions, conditionColumns, shapeLabels, palette, scales, scaleSources, scaleUnconfirmed, markups, approvals, rfis, proposals, conditionEditProposals, rules, cableRuns, provCounters, sheetGroup, sheetLevels, layerOverrides, lastGroup, openTabs, stitches, projectName, clientInfo, units]);
   useEffect(() => { saveStateRef.current = saveState; }, [saveState]);
 
   // Flush a pending debounced save on navigate-away (unmount), and warn before a
@@ -5912,7 +5929,7 @@ export default function TakeoffCanvas() {
       const pages = leasedPages();
       const { bytes, filename } = await buildMarkedSetPdf({
         projectName, clientInfo, company: brand.company, credit: brand.credit, coverTitle: brand.coverTitle,
-        dark: darkMode, units, sheets: sheetMeta, shapes, markups: exportMarkups, approvals, rfis, conditions,
+        dark: darkMode, units, sheets: sheetMeta, shapes, markups: exportMarkups, approvals, rfis, conditions, cable: cableTakeoff,
         getPage: pages.getPage,
         loadPdfData: (file) => store.loadPdfData(file),
       }).finally(pages.release);
@@ -11151,6 +11168,7 @@ export default function TakeoffCanvas() {
           conditionColumns={conditionColumns} shapeLabels={shapeLabels}
           scaleInfo={Object.entries(scales).map(([sheet_id, units_per_px]) => ({ sheet_id, units_per_px, scale_source: scaleSources[sheet_id] || "unknown", scale_confirmed: scaleUnconfirmed[sheet_id] !== false }))}
           rollByCond={rollByCond}
+          cableTakeoff={cableTakeoff}
           provenanceCounters={provCounters}
           sheetLabel={(k) => tabLabel(k)}
           sheetDims={(k) => panelByKey(k)?.img}

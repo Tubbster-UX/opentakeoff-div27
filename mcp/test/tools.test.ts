@@ -75,7 +75,9 @@ async function captureStderr(fn: () => Promise<void>): Promise<string> {
 const NO_COORDS = new Set(["undo_last", "edit_materials", "edit_condition", "export_report", "export_marked_pdf", "export_dxf", "edit_annotation", "link_annotation", "list_shapes", "derive_base", "import_takeoff", "delete_verdict", "duplicate_condition", "split_condition", "apply_rules", "create_rfi", "list_rfis", "resolve_rfi", "delete_rfi",
   "propose_takeoff", "withdraw_proposal", "propose_condition_edit", "withdraw_condition_edit",
   // scope_merge (#366) takes two shape ids and a winner — no geometry crosses it
-  "scope_merge"]);
+  "scope_merge",
+  // cable runs (Division 27): list_runs reads, unlink_run takes a record id — no geometry crosses them
+  "list_runs", "unlink_run"]);
 
 test("tools/list: exactly TOOL_NAMES, each described with the coordinate contract", async () => {
   const client = await pair({});   // a DEFAULT build: the gate is up, TOOL_NAMES is what ships

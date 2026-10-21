@@ -22,7 +22,7 @@ export const TOOL_STAGES: Record<string, readonly string[]> = {
     "propose_takeoff",
     "one_click", "detect_rooms", "measure_polygon", "cut_out", "measure_line",
     "measure_surface", "place_count", "count_marks", "symbol_sweep", "sweep_schedule_row",
-    "derive_base", "derive_transitions",
+    "derive_base", "derive_transitions", "link_run",
   ],
   revise: [
     "list_shapes", "delete_shape", "edit_shape", "edit_materials", "edit_condition",
@@ -31,6 +31,7 @@ export const TOOL_STAGES: Record<string, readonly string[]> = {
     "duplicate_condition", "split_condition", "undo_last", "annotate",
     "list_annotations", "edit_annotation", "link_annotation", "mark_verdict", "delete_verdict",
     "create_rfi", "list_rfis", "resolve_rfi", "delete_rfi",
+    "list_runs", "unlink_run",
   ],
   handoff: [
     "takeoff_summary", "export_takeoff", "export_report", "import_takeoff",

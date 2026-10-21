@@ -123,6 +123,66 @@
         "type": "object"
       }
     },
+    "cable_runs": {
+      "type": "array",
+      "description": "Division 27 cable runs (docs/design/CABLE_SETUP.md): one device location \u2192 its route segments in order \u2192 a TR marker, all by shape id. Stores no length; lengths resolve from the referenced shapes. Omitted when empty.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "device_shape_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "route_shape_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tr_id": {
+            "type": "string"
+          },
+          "cables_override": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "provenance": {
+            "type": "object",
+            "properties": {
+              "method": {
+                "type": "string"
+              },
+              "actor": {
+                "type": "string"
+              },
+              "reviewed": {
+                "type": "boolean"
+              },
+              "created_at": {
+                "$ref": "common.schema.json#/$defs/timestamp"
+              },
+              "author": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "id",
+          "device_shape_ids",
+          "route_shape_ids",
+          "tr_id"
+        ],
+        "additionalProperties": true
+      }
+    },
     "sheet_group": {
       "type": "array",
       "items": {

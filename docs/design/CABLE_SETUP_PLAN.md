@@ -200,12 +200,63 @@ cd protocol && npm run check
 node scripts/check-doc-links.mjs
 ```
 
-## 7. Decisions needed from you before Phase 1 code
+## 7. Decisions (recorded Oct 21, 2026)
 
-1. **TR name field:** `shape.label` (default; reuses the existing label path, with the group-by-label side effect) or a new `tr_name`.
-2. **×N multiplier** on pulls/cables/cable LF in the summary rows: apply (default, house convention) or never.
-3. **Conditional cable tabs/sections** instead of always-present ones, to honor byte-for-byte (default: conditional).
-4. **Route LF ignores a segment's rise/drop legs** and takes the plan length (default), with disclosure in the run's notes.
-5. **MCP version bump to 0.9.99** to satisfy the fork's CI guard (default: bump).
-6. **Spec's three open decisions:** access-control door vertical stays blank and required (default, per the spec's text); shared trunk segments — Phase 1 allows one linear shape in several runs because nothing in the data model prevents it and refusing needs a rule you have not chosen yet; the summary counts route LF per run (a shared trunk's LF appears in each run that uses it, which is the physical truth for cable); private fork stays private.
-7. **Branch name:** this session's harness pins the working branch to `claude/div27-cable-setup-c6t9wu` on `Tubbster-UX/opentakeoff-div27` and refuses pushes elsewhere, so the plan is committed there instead of `feat/div27-cable-setup`. Renaming the branch afterward is a one-line `git branch -m`; say if you want the work moved.
+Plan approved. The review reply left four blanks (TR name field, access-door vertical, shared trunks, fork versus upstream); each was taken at the default stated here. Flip any of them and Phase 2 adjusts.
+
+1. **TR name field:** `shape.label`. The group-by-label and floor × room side effect is documented in FEATURES.md.
+2. **×N multiplier:** applies to pulls, cables and cable LF together in the Cable summary; the Cable runs sheet is unmultiplied with a Multiplier column.
+3. **Conditional cable tabs, columns and blocks:** yes. Old documents export byte-for-byte.
+4. **Route LF:** plan length only (`plan_lf ?? perimeter_lf`), legs ignored; a warning in the report, `list_runs` and the run note when a segment sits on a condition with nonzero rise or drop.
+5. **Pending agent runs:** count, as the engine counts pending shapes; "Pending runs" column on the Cable summary, a pending-run count on the marked-set cover.
+6. **MCP version:** 0.9.98 → 0.9.99 across all seven fields.
+7. **Undo:** link and unlink are undoable (approvals-style entries, Phase 2); cable-setup field edits follow the condition editor's convention (not undoable).
+8. **Access-control door vertical:** blank and required per job.
+9. **Shared trunk segments:** allowed; route LF counted per run.
+10. **Fork versus upstream:** stay in the fork; no upstream push or PR.
+11. **Branch:** `claude/div27-cable-setup-c6t9wu`.
+
+Additions from the review: device EA beside Pulls on the Cable summary; a required test that a run on a stitched sheet survives MCP import → export → import with its length intact and reads broken with a stated reason (stitches never round-trip through MCP).
+
+## 8. Phase 1 as built
+
+Everything in §5 landed, with these refinements found in the build:
+
+- **Unlinked routes.** Which linear shapes are routes is not recorded anywhere, so a base run or a transition cannot be told from an untraced route by its record alone. Rule used: a linear shape is an unlinked route when a non-linked run references it, or when it sits on a condition that some linked run already uses as a route condition. A linear shape on any other condition is not assumed to be a route. Phase 2's canvas tool can tighten this.
+- **Withheld versus broken.** A run with a structural fault (a deleted or wrong-kind shape, a sheet with no scale answer) is `broken`; a run whose condition's setup lacks a required value is `withheld`. Both are excluded and listed with every reason; a broken run still reports its stored route LF.
+- **`link_run` on a stitched segment** refuses in MCP (the session cannot answer the stitch's scale); an imported run that already references one resolves as broken with that reason and its length kept, as required.
+- **`edit_condition` never writes `waste_pct` from a device-type pick.** The spec's 12% starting waste is a canvas pre-fill (Phase 2); an agent passes `waste_pct` explicitly in the same call.
+- **Marked-set cover** gained a `Cable runs: N pulls linked · M runs pending review · K unlinked devices` line (present only with a cable takeoff). Route chips and per-condition legend totals stay Phase 3.
+- **Report Conditions table** gained Pulls / Cables / Cable LF / Cable LF w/Waste columns through the existing profile seam (the roll precedent), present only when a cable condition exists. The dedicated in-app Cable summary table and Unlinked list stay Phase 2.
+- **Protocol:** `cable_setup` and `role` on the condition schema, `cable_runs` inline in the document-fields schema (no new schema file, so the MCP resource allowlist is untouched), inventory rows, a current-records case.
+- **Tool counts:** 56 default, 58 with the One-Click gate lifted, setup 11; `link_run` is a measure-stage verb, `list_runs` and `unlink_run` revise-stage.
+
+## 9. Try it on a plan over MCP
+
+From the repo (`cd web && npm install && cd ../mcp && npm install`), point an MCP client at
+`node --import tsx /abs/path/mcp/server.ts`, then with the bundled `demo/sample-plan.pdf`
+(an invented layout works the same):
+
+1. `load_plan { path }` → `set_scale { sheet, use_detected: true }`.
+2. `place_count { sheet, points: [[200, 200]], condition: "TR" }` → `edit_condition { condition: "TR", role: "tr" }` → `edit_shape { shape_id, label: "MDF" }`.
+3. `place_count` the devices under a device tag (or `symbol_sweep` them), then `edit_condition { condition: "DATA-1", waste_pct: 12, cable_setup: { device_type: "wall_outlet", cables_per_location: 2, cable_type: "CAT6A" } }`. The reply lists the setup, any missing value, and the condition's summary row (EA beside zero pulls until something links).
+4. `measure_line { sheet, pts, condition: "ROUTE" }` for each route segment (several segments, on any sheets, are fine).
+5. `link_run { device_shape_ids: [dev], route_shape_ids: [seg1, seg2], tr_id: tr }` → the reply gives route LF, per-cable LF and location LF. Try the refusals: a count id as a route, the TR id as the device, an `access_door` condition before its vertical is entered.
+6. `list_runs` → runs with status and review, the unlinked list, the leg warnings, the summary by TR and by cable type. `takeoff_summary.cable` and `export_report.cable` carry the same figures; `export_takeoff` carries `cable_runs`.
+7. `export_marked_pdf` → the cover reads `Cable runs: N pulls linked · M runs pending review · K unlinked devices`.
+8. `unlink_run { run_id }` → `undo_last { n: 1 }` puts it back.
+
+In the app, Sheet → Import takeoff… on the `export_takeoff` JSON lands the setups, the TR flag and the runs; Report → CSV / Excel / JSON then carry the Cable summary and Cable runs tables (and the Conditions table gains Pulls / Cables / Cable LF columns). Phase 2 adds the panels and the Link Run tool.
+
+## 10. Phase 1 check record (Oct 21, 2026, this container: Node 22, root user)
+
+| Check | Result |
+|---|---|
+| `web`: typecheck, lint, check:ort | pass |
+| `web`: `npm test` | every cable, totals, workbook, document, import and marked-set case passes; `test/pictures.test.ts` hits the 20 s per-file timeout on this container **on the untouched baseline too** (24 of 24 subtests pass; passes with a 60 s timeout) |
+| `web`: bench, `bench/results.json` | unchanged |
+| `web`: build, check:ocr-dist | pass |
+| `mcp`: typecheck, tests | 285 pass; `safewrite.test.ts` "an unreadable file fails CLOSED" fails **on the untouched baseline too** because the suite runs as root here (chmod 000 cannot withdraw root's read) |
+| `mcp`: check:tool-count, check:protocol-resources, check:wiki, build, smoke:dist | pass (56 flat / 12 staged tools, 11 schemas, 9 wiki pages) |
+| `protocol`: `npm run check` | pass |
+| `node scripts/check-doc-links.mjs` | pass |

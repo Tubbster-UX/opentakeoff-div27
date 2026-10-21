@@ -11,6 +11,7 @@ import { mergeTakeoffImport } from "../../web/src/lib/importTakeoff.js";
 import { conditionTotals } from "../../web/src/lib/totals.js";
 import { buildProjectArchive, parseProjectArchive } from "../../web/src/lib/projectArchive.js";
 import { sanitizeStitches } from "../../web/src/lib/stitches.ts";
+import { computeCableTakeoff, mintCableSetup, mintCableRun } from "../../web/src/lib/cable.js";
 import { validator, assertValid, legacyId, draftId } from "./helpers.mjs";
 
 const ajv = validator();
@@ -214,4 +215,31 @@ test("wall bands and physically clipped base runs conform without floor deductio
   for (const s of record.shapes) assert.equal(s.origin.reviewed, false);
   session.undoLast(1);
   assert.deepEqual(session.exportPayload(), before);
+});
+
+test("Division 27 cable setup, TR role and cable runs conform as additive records; a cable-free document writes none of them", async () => {
+  const d = browserDocument();
+  d.conditions.push(
+    { id: "condition-tr", finish_tag: "TR", multiplier: 1, waste_pct: 0, materials: [], role: "tr" },
+    { id: "condition-data", finish_tag: "DATA-1", multiplier: 1, waste_pct: 12, materials: [], cable_setup: mintCableSetup("wall_outlet", { cables_per_location: 2, cable_type: "CAT6A" }) },
+  );
+  d.shapes = applyShapeCommand(d.shapes, { type: "add", shapes: [
+    { id: "tr-1", sheet_id: sheet, condition_id: "condition-tr", measure_role: "count", verts_norm: [[0.2, 0.2]], computed: { count: 1 }, label: "MDF", origin: { method: "manual" } },
+    { id: "dev-1", sheet_id: sheet, condition_id: "condition-data", measure_role: "count", verts_norm: [[0.6, 0.6]], computed: { count: 1 }, origin: { method: "manual" } },
+    { id: "rt-1", sheet_id: sheet, condition_id: "condition-1", measure_role: "linear", verts_norm: [[0.2, 0.3], [0.6, 0.3]], computed: { area_sf: 0, perimeter_lf: 87.5 }, origin: { method: "manual" } },
+  ] }).shapes;
+  d.cable_runs = [{ ...mintCableRun({ device_shape_ids: ["dev-1"], route_shape_ids: ["rt-1"], tr_id: "tr-1" }), id: "run-1" }];
+  checkBoth(d);
+  const t = computeCableTakeoff(d.conditions, d.shapes, d.cable_runs);
+  assert.deepEqual({ per: t.resolved.runs[0].per_cable_lf, order: t.summary.totals.cable_lf_order }, { per: 130.5, order: 292.32 });
+  // the MCP writer emits none of the keys for a session without cable work
+  const session = new Session();
+  await session.loadPlan(plan);
+  session.setScale(sheet, { use_detected: true });
+  session.placeCount(sheet, [[600, 600]], { condition: "C-1" });
+  const record = session.exportPayload();
+  assert.equal("cable_runs" in record, false);
+  assert.equal("cable_setup" in record.conditions[0], false);
+  assert.equal("role" in record.conditions[0], false);
+  checkBoth(record);
 });

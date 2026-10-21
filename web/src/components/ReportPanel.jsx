@@ -6,8 +6,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../brand/icons.jsx";
 import ToolMenu from "./ToolMenu.jsx";
 import { conditionTotals, grandTotals, sheetTotals, sheetGroupedRows, labelGroupedRows, authorGroupedRows, sheetLabelGroupedRows, round2, totalsToCsv, downloadText, materialsSummary, reportJson, hasMultipliers, BY_SHEET_BASE_NOTE } from "../lib/totals.js";
-import { TABLE_PROFILE, CSV_PROFILE, colGetter, customColProfile, specColProfile, laborColProfile, rollColProfile, partitionRowsBy, forceIncludeGroupCol, loadColPrefs, saveColPrefs, loadGroupBy, saveGroupBy, visibleCols, floorPerimeterLf, applyUnits } from "../lib/reportColumns.js";
+import { TABLE_PROFILE, CSV_PROFILE, colGetter, customColProfile, specColProfile, laborColProfile, rollColProfile, cableColProfile, partitionRowsBy, forceIncludeGroupCol, loadColPrefs, saveColPrefs, loadGroupBy, saveGroupBy, visibleCols, floorPerimeterLf, applyUnits } from "../lib/reportColumns.js";
 import { rollReportRows, seamLfByShape } from "../lib/rollTakeoff.js";
+import { cableReportBlock } from "../lib/cable.js";
 import { areaVal, areaUnit, lenVal, lenUnit } from "../lib/units";
 import { columnLabel } from "../lib/conditionColumns.js";
 import { shapeLabelValue } from "../lib/shapeLabels.js";
@@ -48,7 +49,7 @@ const sheetNum = (v, d = 1) => {
   return num(r, d);
 };
 
-export default function ReportPanel({ projectName, onProjectName, conditions, shapes, sheetLabel, sheetDims, onMarkedSet, markedSetDark, onClose, markups = [], rfis = [], scaleInfo = [], provenanceCounters = null, clientInfo = {}, onClientInfo, conditionColumns = [], shapeLabels = [], units = "imperial", rollByCond = null, conditionEditProposals = [] }) {
+export default function ReportPanel({ projectName, onProjectName, conditions, shapes, sheetLabel, sheetDims, onMarkedSet, markedSetDark, onClose, markups = [], rfis = [], scaleInfo = [], provenanceCounters = null, clientInfo = {}, onClientInfo, conditionColumns = [], shapeLabels = [], units = "imperial", rollByCond = null, conditionEditProposals = [], cableTakeoff = null }) {
   // proposals (#365): a pending condition-edit diff prints BESIDE the current
   // values — the row's numbers are always the current knobs; the chip says
   // what the agent proposed, and the JSON export carries the same rows.
@@ -150,6 +151,9 @@ export default function ReportPanel({ projectName, onProjectName, conditions, sh
   // built-in opt-ins → custom → spec → labor → roll), present only when at
   // least one condition figures a roll layout.
   const rollCols = rollColProfile(rollByCond);
+  // cable columns (Division 27) — pulls / cables / cable LF beside the device
+  // EA, appended after roll; present only when a cable condition exists.
+  const cableCols = cableColProfile(cableTakeoff?.byCond);
   // metric display converts AT THE DESCRIPTOR (applyUnits): headers swap to
   // m²/m, the SY column retires, and every dimensioned getter/foot wraps in
   // the converter — renderCell and the tfoot below need no unit awareness.
@@ -157,7 +161,7 @@ export default function ReportPanel({ projectName, onProjectName, conditions, sh
   // inside totalsToCsv/reportWorkbook so each output has ONE conversion site.
   const M = units === "metric";
   const AU = areaUnit(units), LU = lenUnit(units);
-  const tableCols = applyUnits(visibleCols([...TABLE_PROFILE, ...customCols, ...specCols, ...laborCols, ...rollCols], colPrefs), units);
+  const tableCols = applyUnits(visibleCols([...TABLE_PROFILE, ...customCols, ...specCols, ...laborCols, ...rollCols, ...cableCols], colPrefs), units);
   // group-by choice: "" (none) | "sheet" | a custom column id; normalized
   // ONCE per render and used everywhere (select value AND partitioning) — a
   // stale colId must fall back to None, never reach the select or the
@@ -171,7 +175,7 @@ export default function ReportPanel({ projectName, onProjectName, conditions, sh
   const groupBy = groupByRaw === "sheet" || (groupByRaw === "label" && shapeLabels.length > 0) || (groupByRaw === "author" && hasAuthors) || conditionColumns.some((cc) => cc.id === groupByRaw) ? groupByRaw : "";
   // grouping force-includes its column in the CSV/XLSX even when hidden in
   // the picker (D7) — a grouped report's export always carries its grouping
-  const csvCols = forceIncludeGroupCol(visibleCols([...CSV_PROFILE, ...customCols, ...specCols, ...laborCols, ...rollCols], colPrefs), customCols, groupBy);
+  const csvCols = forceIncludeGroupCol(visibleCols([...CSV_PROFILE, ...customCols, ...specCols, ...laborCols, ...rollCols, ...cableCols], colPrefs), customCols, groupBy);
   const perimByCond = useMemo(() => floorPerimeterLf(shapes), [shapes]);
   // custom-column values reach the getters through ctx, never as row fields
   // (conditionTotals rows are spread into the contribution payload)
@@ -180,7 +184,7 @@ export default function ReportPanel({ projectName, onProjectName, conditions, sh
   const specByCond = useMemo(() => new Map(conditions.map((c) => [c.id, c.spec])), [conditions]);
   // labor columns read the hand-typed labor/subfloor type off the same ctx seam
   const laborByCond = useMemo(() => new Map(conditions.map((c) => [c.id, { laborType: c.laborType, subfloorType: c.subfloorType }])), [conditions]);
-  const ctx = { perimByCond, attrsByCond, specByCond, laborByCond, rollByCond };
+  const ctx = { perimByCond, attrsByCond, specByCond, laborByCond, rollByCond, cableByCond: cableTakeoff?.byCond };
   // grouped view. Custom-column mode partitions the already-computed rows
   // (no recompute); sheet mode re-runs conditionTotals per sheet's shapes —
   // ORDERED quantities per slice (waste + ×N applied), each group carrying
@@ -323,9 +327,9 @@ export default function ReportPanel({ projectName, onProjectName, conditions, sh
   };
 
   const baseName = (projectName || "takeoff").replace(/[^\w.-]+/g, "_");
-  const exportCsv = () => downloadText(`${baseName}.csv`, totalsToCsv(rows, projectName, bySheet, sheetLabel, csvCols, ctx, byLabelExport.length ? byLabelExport : null, brand.brandName, units), "text/csv");
+  const exportCsv = () => downloadText(`${baseName}.csv`, totalsToCsv(rows, projectName, bySheet, sheetLabel, csvCols, ctx, byLabelExport.length ? byLabelExport : null, brand.brandName, units, cableTakeoff), "text/csv");
   const exportJson = () => downloadText(`${baseName}.json`,
-    JSON.stringify(reportJson({ projectName, rows, bySheet, scaleInfo, markups, rfis, sheetLabel, conditionColumns, attrsByCond, shapeLabels, byLabel: byLabelExport, displayUnits: units, rollGoods: rollReportRows(rollByCond, rows), proposedConditionEdits: proposedEditRows }), null, 2),
+    JSON.stringify(reportJson({ projectName, rows, bySheet, scaleInfo, markups, rfis, sheetLabel, conditionColumns, attrsByCond, shapeLabels, byLabel: byLabelExport, displayUnits: units, rollGoods: rollReportRows(rollByCond, rows), proposedConditionEdits: proposedEditRows, cable: cableReportBlock(cableTakeoff, sheetLabel) }), null, 2),
     "application/json");
   const exportRfisCsv = () => downloadText(`${baseName}_rfis.csv`, rfisToCsv(rfis, markups, projectName, sheetLabel, brand.brandName), "text/csv");
   const exportRfisJson = () => downloadText(`${baseName}_rfis.json`,
@@ -333,7 +337,7 @@ export default function ReportPanel({ projectName, onProjectName, conditions, sh
   // Excel workbook — same sources as the CSV/JSON (Conditions tab follows the
   // column picker like the CSV); buildXlsx lazy-loads fflate on first use
   const exportXlsx = async () => {
-    const sheets = reportWorkbook({ rows, bySheet, shapeRows: shapesDetail(conditions, shapes, sheetLabel), cols: csvCols, ctx, sheetLabel, units, byFloorRoom });
+    const sheets = reportWorkbook({ rows, bySheet, shapeRows: shapesDetail(conditions, shapes, sheetLabel), cols: csvCols, ctx, sheetLabel, units, byFloorRoom, cable: cableTakeoff });
     const bytes = await buildXlsx(sheets);
     downloadText(`${baseName}.xlsx`, bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   };

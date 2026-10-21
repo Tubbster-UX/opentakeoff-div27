@@ -15,6 +15,7 @@
 
 import { GETTERS, colGetter, applyUnits, METRIC_CSV_LABELS } from "./reportColumns.js";
 import { grandTotals, materialsSummary, roundSheetRow, hasMultipliers, BY_SHEET_BASE_NOTE } from "./totals.js";
+import { cableTables } from "./cable.js";
 import { round2 } from "./num.js";
 import { M_PER_FT, M2_PER_SF } from "./units";
 
@@ -171,9 +172,13 @@ export async function buildXlsx(sheets) {
  * @param {"imperial"|"metric"} [args.units] display units — "metric" converts
  *   the Conditions, By-sheet, floor × room, and Shapes tabs to m2/m (SY retires)
  *   exactly like the CSV. "imperial" (default) is byte-identical.
+ * @param {object|null} [args.cable] computeCableTakeoff() result (lib/cable.js):
+ *   appends the "Cable summary" and "Cable runs" tabs. The fixed five-tab list
+ *   above is unchanged; these two exist ONLY when a cable condition exists, so
+ *   a project without one gets the same workbook it always did.
  * @returns {Array<{name: string, rows: any[][]}>}
  */
-export function reportWorkbook({ rows = [], bySheet = [], shapeRows = [], cols = null, ctx = null, sheetLabel = null, units = "imperial", byFloorRoom = [] }) {
+export function reportWorkbook({ rows = [], bySheet = [], shapeRows = [], cols = null, ctx = null, sheetLabel = null, units = "imperial", byFloorRoom = [], cable = null }) {
   const columns = applyUnits(cols || [], units, METRIC_CSV_LABELS);
   const label = (id) => (sheetLabel ? sheetLabel(id) : id);
   const M = units === "metric";
@@ -252,11 +257,24 @@ export function reportWorkbook({ rows = [], bySheet = [], shapeRows = [], cols =
     }
   }
 
+  // Cable summary / Cable runs (Division 27) — full-precision cells, the same
+  // matrices the CSV sections print (lib/cable.js cableTables), so a bid
+  // workbook can reference them directly. The Unlinked list rides at the foot
+  // of the summary tab, and a leg warning prints above it.
+  const cableTabs = [];
+  const cableT = cableTables(cable, { sheetLabel, L, lengthUnit: LU });
+  if (cableT) {
+    const summary = [...cableT.warnings.map((w) => [w]), ...cableT.summary];
+    if (cableT.unlinked.length > 1) summary.push([], ["Unlinked"], ...cableT.unlinked);
+    cableTabs.push({ name: "Cable summary", rows: summary }, { name: "Cable runs", rows: cableT.runs });
+  }
+
   return [
     { name: "Conditions", rows: conditions },
     { name: "By sheet", rows: bySheetRows },
     { name: "Materials", rows: materials },
     { name: "Shapes", rows: shapesTab },
     { name: "By floor × room", rows: floorRoom },
+    ...cableTabs,
   ];
 }
