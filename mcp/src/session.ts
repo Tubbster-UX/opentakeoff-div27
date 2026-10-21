@@ -186,7 +186,12 @@ export interface ConditionEditFields {
 }
 
 /** The knobs edit_condition writes — one type, three call sites. */
-export type ConditionKnobPatch = { waste_pct?: number; multiplier?: number; height_ft?: number; rise_ft?: number; drop_ft?: number; roll_setup?: Record<string, unknown> | null; cable_setup?: Record<string, unknown> | null; role?: "tr" | null };
+export type ConditionKnobPatch = { waste_pct?: number; multiplier?: number; height_ft?: number; rise_ft?: number; drop_ft?: number; roll_setup?: Record<string, unknown> | null; cable_setup?: Record<string, unknown> | null; role?: ConditionRole | null };
+
+/** "tr": a count condition's markers are telecom rooms (link_run's tr_id
+ * targets). "route": a linear condition's shapes are cable routes — every
+ * one no linked run uses is reported unlinked (web/src/lib/cable.js). */
+export type ConditionRole = "tr" | "route";
 
 /** A Division 27 cable setup on a count condition (web/src/lib/cable.js
  * mintCableSetup) — the opt-in that makes a condition a device condition. */
@@ -252,8 +257,9 @@ export interface Condition {
    * setup with a device_type makes a count condition a DEVICE condition. */
   cable_setup?: CableSetup;
   /** "tr" flags a count condition whose markers are telecom rooms (TR / MDF /
-   * IDF) — the run origins link_run homes to. */
-  role?: "tr";
+   * IDF) — the run origins link_run homes to; "route" flags a linear
+   * condition whose shapes are cable routes (unlinked ones are listed). */
+  role?: ConditionRole;
   materials: MaterialRow[];
 }
 
@@ -694,7 +700,7 @@ export type JournalPayload =
   | { op: "delete"; tool: string; removed: { shape: Shape; index: number }[] }
   | { op: "materials"; tool: string; condition_id: string; before: MaterialRow[]; dropped_before?: string[];
       family?: { condition_id: string; before: MaterialRow[]; dropped_before?: string[] }[] }
-  | { op: "condition"; tool: string; condition_id: string; before: { waste_pct: number; multiplier: number; height_ft?: number; rise_ft?: number; drop_ft?: number; roll_setup?: Record<string, unknown>; cable_setup?: CableSetup; role?: "tr" } }
+  | { op: "condition"; tool: string; condition_id: string; before: { waste_pct: number; multiplier: number; height_ft?: number; rise_ft?: number; drop_ft?: number; roll_setup?: Record<string, unknown>; cable_setup?: CableSetup; role?: ConditionRole } }
   // cable runs (Division 27): link mints one record, unlink removes one —
   // each its own step, the inverse exact (the approvals-family precedent)
   | { op: "run_link"; tool: string; id: string }
@@ -4248,7 +4254,8 @@ export class Session {
     }
     if (opts.role !== undefined) {
       if (opts.role === null) delete c.role;
-      else c.role = "tr";
+      else if (opts.role === "tr" || opts.role === "route") c.role = opts.role;
+      else throw new UserError(`role must be "tr", "route" or null.`);
     }
   }
 
@@ -4267,7 +4274,18 @@ export class Session {
       cable_setup: c.cable_setup ? structuredClone(c.cable_setup) : undefined,
       role: c.role,
     };
+    // cable (Division 27): a fresh opt-in or a device-type change takes the
+    // type's STARTING values for whatever the call did not state — the reply
+    // names each minted value, because a starting value is not the spec
+    const freshCable = !!opts.cable_setup && (!hasCableSetup(c) || (typeof opts.cable_setup.device_type === "string" && opts.cable_setup.device_type !== c.cable_setup?.device_type));
     this.applyConditionKnobs(c, opts);
+    const minted: Record<string, number> = {};
+    if (freshCable && c.cable_setup) {
+      for (const k of ["cables_per_location", "vertical_ft", "loop_device_ft", "loop_tr_ft"] as const) {
+        const v = c.cable_setup[k];
+        if (opts.cable_setup![k] === undefined && typeof v === "number") minted[k] = v;
+      }
+    }
     this.record({ op: "condition", tool: "edit_condition", condition_id: c.id, before });
     // #441 — the defaults re-flow every linear run of the condition that does
     // not carry its own leg for that field (the canvas's setCondParam rule)
@@ -4290,7 +4308,10 @@ export class Session {
     if (hasCableSetup(c)) {
       const t = this.cableTakeoff();
       const rows = t ? t.summary.rows.filter((r) => r.condition_id === c.id) : [];
-      cable = { problems: cableSetupProblemsOf(c), rows };
+      cable = {
+        problems: cableSetupProblemsOf(c), rows,
+        ...(Object.keys(minted).length ? { minted, note: "starting values, not verified against spec — these came from the device type, not the project spec; confirm vertical_ft, loop_device_ft and loop_tr_ft (edit_condition patches them)" } : {}),
+      };
     }
     return {
       condition: tag, condition_id: c.id, waste_pct: c.waste_pct, multiplier: c.multiplier,

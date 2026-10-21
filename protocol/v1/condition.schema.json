@@ -130,9 +130,10 @@
     },
     "role": {
       "enum": [
-        "tr"
+        "tr",
+        "route"
       ],
-      "description": "\"tr\" flags a count condition whose markers are telecom rooms \u2014 the origins cable runs home to. Absent on every other condition."
+      "description": "\"tr\" flags a count condition whose markers are telecom rooms (the origins cable runs home to); \"route\" flags a linear condition whose shapes are cable routes (the ones no linked run uses are reported unlinked). Absent on every other condition."
     },
     "tile_setup": {
       "type": [

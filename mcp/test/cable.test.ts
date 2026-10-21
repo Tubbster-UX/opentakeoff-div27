@@ -60,6 +60,7 @@ async function worked() {
   await ok(client, "edit_condition", { condition: "CAM-1", waste_pct: 12, cable_setup: { device_type: "camera", cable_type: "CAT6" } });
   const rw = await ok(client, "measure_line", { sheet: KEY, pts: [[200, 300], [3350, 300]], condition: "ROUTE" });
   const rc = await ok(client, "measure_line", { sheet: KEY, pts: [[200, 400], [5240, 400]], condition: "ROUTE" });
+  await ok(client, "edit_condition", { condition: "ROUTE", role: "route" });
   assert.deepEqual([rw.length_lf, rc.length_lf], [87.5, 140]);
   return { client, tr: tr.shape_ids[0] as string, devW: w.shape_ids[0] as string, devC: c.shape_ids[0] as string, rtW: rw.shape_id as string, rtC: rc.shape_id as string };
 }
@@ -72,21 +73,34 @@ test("edit_condition cable_setup: a fresh opt-in mints the type's starting value
   const on = await ok(client, "edit_condition", { condition: "WAP-1", cable_setup: { device_type: "wap" } });
   assert.deepEqual(on.cable_setup, { device_type: "wap", cables_per_location: 1, cable_type: "", vertical_ft: 13, loop_device_ft: 20, loop_tr_ft: 10 });
   assert.equal(on.waste_pct, 0, "waste is never set silently — the 12% starting value is a canvas pre-fill");
-  assert.deepEqual(on.cable, { problems: [], rows: [{ condition_id: on.condition_id, finish_tag: "WAP-1", device_type: "wap", cable_type: "", tr_id: "", tr_name: "", multiplier: 1, waste_pct: 0, ea: 1, pulls: 0, cables: 0, route_lf: 0, cable_lf: 0, cable_lf_order: 0, unlinked_devices: 1, pending_runs: 0, leg_warning: false }] });
+  assert.deepEqual(on.cable.problems, []);
+  assert.deepEqual(on.cable.rows, [{ condition_id: on.condition_id, finish_tag: "WAP-1", device_type: "wap", cable_type: "", tr_id: "", tr_name: "", multiplier: 1, waste_pct: 0, ea: 1, pulls: 0, cables: 0, route_lf: 0, cable_lf: 0, cable_lf_order: 0, unlinked_devices: 1, pending_runs: 0, leg_warning: false }]);
+  // the minted-values caveat: every value this call did not state is named
+  assert.deepEqual(on.cable.minted, { cables_per_location: 1, vertical_ft: 13, loop_device_ft: 20, loop_tr_ft: 10 });
+  assert.match(on.cable.note, /^starting values, not verified against spec/);
   const patched = await ok(client, "edit_condition", { condition: "WAP-1", cable_setup: { loop_device_ft: 25, cable_type: "CAT6A" } });
   assert.deepEqual({ v: patched.cable_setup.vertical_ft, l: patched.cable_setup.loop_device_ft, t: patched.cable_setup.cable_type }, { v: 13, l: 25, t: "CAT6A" });
-  const door = await ok(client, "edit_condition", { condition: "WAP-1", cable_setup: { device_type: "access_door" } });
+  assert.equal(patched.cable.minted, undefined, "a same-type patch mints nothing");
+  const door = await ok(client, "edit_condition", { condition: "WAP-1", cable_setup: { device_type: "access_door", loop_tr_ft: 12 } });
   assert.deepEqual({ v: door.cable_setup.vertical_ft, l: door.cable_setup.loop_device_ft, t: door.cable_setup.cable_type }, { v: null, l: 15, t: "" }, "a type change starts over from that type's values");
   assert.match(door.cable.problems[0], /vertical_ft is required/);
+  assert.deepEqual(door.cable.minted, { cables_per_location: 1, loop_device_ft: 15 }, "the stated loop_tr_ft and the absent vertical are not minted");
+  // an explicit call mints nothing and carries no caveat
+  const explicit = await ok(client, "edit_condition", { condition: "WAP-1", cable_setup: { device_type: "custom", cables_per_location: 2, vertical_ft: 15, loop_device_ft: 5, loop_tr_ft: 5 } });
+  assert.deepEqual({ minted: explicit.cable.minted, note: explicit.cable.note, problems: explicit.cable.problems }, { minted: undefined, note: undefined, problems: [] });
   const off = await ok(client, "edit_condition", { condition: "WAP-1", cable_setup: null });
   assert.equal(off.cable_setup, undefined);
   assert.equal(off.cable, undefined);
   await ok(client, "undo_last", { n: 1 });
   const back = await ok(client, "export_takeoff", {});
-  assert.equal(back.conditions.find((c: any) => c.finish_tag === "WAP-1").cable_setup.device_type, "access_door", "undo restores the setup verbatim");
-  // role: set, echoed, cleared, undone
+  assert.equal(back.conditions.find((c: any) => c.finish_tag === "WAP-1").cable_setup.device_type, "custom", "undo restores the setup verbatim");
+  // role: set, echoed, cleared, undone; "route" is the other value
   const tr = await ok(client, "edit_condition", { condition: "WAP-1", role: "tr" });
   assert.equal(tr.role, "tr");
+  assert.equal((await ok(client, "edit_condition", { condition: "WAP-1", role: "route" })).role, "route");
+  const badRole: any = await client.callTool({ name: "edit_condition", arguments: { condition: "WAP-1", role: "pathway" } });
+  assert.ok(badRole.isError && /MCP error -32602/.test(badRole.content[0].text), "an unknown role is a schema violation");
+  await ok(client, "edit_condition", { condition: "WAP-1", role: "tr" });
   const cleared = await ok(client, "edit_condition", { condition: "WAP-1", role: null });
   assert.equal(cleared.role, undefined);
   await ok(client, "undo_last", { n: 1 });
@@ -171,6 +185,7 @@ test("unlink_run removes the link only; undo_last re-seats it; the device goes b
   const after = await ok(client, "list_runs", {});
   assert.equal(after.count, 0);
   assert.deepEqual(after.unlinked.devices.map((d: any) => [d.shape_id, d.reason]), [[devW, "no run links this device"], [(await ok(client, "list_shapes", { condition: "CAM-1" })).shapes[0].id, "no run links this device"]]);
+  assert.deepEqual(after.unlinked.routes.map((r: any) => [r.shape_id, r.finish_tag, r.reason]), [[rtW, "ROUTE", "no run links this segment"], [(await ok(client, "list_shapes", { condition: "ROUTE" })).shapes[1].id, "ROUTE", "no run links this segment"]], "every line on the route condition is listed while no run uses it");
   assert.equal((await ok(client, "list_shapes", {})).count, 5, "every shape stays");
   await refused(client, "unlink_run", { run_id: "run-nope" }, /No run with id "run-nope"/);
   const undone = await ok(client, "undo_last", { n: 1 });
@@ -276,4 +291,20 @@ test("a session with no cable condition: no cable key in summary, report or expo
   const empty = await ok(client, "list_runs", {});
   assert.deepEqual({ count: empty.count, summary: empty.summary }, { count: 0, summary: null });
   assert.match(empty.note, /No condition carries a cable_setup/);
+});
+
+test("unlinked routes come only from role 'route' conditions over the wire: a route condition with zero linked runs lists every line; base lines are never listed", async () => {
+  const { client, tr, devW, rtW } = await worked();
+  const base = await ok(client, "measure_line", { sheet: KEY, pts: [[200, 700], [2000, 700]], condition: "WB-1" });   // a base run, no role
+  const none = await ok(client, "list_runs", {});
+  assert.deepEqual(none.unlinked.routes.map((r: any) => r.finish_tag), ["ROUTE", "ROUTE"]);
+  assert.ok(!none.unlinked.routes.some((r: any) => r.shape_id === base.shape_id), "the base run is never assumed to be a route");
+  await ok(client, "link_run", { device_shape_ids: [devW], route_shape_ids: [rtW], tr_id: tr });
+  const one = await ok(client, "list_runs", {});
+  assert.equal(one.unlinked.routes.length, 1);
+  assert.notEqual(one.unlinked.routes[0].shape_id, rtW);
+  // clearing the flag empties the list; linking is still by shape id
+  await ok(client, "edit_condition", { condition: "ROUTE", role: null });
+  assert.deepEqual((await ok(client, "list_runs", {})).unlinked.routes, []);
+  assert.equal((await ok(client, "list_runs", {})).runs[0].status, "linked");
 });

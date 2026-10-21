@@ -397,8 +397,9 @@ Agents get the same thing headlessly—`roll_setup` is a field on the MCP server
 A count condition can carry a **cable setup**: device type (wall outlet, WAP, camera, access
 control door, other ceiling device, custom), cables per location, cable type, and the vertical
 and service-loop allowances per cable. A second count condition flagged as **telecom rooms**
-holds the TR markers (name each with its label: `MDF`, `IDF-1`). A **run** links one device
-marker to the route you traced with Linear (one or more segments, in order, each measured at
+holds the TR markers (name each with its label: `MDF`, `IDF-1`), and a linear condition flagged
+as **cable routes** holds the segments you trace with Linear (so any left unlinked is listed).
+A **run** links one device marker to its route (one or more segments, in order, each measured at
 its own sheet's scale) and the TR it homes to. Per cable LF = the measured route + the vertical
 + both loops; pulls are per location, cables per pull; the condition's waste % applies only to
 the order figure. Nothing is estimated: a device or route with no run, a run whose shape was

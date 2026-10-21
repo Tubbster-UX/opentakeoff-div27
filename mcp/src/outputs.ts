@@ -446,7 +446,7 @@ const cableRunRow = z.object({
 });
 const cableUnlinked = z.object({
   devices: z.array(z.object({ shape_id: z.string(), condition_id: z.string(), finish_tag: z.string(), sheet_id: z.string(), reason: z.string() }).passthrough()),
-  routes: z.array(z.object({ shape_id: z.string(), condition_id: z.string(), sheet_id: z.string(), length_lf: z.number().nullable(), reason: z.string() }).passthrough()),
+  routes: z.array(z.object({ shape_id: z.string(), condition_id: z.string(), finish_tag: z.string(), sheet_id: z.string(), length_lf: z.number().nullable(), reason: z.string() }).passthrough()).describe("Every linear shape on a role \"route\" condition that no linked run uses"),
 });
 const cableSummaryBlock = z.object({
   rows: z.array(cableSummaryRow), by_tr: z.array(cableGroupRow), by_cable_type: z.array(cableGroupRow), totals: cableGroupRow,
@@ -857,10 +857,12 @@ export const editConditionOutput = {
     oversize: z.boolean().describe("true when a cut exceeds the physical roll length (roll_length_ft binds)"),
   }).passthrough().optional().describe("The figured order (same row export_report's roll_goods carries) — present when the roll-goods condition has floor shapes on scaled sheets"),
   cable_setup: cableSetupShape.optional().describe("The condition's Division 27 cable setup after this write — present while opted in"),
-  role: z.literal("tr").optional().describe("Present when the condition's count markers are telecom rooms (link_run's tr_id targets)"),
+  role: z.enum(["tr", "route"]).optional().describe("Present when flagged: \"tr\" = the condition's count markers are telecom rooms (link_run's tr_id targets); \"route\" = its linear shapes are cable routes (unlinked ones are listed by list_runs)"),
   cable: z.object({
     problems: z.array(z.string()).describe("Required values still missing from the setup — while any remain, every run on this condition is WITHHELD with this reason (no length is assumed)"),
     rows: z.array(cableSummaryRow).describe("The condition's Cable summary row(s), one per TR it homes to, ×N and waste applied as in export_report"),
+    minted: z.record(z.number()).optional().describe("On a fresh opt-in or a device-type change: every setup value this call did NOT state and the device type's starting table supplied (cables_per_location, vertical_ft, loop_device_ft, loop_tr_ft). Starting values, not verified against spec — confirm each against the project spec"),
+    note: z.string().optional().describe("Present with minted: the starting-values caveat"),
   }).optional().describe("Present when the condition carries a cable setup"),
 };
 

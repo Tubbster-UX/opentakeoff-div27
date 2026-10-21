@@ -219,3 +219,10 @@ Recorded from the plan review on Oct 21, 2026. The three spec decisions were lef
 - [x] **MCP version.** 0.9.98 → 0.9.99 across all seven fields (the fork's CI guard).
 - [x] **Undo.** Link and unlink are undoable; cable-setup field edits follow the condition editor's existing convention (not undoable), like roll goods.
 - [x] **Branch.** `claude/div27-cable-setup-c6t9wu` on the fork.
+
+Recorded from the Phase 1 review (Oct 21, 2026):
+
+- [x] **Route conditions.** A linear condition flagged `role: "route"` (set with `edit_condition`, the same pattern as `role: "tr"`) holds the route segments. Every linear shape on a route condition that no linked run uses is reported unlinked; a line on any other condition (base, a transition, a wall) is never assumed to be a route. The earlier inferred rule is dropped. Linking stays by shape id.
+- [x] **Cable setup over MCP.** A fresh opt-in or a device-type change keeps minting the device type's starting values for whatever the call does not state, and the `edit_condition` reply names every minted value under `cable.minted` with the note "starting values, not verified against spec". (The review left this choice blank; this is the less disruptive option and the canvas pre-fill in Phase 2 is unchanged either way.)
+- [x] **Shared trunk segments.** Kept allowed. (Left blank in the review; unchanged from the plan default.)
+- [x] **Stitched sheets in the canvas.** The Phase 2 Link Run tool will link route segments on stitched surfaces: the library resolves a segment through the caller's scale answer, the canvas knows every stitch's scale, and `web/test/cable.test.ts` already proves a `stitch:<uid>` segment links there while the same run reads broken over MCP.

@@ -176,7 +176,7 @@ Fifty-two tools, in the order an agent tends to reach for them:
   canvas's own delete semantics, ported as the spec)
 - **Revise**—`edit_shape` (all five roles), `edit_materials`,
   `edit_condition` (waste %, ×N multiplier, `height_ft`, `rise_ft` / `drop_ft` — the vertical legs every linear run adds to its plan length (#441), the roll-goods
-  `roll_setup` opt-in—the reply echoes the figured order—and the Division 27 `cable_setup` opt-in plus the `role: "tr"` flag), `delete_shape`,
+  `roll_setup` opt-in—the reply echoes the figured order—and the Division 27 `cable_setup` opt-in plus the `role: "tr"` / `"route"` flags), `delete_shape`,
   `undo_last`, with `list_shapes` as the mid-session inventory the mutating
   verbs assume you have
 - **Proposals** (#365)—`propose_takeoff` opens a named batch that every
@@ -195,8 +195,9 @@ Fifty-two tools, in the order an agent tends to reach for them:
   routing factor and no estimated length: an agent links shapes that already carry measured
   geometry, and a route on an unscaled sheet, a device condition missing its vertical, or an id
   that is not the right kind of shape refuses with the next move. `list_runs` resolves every
-  run (linked / withheld / broken, with reasons), lists unlinked devices and routes (excluded
-  from totals, never assigned a length) and rolls the summary up per condition × TR, by TR and
+  run (linked / withheld / broken, with reasons), lists unlinked devices and routes—every line on
+  a `role: "route"` condition no linked run uses (excluded from totals, never assigned a
+  length)—and rolls the summary up per condition × TR, by TR and
   by cable type; `unlink_run` removes a link, shapes untouched. `takeoff_summary` and
   `export_report` carry a `cable` block whenever a cable condition exists; agent-linked runs
   land pending and count exactly as pending agent shapes do

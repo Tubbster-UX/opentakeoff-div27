@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  DEVICE_TYPES, CABLE_DEFAULTS, mintCableSetup, hasCableSetup, isTrCondition, cableSetupProblems,
+  DEVICE_TYPES, CABLE_DEFAULTS, mintCableSetup, hasCableSetup, isTrCondition, isRouteCondition, CONDITION_ROLES, cableSetupProblems,
   mintCableRun, sanitizeCableRuns, routeLengthFt, resolveCableRuns, cableSummary, computeCableTakeoff,
   cableReportBlock, cableTables, cableRunRows, linkRunRefusal, cableByCondition,
 } from "../src/lib/cable.js";
@@ -29,7 +29,7 @@ const line = (id: string, condId: string, lf: number, sheet = "a.pdf", extra: an
 const WALL = cond("c-wall", "DATA-1", { waste_pct: 12, cable_setup: mintCableSetup("wall_outlet", { cables_per_location: 2, cable_type: "CAT6A" }) });
 const CAM = cond("c-cam", "CAM-1", { waste_pct: 12, cable_setup: mintCableSetup("camera", { cable_type: "CAT6" }) });
 const TR = cond("c-tr", "TR", { role: "tr" });
-const ROUTE = cond("c-route", "ROUTE");
+const ROUTE = cond("c-route", "ROUTE", { role: "route" });
 const BASE_CONDS = [WALL, CAM, TR, ROUTE];
 const BASE_SHAPES = [
   count("tr-mdf", "c-tr", "a.pdf", { label: "MDF" }),
@@ -63,6 +63,9 @@ test("opt-in is cable_setup presence; corrupt setups read as opted out; role 'tr
   assert.equal(hasCableSetup(cond("x", "X", { cable_setup: { vertical_ft: 3 } })), false, "no device type = no setup");
   assert.equal(isTrCondition(TR), true);
   assert.equal(isTrCondition(WALL), false);
+  assert.equal(isRouteCondition(ROUTE), true);
+  assert.equal(isRouteCondition(TR), false);
+  assert.deepEqual([...CONDITION_ROLES], ["tr", "route"]);
 });
 
 test("cableSetupProblems names every missing required value; a complete setup has none", () => {
@@ -167,10 +170,31 @@ test("an unlinked device and an unlinked route are excluded from totals and list
   assert.deepEqual({ ea: row.ea, pulls: row.pulls, unlinked: row.unlinked_devices }, { ea: 2, pulls: 1, unlinked: 1 }, "EA beside pulls shows the gap");
 });
 
-test("a linear shape on a condition no run uses is not assumed to be a route (base and transitions stay quiet)", () => {
-  const shapes = [...BASE_SHAPES, line("base-1", "c-wall-base", 300)];
-  const t = computeCableTakeoff([...BASE_CONDS, cond("c-wall-base", "WB-1")], shapes, BASE_RUNS)!;
-  assert.deepEqual(t.resolved.unlinked.routes, []);
+test("unlinked routes come only from role 'route' conditions: a route condition with zero linked runs flags every line; base and transition shapes are never flagged", () => {
+  const BASE = cond("c-base", "WB-1");   // no role — a base condition
+  const TRANS = cond("c-trans", "TRN-1");
+  const shapes = [
+    count("tr-mdf", "c-tr"), count("dev-w1", "c-wall"),
+    line("rt-1", "c-route", 40), line("rt-2", "c-route", 55),
+    line("base-1", "c-base", 300),
+    { ...line("trn-1", "c-trans", 12), origin: { method: "derived", actor: "canvas", reviewed: false, derived: { between_shape_ids: ["a", "b"], between: ["F-1", "F-2"], case: "butt", gap_in: 0 } } },
+  ];
+  const none = computeCableTakeoff([WALL, TR, ROUTE, BASE, TRANS], shapes, [])!;
+  assert.deepEqual(none.resolved.unlinked.routes.map((r: any) => [r.shape_id, r.finish_tag, r.length_lf, r.reason]), [["rt-1", "ROUTE", 40, "no run links this segment"], ["rt-2", "ROUTE", 55, "no run links this segment"]]);
+  // linking one leaves the other; a segment in a broken run names the run
+  const run = { ...mintCableRun({ device_shape_ids: ["dev-w1"], route_shape_ids: ["rt-1"], tr_id: "tr-mdf" }), id: "run-1" };
+  const one = computeCableTakeoff([WALL, TR, ROUTE, BASE, TRANS], shapes, [run])!;
+  assert.deepEqual(one.resolved.unlinked.routes.map((r: any) => r.shape_id), ["rt-2"]);
+  const broken = computeCableTakeoff([WALL, TR, ROUTE, BASE, TRANS], shapes.filter((s) => s.id !== "tr-mdf"), [run])!;
+  assert.deepEqual(broken.resolved.unlinked.routes.map((r: any) => [r.shape_id, r.reason]), [["rt-1", "its run run-1 is broken: TR marker tr-mdf was deleted"], ["rt-2", "no run links this segment"]]);
+  // a line on an unflagged condition is never a route, even when a run links it
+  const base = { ...run, id: "run-b", route_shape_ids: ["base-1"] };
+  const viaBase = computeCableTakeoff([WALL, TR, ROUTE, BASE, TRANS], shapes, [base])!;
+  assert.equal(viaBase.resolved.runs[0].status, "linked", "linking is by shape id, the role only drives the unlinked list");
+  assert.deepEqual(viaBase.resolved.unlinked.routes.map((r: any) => r.shape_id), ["rt-1", "rt-2"]);
+  // a project whose only cable record is a route condition still figures (so its lines get listed)
+  assert.ok(computeCableTakeoff([ROUTE], [line("rt-1", "c-route", 40)], []));
+  assert.equal(computeCableTakeoff([BASE, TRANS], shapes, []), null);
 });
 
 test("access-control door with no vertical: runs withheld with the stated reason, excluded from totals, condition row still shows EA", () => {
@@ -331,7 +355,7 @@ test("linkRunRefusal: each refusal names the problem and the next move; a sound 
 });
 
 test("computeCableTakeoff is null for a project with no cable condition and no runs — nothing figured, nothing exported", () => {
-  assert.equal(computeCableTakeoff([TR, ROUTE], BASE_SHAPES, []), null);
+  assert.equal(computeCableTakeoff([TR, cond("c-plain", "VCT-1")], BASE_SHAPES, []), null);
   assert.equal(cableReportBlock(null), null);
   assert.equal(cableTables(null), null);
   assert.deepEqual(cableByCondition(null), new Map());

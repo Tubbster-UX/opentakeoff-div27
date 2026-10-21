@@ -78,6 +78,11 @@ export function hasCableSetup(c) {
 
 /** A condition whose count markers are telecom rooms. */
 export function isTrCondition(c) { return c?.role === "tr"; }
+/** A condition whose linear shapes are cable routes: every one of them that
+ *  no linked run uses is reported unlinked. A linear shape on any other
+ *  condition (base, a transition, a wall) is never assumed to be a route. */
+export function isRouteCondition(c) { return c?.role === "route"; }
+export const CONDITION_ROLES = Object.freeze(["tr", "route"]);
 
 const finiteNonNeg = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0;
 
@@ -201,7 +206,7 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
   const linkedDevices = new Set();   // device ids in LINKED runs
   const deviceRun = new Map();       // device id → first run referencing it (any status)
   const routeRun = new Map();        // route id → first run referencing it (any status)
-  const routeConds = new Set();      // conditions that serve as route conditions (any linked run)
+  const linkedRoutes = new Set();    // route ids in LINKED runs
 
   for (const raw of runs || []) {
     const run = normalizeRunReview(raw);
@@ -295,7 +300,7 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
         ...(Number.isInteger(run.cables_override) ? { cables_override: run.cables_override } : {}),
       });
       for (const id of devIds) linkedDevices.add(id);
-      for (const seg of segments) routeConds.add(shapeById.get(seg.shape_id).condition_id);
+      for (const seg of segments) linkedRoutes.add(seg.shape_id);
     } else {
       resolved.push({
         ...base,
@@ -320,21 +325,19 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
       reason: r ? `its run ${r.id} is ${r.status}: ${r.reason}` : "no run links this device",
     });
   }
-  // ── unlinked routes: a segment referenced by a non-linked run, or an
-  // unreferenced linear shape on a condition some linked run already uses as
-  // a route condition. A linear shape on any other condition (base, a
-  // transition, a wall) is not assumed to be a route.
+  // ── unlinked routes: every linear shape on a condition flagged role
+  // "route" that no LINKED run uses. The flag is the only thing that says a
+  // line is a route — base, transitions and walls are never assumed to be.
   const routes = [];
   for (const s of shapes || []) {
-    if (s.measure_role !== "linear") continue;
+    if (s.measure_role !== "linear" || !isRouteCondition(condById.get(s.condition_id))) continue;
+    if (linkedRoutes.has(s.id)) continue;
     const via = routeRun.get(s.id);
-    if (via) {
-      const r = resolved.find((x) => x.id === via);
-      if (!r || r.status === "linked") continue;
-      routes.push({ shape_id: s.id, condition_id: s.condition_id, sheet_id: s.sheet_id, length_lf: routeLengthFt(s), reason: `its run ${r.id} is ${r.status}: ${r.reason}` });
-    } else if (routeConds.has(s.condition_id)) {
-      routes.push({ shape_id: s.id, condition_id: s.condition_id, sheet_id: s.sheet_id, length_lf: routeLengthFt(s), reason: "no run links this segment" });
-    }
+    const r = via ? resolved.find((x) => x.id === via) : null;
+    routes.push({
+      shape_id: s.id, condition_id: s.condition_id, finish_tag: condById.get(s.condition_id).finish_tag, sheet_id: s.sheet_id, length_lf: routeLengthFt(s),
+      reason: r ? `its run ${r.id} is ${r.status}: ${r.reason}` : "no run links this segment",
+    });
   }
   return { runs: resolved, unlinked: { devices, routes }, warnings };
 }
@@ -448,7 +451,7 @@ export function cableByCondition(summary) {
  *  every surface reads. `null` when no condition carries a cable setup, so a
  *  project that never used the feature pays nothing and exports byte-identically. */
 export function computeCableTakeoff(conditions, shapes, runs, opts = {}) {
-  if (!(conditions || []).some(hasCableSetup) && !(runs || []).length) return null;
+  if (!(conditions || []).some((c) => hasCableSetup(c) || isRouteCondition(c)) && !(runs || []).length) return null;
   const resolved = resolveCableRuns(conditions, shapes, runs, opts);
   const summary = cableSummary(resolved, conditions, shapes);
   return { resolved, summary, byCond: cableByCondition(summary) };
