@@ -1,0 +1,211 @@
+# Division 27 cable setup — implementation plan
+
+Companion to [CABLE_SETUP.md](CABLE_SETUP.md), which governs. This page records
+what the code actually does today against each assumption the spec makes, the
+decisions the mismatches force, and the exact file list for Phase 1. Written
+2026-10-21 against fork commit `18c1f1d` (MCP source 0.9.98, 53 default tools).
+
+Legend: **CONFIRMED** = the code does what the spec assumes. **DIFFERENT** =
+the code does something else; the "Plan" column says what Phase 1 does about it.
+
+## 1. Spec assumptions checked against the code
+
+### 1.1 The roll-goods pattern (what the spec says to copy)
+
+| Spec assumption | Status | What the code does |
+|---|---|---|
+| Roll goods is an optional `roll_setup` object on a condition; presence is the opt-in | CONFIRMED | `web/src/lib/rollTakeoff.js` `hasRollSetup` (object with `roll_width_ft > 0`; corrupt payloads read as opted out). Canvas opt-in select in `web/src/components/TakeoffsPanel.jsx:560-590`; MCP in `mcp/src/session.ts` `applyConditionKnobs`. |
+| One pure library shared by canvas and MCP | DIFFERENT (two modules) | Roll goods is **two** pure modules: the engine `web/src/lib/rollgoods.js` (rings in feet) and the bridge `web/src/lib/rollTakeoff.js` (shapes/conditions → engine, report rows). Both are DOM-free and imported by `mcp/src/session.ts:66-67`. **Plan:** cable gets ONE module, `web/src/lib/cable.js`, holding both halves (defaults, sanitize, run resolution, math, rollups, unlinked detection, export rows). |
+| Report/CSV/Excel columns for roll goods | CONFIRMED | `rollColProfile` in `web/src/lib/reportColumns.js:244` adds "Roll Order LF / Rolls / Seam LF" to the Conditions table, CSV and the workbook Conditions tab **only when some condition figures a layout** (so a project without roll goods exports byte-identically). `rollReportRows` (`rollTakeoff.js:138`) feeds the `roll_goods` array of `opentakeoff.report.v1` (`totals.js` `reportJson`), which is always emitted (empty array). |
+| `roll_setup` on `edit_condition`, reply echoes the figured order | CONFIRMED | `mcp/src/tools.ts:517-541` (zod union: `null` opts out, object patches), `session.ts` `editCondition` + `applyConditionKnobs` (fresh opt-in mints defaults, same-material partial edits patch), journal op `condition` snapshots `before.roll_setup`, `undo_last` restores it. Output schema `editConditionOutput` in `mcp/src/outputs.ts:770`. |
+| Roll goods tests | CONFIRMED | `web/test/rollgoods.test.ts`, `web/test/rollTakeoff.test.ts`, `web/test/seamLf.test.ts`; MCP in `mcp/test/tools.test.ts` and `conformance.test.ts` (`roll_goods` always `[]` without a setup). |
+| Templates / profiles deep-copy `roll_setup` | CONFIRMED | `web/src/lib/canvasUtil.js:68` and `TakeoffCanvas.jsx:8374` copy it into condition templates. **Plan:** `cable_setup` and `role` copied the same way (one line each), Phase 2. |
+
+### 1.2 Data model
+
+| Spec assumption | Status | What the code does |
+|---|---|---|
+| Count conditions exist; device markers are count shapes | CONFIRMED | `measure_role: "count"`, `verts_norm: [[x, y]]`, `computed: { count: 1 }` — canvas `commitCount` (`TakeoffCanvas.jsx:5139`), MCP `placeCount` (`session.ts:2972`). No scale needed. |
+| Conditions have a waste % field | CONFIRMED | `waste_pct` on every condition; `conditionTotals` applies it to SF and LF only, never EA (`totals.js:67-110`). Cable order LF will apply `waste_pct` inside `cable.js`. |
+| Lengths stored in feet; metric converts on display | CONFIRMED | `web/src/lib/units.ts`; report columns convert through `applyUnits` + the `COL_DIM` map (`reportColumns.js:94-99`). New cable columns register in `COL_DIM` as `len`. |
+| A condition can carry `role: "tr"` | CONFIRMED (field is free) | No condition field named `role` exists (the only `role` is `measure_role` on shapes). Canvas hydrate passes unknown condition keys through untouched (`sanitizeConditionAttrs` only rewrites `attrs`). MCP `Condition` interface (`session.ts:189-212`) is typed; `role?: "tr"` and `cable_setup?` get added. |
+| TR marker has a `name` | DIFFERENT (no `name` field) | Shapes have no `name`. They DO have `label` (`Shape.label`, the per-room label the Report groups by; set in the canvas label field and by MCP `edit_shape { label }`, which accepts count shapes). **Plan:** the TR name IS `shape.label`. Zero new UI or MCP surface for naming. Side effect: a TR named "MDF" also appears as a "MDF" bucket in the Report's group-by-label view and the workbook's floor × room tab, carrying the TR condition's EA. Alternative if you dislike that: a dedicated `tr_name` field on the shape (needs its own edit path in Phase 2 and an `edit_shape` extension). **Decision for you — default: `label`.** |
+| Runs are a new record family in the takeoff document | CONFIRMED (additive key) | The document writer `web/src/lib/takeoffDocument.js` is the one envelope (canvas autosave, file export, MCP `exportPayload`). Additive keys are omitted when empty (`stitches`, `approvals`, `rules` precedent), so old documents round-trip byte-for-byte. **Plan:** new top-level `cable_runs` array (see §3). |
+| Run `id` locally minted, stable | CONFIRMED | `mintUuid` in `web/src/lib/provenance.js` (canvas) and the identical fallback in `session.ts:76-83` (MCP). Runs mint `run-<uuid>`. |
+| Run `provenance` (actor, method, created, review status) | CONFIRMED vocabulary | Shapes carry `origin: { method, actor?, reviewed? }` + `created_at` + `author?`. Runs use the spec's field name `provenance` with the same vocabulary: `{ method: "manual", actor?: "agent", reviewed?: false, created_at, author? }`. |
+| Full precision kept in storage | DIFFERENT (0.01 ft) | Every shape's `computed.perimeter_lf` is `toFixed(2)` at commit (`shapeMetrics.js:65`, `session.ts linearQty`). Measured route LF is therefore stored to 1/100 ft, not full float. Cable math keeps full precision from there on (no rounding until display/CSV `round2`), and Excel cells carry the unrounded cable numbers. The worked examples (87.5, 140.0) are exact in 0.01 ft, so the tests are unaffected. |
+
+### 1.3 Quantity math inputs
+
+| Spec assumption | Status | What the code does |
+|---|---|---|
+| Route LF = Σ length of linear shapes, each at its own sheet scale | DIFFERENT (verticals, #441) | A linear shape's `computed.perimeter_lf` is the TOTAL `plan + rise + drop` (Drop and Rise, #441): the condition's `rise_ft`/`drop_ft` defaults or the run's own legs. `computed.plan_lf` rides only when a vertical exists. **Plan:** route LF reads `plan_lf ?? perimeter_lf` (the plan trace only), so a route segment traced on a condition that carries rise/drop does NOT double-count a vertical against the cable setup's `vertical_ft`. A run whose segment carries legs is disclosed in its `notes` ("segment X carries 8 ft of rise/drop legs, ignored; vertical comes from the cable setup"). |
+| Vertical, loops are per-condition constants; `vertical_ft` required | CONFIRMED (new) | Validation lives in `cable.js` `cableSetupProblems(setup)`: `device_type` in the enum, `cables_per_location` integer ≥ 1, `vertical_ft` finite ≥ 0, both loops finite ≥ 0. A condition whose setup has a problem withholds every run with the stated reason (the access-control-door case). |
+| Pulls = linked runs; Cables = Σ cables | CONFIRMED (new) | EA (device count) stays the condition's existing `ea`; pulls and cables are new figured quantities beside it, the roll-goods precedent (order LF beside measured SF). |
+| ×N multiplier | NOT IN SPEC | Every reported quantity applies the condition's `multiplier` (roll goods: "N identical units are N cuttings"). **Plan:** pulls, cables and cable LF are ×N in the summary rows; the per-run sheet stays unmultiplied (like per-shape exports). Flagging so you can veto. |
+| Waste on the order quantity only | CONFIRMED | `cable_lf_order = location_lf × (1 + waste_pct/100)`; `cable_lf` (net) and route LF never carry waste. |
+
+### 1.4 Scale, sheets, provenance, deletion
+
+| Spec assumption | Status | What the code does |
+|---|---|---|
+| A route on an unscaled sheet refuses to link with the engine's message | CONFIRMED (gate exists) | MCP `measure_line` already refuses on an unscaled sheet (`session.ts:1859`, `scaleGate` message "… has no scale — call set_scale first …"); the canvas Linear tool refuses with "Set the scale for {sheet} first." (`TakeoffCanvas.jsx:4933`). A linear shape can still ARRIVE on an unscaled sheet by import, so `link_run` re-checks the sheet's `units_per_px` and refuses with the same `scaleGate` text. |
+| Recalibrating updates every run on that sheet | CONFIRMED (by construction) | `recalibrateShapes` (`shapeMetrics.js:97`) rewrites `shape.computed` for the sheet; runs store NO lengths (they reference shape ids and are resolved at read time), so every reader sees the new length with nothing to update. The "recalibration changes one segment" test asserts exactly this. |
+| Stitched sheets: one trace across the match line is one segment | CONFIRMED | A shape on a composite has `sheet_id = "stitch:<uid>"`; one shape. Note MCP omits stitches from export (`protocol/COMPATIBILITY.md`), unchanged. |
+| One trace cannot span two grouped (unstitched) sheets | CONFIRMED | Shapes bind to one panel key at commit. |
+| Device and TR on different sheets | CONFIRMED | Links are by shape id; nothing geometric. |
+| Agent-made shapes land as pencil proposals | CONFIRMED | `commit()` stamps `origin.reviewed = false` on every agent commit (`session.ts:1455`); the canvas renders `reviewed === false` dashed and offers Accept. |
+| Unaccepted agent shapes are "treated in totals exactly as the engine already treats them" | **VERIFIED: they COUNT** | `conditionTotals` never reads `origin.reviewed` (`totals.js:67-110`). Pending shapes are included in the Takeoffs-panel chips, the Report, CSV, XLSX, `report.v1`, `takeoff_summary` and the marked-set legend. What the engine does instead of excluding them is DISCLOSE: the canvas Accept pill and "Work · N" counter, `list_shapes.reviewed`, the marked-set cover's provenance split and "pending review" wording, `import_takeoff`'s `shapes_pending`. **Plan:** agent-made runs (`provenance.reviewed: false`) count in every cable total and are disclosed the same way: `review_status` column on the Cable runs sheet, a `pending` count in the Cable summary and in `list_runs` / `takeoff_summary`. |
+| Accepting a run does not accept its route segments | CONFIRMED (separate records) | Shape review is the `review` shape command; runs carry their own `provenance.reviewed`. Phase 2 wires a run accept separate from the shape Accept pill. |
+| Deleting a linked shape marks the run broken, never drops it | CONFIRMED (by construction) | Neither the canvas `delete` command nor MCP `delete_shape` cascades to referencing records (reconciled cutouts are left orphaned the same way, disclosed). The run record is untouched; resolution reports `status: "broken"` with `reason: "route shape shp-… was deleted"` and lists it under Unlinked. No hook into delete needed. |
+| Every canvas action is on the undo stack | DIFFERENT for condition edits | Shape mutations go through `web/src/lib/shapeCommands.js` (undoable). Condition field edits (`updateCond`, `setCondParam`, `TakeoffCanvas.jsx:7815/7970`) write `setConditions` directly and are NOT undoable today; neither are `roll_setup` edits. Approval seals are undoable through family-tagged entries (`approvals.js`). **Plan (Phase 2):** link/unlink run are undoable through family-tagged entries (the approvals precedent); cable-setup field edits follow the condition editor's existing non-undoable convention, same as roll goods. Flagging the gap against the spec's "every action". |
+
+### 1.5 Export, report, MCP
+
+| Spec assumption | Status | What the code does |
+|---|---|---|
+| Excel gains two sheets | DIFFERENT (fixed-tab convention) | `reportWorkbook` (`xlsx.js:160`) keeps "a fixed tab list so a consumer never has to test for a sheet's existence" (five tabs, the floor × room tab is emitted even when empty). Always adding two tabs would change every existing project's workbook. **Plan:** your byte-for-byte rule wins: "Cable summary" and "Cable runs" tabs are appended only when at least one condition carries a `cable_setup` (the roll-column precedent). |
+| CSV and JSON carry the same data | CONFIRMED (additive sections) | `totalsToCsv` appends sections conditionally (materials, by-sheet, by-label); the CSV golden (`web/test/report-csv-golden.test.ts`) pins the no-cable output and stays green. `reportJson` is additive-only; `roll_goods` was added as always-emitted (which changed every export once). **Plan:** the report.v1 `cable` block is emitted only when a cable condition exists (the `proposed_condition_edits` precedent), so `web/test/totals.test.ts:134`'s key pin and old exports stay byte-identical. |
+| In-app Report shows the Cable summary + Unlinked list | CONFIRMED feasible | `ReportPanel.jsx` already receives `rollByCond` from the canvas; a `cableTakeoff` prop goes in the same way. UI table is Phase 2; Phase 1 only wires the three export handlers (`exportCsv`, `exportJson`, `exportXlsx` at `ReportPanel.jsx:326-338`), which is wiring, not UI. |
+| `edit_condition` extended, `place_count` / `symbol_sweep` / `measure_line` unchanged | CONFIRMED | `symbol_sweep` commits through `placeCount` (`session.ts:3153`), so swept devices are ordinary count shapes. |
+| New verbs `link_run`, `list_runs`, `unlink_run`; CI checks tool count and inventory | CONFIRMED | `mcp/scripts/check-tool-count.mjs` rewrites `<!--tool-count-->` markers in ten docs and `check-tool-inventory.mjs` regenerates `docs/MCP_TOOL_INDEX.md` and requires one `mcp/README.md` table row per tool. `mcp/src/staging.ts` `TOOL_STAGES` must partition the set (`staging.test.ts`). Counts go 53 → 56 default, 55 → 58 with the One-Click gate lifted, setup stays 11. |
+| `takeoff_summary` / `export_takeoff` / `export_report` extended | CONFIRMED | `export_takeoff` is `exportPayload()` → `buildTakeoffDocument` (gets `cable_runs` for free once the writer knows the key). `export_report` is `reportJson` (gets the `cable` block). `takeoff_summary` gets an optional `cable` block; `takeoffSummaryOutput` in `outputs.ts` is `.passthrough()`-friendly but gets the field declared. |
+| CI version guard | NOT IN SPEC | `.github/workflows/ci.yml` `mcp-version-guard` fails any PR that changes `mcp/` without bumping the MCP version in all seven fields (`mcp/package.json`, its lockfile ×2, `mcp/server.json` ×2, `web/public/.well-known/mcp.json` ×2); `check:tool-count` runs the same agreement check. **Plan:** bump 0.9.98 → 0.9.99 in Phase 1 (fork-local; renumber before any upstream conversation). |
+| `node scripts/check-doc-links.mjs` | CONFIRMED | Scans top-level READMEs, `docs/*.md`, `docs/wiki`, `protocol/*.md`, `mcp/README.md` and friends; `docs/design/*.md` are not scanned but links INTO them from scanned docs are. |
+| `web/bench/results.json` unchanged | CONFIRMED | Nothing in the plan imports or touches `oneclick.ts`, the bench or the gate. CI diffs `results.json` after `npm run bench`; Phase 1 verifies with `git diff --exit-code -- web/bench/results.json`. |
+| Node toolchain | NOTE | CI runs Node 24 (`.nvmrc`); this container has Node 22. `npm ci` succeeded in `web`, `mcp`, `protocol`, and the baseline `npm run typecheck` (web, mcp) and `npm run check --prefix protocol` pass here. Any Node-version-only failure in the fuller suite gets reported, not patched. |
+
+## 2. How unaccepted agent shapes are treated in totals today
+
+Verified in code, not inferred:
+
+- `web/src/lib/totals.js` `conditionTotals` / `sheetTotals` / the grouped views sum every shape handed to them; there is no `reviewed` check anywhere in `totals.js`, `reportColumns.js`, `xlsx.js` or `ReportPanel.jsx`.
+- The canvas hands the full `shapes` array (or the visible subset for the panel chips) to those functions; the marked set does the same (`markedset.js:392`); MCP `summary()` and `exportReport()` do the same (`session.ts:3765`, `:4990`).
+- What distinguishes pending work is disclosure, not exclusion: dashed rendering and the Accept pill in the canvas, `reviewed` on `list_shapes`, the marked-set cover's provenance/approval tallies, `shapes_pending` on import, and `takeoff_summary`'s proposals ledger.
+
+So an agent-made run counts in pulls, cables and cable LF exactly as an agent-traced room counts in floor SF, and the feature discloses it the same way (a per-run review status, a pending count on the summary).
+
+## 3. Where the records live in the takeoff document
+
+```
+opentakeoff.takeoff_canvas.v1
+├─ conditions[]
+│   ├─ cable_setup?: { device_type, cables_per_location, cable_type, vertical_ft, loop_device_ft, loop_tr_ft }
+│   └─ role?: "tr"                      ← TR marker condition
+├─ shapes[]
+│   ├─ device marker  = { measure_role: "count", condition_id: <cable condition> }
+│   ├─ TR marker      = { measure_role: "count", condition_id: <role:"tr" condition>, label: "MDF" }
+│   └─ route segment  = { measure_role: "linear", computed.perimeter_lf (and plan_lf when legs exist) }
+└─ cable_runs[]?                         ← NEW additive key, omitted when empty
+    └─ { id: "run-<uuid>", device_shape_ids: [..], route_shape_ids: [..in order..], tr_id: <TR shape id>,
+         cables_override?: n, provenance: { method, actor?, reviewed?, created_at, author? }, notes?: "" }
+```
+
+- `cable_runs` joins `TAKEOFF_DOCUMENT_KEYS` after `rules` (before `sheet_group`), emitted only when non-empty, so every document that never used the feature is byte-identical to today's.
+- Lengths are never stored on a run: they are resolved from the referenced shapes at read time (recalibration and edit-in-place propagate for free; a deleted shape makes the run `broken`).
+- Canvas hydrate adopts it through a sanitize gate (`sanitizeCableRuns`, the `sanitizeStitches` precedent: drop malformed entries, else-clear on load). Import merge (`importTakeoff.js`) appends runs by id. `device_shape_ids`, `route_shape_ids` and `tr_id` are shape ids, which import never re-mints, so no re-pointing is needed; a run whose shapes did not arrive stays and resolves as broken, never dropped.
+- MCP `Session` gets `cableRuns: CableRun[]`, exported through `exportPayload`, adopted by `import_takeoff`, journaled for `undo_last`.
+
+## 4. The cable library contract (`web/src/lib/cable.js`)
+
+Pure, DOM-free, imported by `TakeoffCanvas.jsx`/`ReportPanel.jsx` (Phase 2/1) and `mcp/src/session.ts`.
+
+```
+DEVICE_TYPES            = ["wall_outlet","wap","camera","access_door","ceiling_other","custom"]
+CABLE_DEFAULTS[type]    = { vertical_ft, loop_device_ft, loop_tr_ft, waste_pct }   // the spec's starting values; access_door.vertical_ft = null
+mintCableSetup(type)    → a fresh setup with the type's starting values (custom: all blank)
+hasCableSetup(cond)     → object with a device_type (corrupt → opted out)
+isTrCondition(cond)     → cond.role === "tr"
+cableSetupProblems(s)   → [] or ["vertical_ft is required", ...]   // the withhold reasons
+sanitizeCableRuns(v)    → well-formed runs only (load gate)
+resolveCableRuns(conditions, shapes, runs, {uppFor})
+  → { runs: [{ id, condition_id, finish_tag, device_type, cable_type, tr_id, tr_name, sheet_ids,
+               route_lf, vertical_ft, loop_device_ft, loop_tr_ft, per_cable_lf, cables, location_lf,
+               status: "linked"|"withheld"|"broken", reason?, notes?, reviewed }],
+      unlinked: { devices: [{shape_id, condition_id, sheet_id, reason}], routes: [...], runs: [...] } }
+cableSummary(resolved, conditions)
+  → rows [{ condition_id, finish_tag, device_type, cable_type, tr_id, tr_name, pulls, cables,
+            route_lf, cable_lf, cable_lf_order, unlinked_devices, pending }] + subtotals by TR, by cable type + total
+cableReportBlock(...)   → the report.v1 `cable` object; cableCsvSections(...); cableWorkbookTabs(...)
+linkRunRefusal(...)     → the shared refusal text for link_run (MCP) and the Link Run tool (canvas)
+```
+
+Rules baked in: no routing factor, no estimated or default length, `location_lf` only from measured linear shapes, waste only on `cable_lf_order`, `cables = cables_override ?? cables_per_location`, route LF from `plan_lf ?? perimeter_lf` per segment summed in `route_shape_ids` order.
+
+## 5. Phase 1 file list
+
+### New files
+
+| File | Purpose |
+|---|---|
+| `web/src/lib/cable.js` | The library (§4). |
+| `web/test/cable.test.ts` | The spec's worked examples with exact values (wall outlet 130.5 / 261.0 / 292.32; camera 178.0 / 199.36; totals 2 pulls, 3 cables, 439.0, 491.68), two-sheet route at two scales, recalibration of one segment, unlinked device and route (excluded and listed), access-control door with no vertical (withheld, reason stated), broken run after a shape delete, override cables, ×N, sanitize gate, export → import round trip of a document with runs through `buildTakeoffDocument` + `parseTakeoffImport`/`mergeTakeoffImport`. |
+| `docs/design/CABLE_SETUP.md` | The governing spec, copied in verbatim (it did not exist in the repo). |
+| `docs/design/CABLE_SETUP_PLAN.md` | This page. |
+
+### Changed files — web
+
+| File | Change |
+|---|---|
+| `web/src/lib/takeoffDocument.js` | `cable_runs` in `TAKEOFF_DOCUMENT_KEYS` and `buildTakeoffDocument` (omit-when-empty). |
+| `web/src/lib/importTakeoff.js` | Append imported runs by id (clean-replace path carries them; merge path appends unseen ids). |
+| `web/src/lib/totals.js` | `reportJson` takes `cable` and emits the block only when present; `totalsToCsv` takes `cable` sections appended after by-label. |
+| `web/src/lib/xlsx.js` | `reportWorkbook` appends "Cable summary" / "Cable runs" tabs when `cable` is passed. |
+| `web/src/lib/reportColumns.js` | `cableColProfile` (Pulls / Cables / Cable LF / Cable LF w/Waste on the Conditions table, CSV, workbook) emitted only when a cable condition exists; `COL_DIM` entries for metric. |
+| `web/src/components/ReportPanel.jsx` | Wiring only: accept a `cableTakeoff` prop and hand it to the three export calls. No visible UI (Phase 2). |
+| `web/src/pages/TakeoffCanvas.jsx` | Wiring only: `cableRuns` state, hydrate through `sanitizeCableRuns`, `buildPayload` carries it, `useMemo` resolve, pass to `ReportPanel`. No tools, no panels (Phase 2). |
+| `web/test/takeoffDocument.test.ts` | The "everything but units" key count and the additive-keys list gain `cable_runs`. |
+| `web/test/totals.test.ts`, `web/test/xlsx.test.ts` | New cases: no-cable outputs unchanged (byte pins), cable outputs present when a setup exists. |
+
+### Changed files — MCP
+
+| File | Change |
+|---|---|
+| `mcp/src/session.ts` | `Condition.cable_setup?` / `role?`; `ConditionKnobPatch`/`applyConditionKnobs` accept `cable_setup` (null opts out, `device_type` change re-mints defaults, same-type partial edit patches) and `role`; journal `condition` snapshot carries both; `cableRuns` array; `linkRun` / `listRuns` / `unlinkRun` with journal ops `run_link` / `run_unlink` and `undo_last` inverses; `summary()` and `exportReport()` add the `cable` block; `exportPayload` carries `cable_runs`. |
+| `mcp/src/importing.ts` | Adopt `payload.cable_runs`. |
+| `mcp/src/tools.ts` | `edit_condition` input gains `cable_setup` (zod union null / object with the six fields) and `role` (`"tr"` or null); registers `link_run`, `list_runs`, `unlink_run` with the refusal texts in their descriptions; `takeoff_summary` / `export_report` descriptions mention the cable block. |
+| `mcp/src/outputs.ts` | `editConditionOutput.cable_setup?`, `.role?`; `linkRunOutput`, `listRunsOutput`, `unlinkRunOutput`; `takeoffSummaryOutput.cable?`, `exportReportOutput.cable?`; `undoLastOutput` op enum gains `run_link` / `run_unlink`. |
+| `mcp/src/staging.ts` | `TOOL_STAGES`: `link_run` → measure; `list_runs`, `unlink_run` → revise. |
+| `mcp/test/cable.test.ts` (new) | Over the bundled demo PDF: setup + TR + devices + routes → `link_run` reply values; every refusal (not a linear shape, unscaled sheet, missing vertical, TR id not a TR marker, device already linked); `list_runs` unlinked list; `unlink_run` + `undo_last`; `export_takeoff` → `import_takeoff` round trip with runs; `export_report.cable`. |
+| `mcp/test/conformance.test.ts`, `tools.test.ts` | Output-schema conformance rows for the three verbs; the `edit_condition` cable path. |
+| `mcp/package.json`, `mcp/package-lock.json`, `mcp/server.json`, `web/public/.well-known/mcp.json` | 0.9.98 → 0.9.99 (seven fields). |
+
+### Changed files — protocol and docs (CI-required)
+
+| File | Change |
+|---|---|
+| `protocol/v1/condition.schema.json` | `cable_setup` (object/null) and `role` (`"tr"`) properties. |
+| `protocol/v1/document-fields.schema.json` | `cable_runs` array with the run item schema inline (the `proposals` precedent; no new schema file, so the MCP resource allowlist is untouched). |
+| `protocol/README.md` | Regenerated schema reference (`node protocol/scripts/check-docs.mjs --write`). |
+| `protocol/INVENTORY.md` | Rows for `conditions[].cable_setup` / `role` and `cable_runs[]`. |
+| `protocol/test/current-records.test.mjs` | A record case with a cable condition, a TR marker and one run validating against the draft schemas. |
+| `mcp/src/protocol.generated.ts` | Regenerated (`npm run check:protocol-resources --prefix mcp -- --write`). |
+| `docs/MCP_TOOL_INDEX.md` + the ten `<!--tool-count-->` docs | Regenerated (`npm run check:tool-count --prefix mcp -- --write`). |
+| `mcp/README.md` | Three tool-table rows; `edit_condition` row mentions `cable_setup` / `role`. |
+| `docs/MCP.md`, `docs/AGENT_GUIDE.md` | The reach-for-it list gains the three verbs; the refusal → next-move table gains `link_run`'s four refusals. |
+| `docs/wiki/status.md`, `docs/wiki/mcp.md` | One row each ("Division 27 cable runs"), then `npm run check:wiki --prefix mcp -- --write` regenerates `mcp/src/wiki.generated.ts`. |
+| `FEATURES.md`, `CHANGELOG.md` (Unreleased), `README.md` (What's in the box), `docs/USER_GUIDE.md` | The paper trail CONTRIBUTING requires; user-guide section is a stub pointing at Phase 2 until the canvas lands. |
+
+### Not touched
+
+`web/src/lib/oneclick.ts`, `web/src/lib/gate.js`, `web/bench/**`, `mcp/server.ts` initialize instructions (a new verb is not a new step in the standard finish), `docs/design/ONE_CLICK_GATE.md`.
+
+## 6. Checks run before calling Phase 1 done
+
+```
+cd web      && npm run check                                  # typecheck, lint, test, bench, build, ocr-dist
+git diff --exit-code -- web/bench/results.json                # One-Click numbers unmoved
+cd mcp      && npm run typecheck && npm test && npm run check:tool-count && npm run check:protocol-resources && npm run check:wiki && npm run build && npm run smoke:dist
+cd protocol && npm run check
+node scripts/check-doc-links.mjs
+```
+
+## 7. Decisions needed from you before Phase 1 code
+
+1. **TR name field:** `shape.label` (default; reuses the existing label path, with the group-by-label side effect) or a new `tr_name`.
+2. **×N multiplier** on pulls/cables/cable LF in the summary rows: apply (default, house convention) or never.
+3. **Conditional cable tabs/sections** instead of always-present ones, to honor byte-for-byte (default: conditional).
+4. **Route LF ignores a segment's rise/drop legs** and takes the plan length (default), with disclosure in the run's notes.
+5. **MCP version bump to 0.9.99** to satisfy the fork's CI guard (default: bump).
+6. **Spec's three open decisions:** access-control door vertical stays blank and required (default, per the spec's text); shared trunk segments — Phase 1 allows one linear shape in several runs because nothing in the data model prevents it and refusing needs a rule you have not chosen yet; the summary counts route LF per run (a shared trunk's LF appears in each run that uses it, which is the physical truth for cable); private fork stays private.
+7. **Branch name:** this session's harness pins the working branch to `claude/div27-cable-setup-c6t9wu` on `Tubbster-UX/opentakeoff-div27` and refuses pushes elsewhere, so the plan is committed there instead of `feat/div27-cable-setup`. Renaming the branch afterward is a one-line `git branch -m`; say if you want the work moved.
