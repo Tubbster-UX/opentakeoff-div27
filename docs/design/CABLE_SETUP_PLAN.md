@@ -364,3 +364,32 @@ PLAYWRIGHT_MODULE=/path/to/playwright-core/index.mjs BROWSER_PATH=/path/to/chrom
   node scripts/verify-cable-runs.mjs /tmp/cable-fixture.json /tmp/cable-ui/results.json
 node --import tsx scripts/make-cable-marked-sample.mts /tmp/cable-marked-sample.pdf
 ```
+
+## 14.3 Duplicate device check (item 3), as built (Oct 27, 2026)
+
+The first real bid counted 14 cameras twice: camera outlets on the comms plan T3.1 and CAM markers on the security plan T4.1, at one page size and scale, both on cable conditions. The check flags; it never merges, moves or deletes a marker, and no count changes. The thresholds and their reasons are in the spec's Decisions ("Recorded while building item 3").
+
+| File | What it is |
+|---|---|
+| `web/src/lib/cableDupes.js` (new) | Pure: `findCableDuplicates(conditions, shapes, { sheetSize, uppFor, sheetLabel })` → `same_sheet`, `cross_sheet` (grouped by condition pair, `different_conditions`), `reference` (one side non-cable: detail only), `not_compared`, `warnings`, `count`, `thresholds`; `hasDuplicateFindings`; the named constants `SAME_SHEET_DUP_FT` (1.0), `SAME_SHEET_DUP_NORM` (0.0035), `PAGE_SIZE_TOL` (0.01), `SCALE_TOL` (0.01), `OVERLAY_POS_TOL` (0.0075), `OVERLAY_MIN_POSITIONS` (3), `OVERLAY_MIN_SHARE` (0.5). |
+| `web/src/lib/cable.js` | The hook: `computeCableTakeoff` runs the check when `opts.sheetSize` is given, appends its warnings to `summary.warnings` and returns `duplicates` (null without `sheetSize`); `cableReportBlock` carries `duplicates` only when it found something. |
+| `web/src/pages/TakeoffCanvas.jsx` | Wiring only: the cable memo passes `sheetSize` from the rendered sheets' dims (`panelImgs`, accumulated in a ref, since it holds only the open group) and lists `panelImgs` as a dependency. |
+| `web/src/components/RunsPanel.jsx` | A **Possible duplicates** list, one row per condition pair or stacked spot, with ⌖ on each side; the warnings already render. |
+| `mcp/src/session.ts` | `cableInputs().sheetSize` (each loaded sheet's image px); `list_runs.duplicates` always (null with no cable takeoff); `takeoff_summary.cable.duplicates` when it found something; `export_report.cable.duplicates` through the report block. |
+| `mcp/src/outputs.ts`, `mcp/src/tools.ts` | `cableDuplicatesBlock` on `list_runs`, `takeoff_summary.cable` and `export_report.cable`; the `list_runs` description. No new tool (57 default). |
+| `web/test/cableDupes.test.ts` (new) | 11 tests, exact values: 14 cameras across two equal sheets → one group of 14 and its warning; offsets 0.007 in, 0.008 out, the long-edge rule; ANSI D vs ARCH D, rotated, within 1%, unknown size → `not_compared`, disagreeing scales; 2 coinciding → none, 3 of 10 → none, 5 of 10 → reported; different cable conditions; a non-cable side → `reference` only; 0.5 ft flagged, 3 ft not, three stacked → one finding; the no-scale fallback and its wording; no cable conditions → nothing; no `sheetSize` → null and an unchanged report block. |
+| `mcp/test/cable.test.ts` | Two `place_count` calls on one spot of DATA-1 → the same-sheet finding (0 ft, basis ft) and warning in `list_runs`, EA still 2, `takeoff_summary` and `export_report` carry it (and do not before). Cross-sheet over the wire: the demo plan copied to a tmp dir as `comm.pdf` and `sec.pdf`, loaded with `load_plan { merge: true }`, three CAM-1 markers on each → one group of 3, labels disambiguated as `A-101 (comm.pdf)` / `A-101 (sec.pdf)`; `edit_shape { condition: "CAM-REF" }` on the second set clears the warning and lists it under `reference`. |
+
+The canvas compares only sheets rendered in this session, because page sizes are known only for those; a sheet with cable markers not yet opened is listed under `not_compared`, never guessed. Not done here: a browser check of the Runs panel list (no browser in this container).
+
+### Check record (this container: Node 22, root)
+
+| Check | Result |
+|---|---|
+| `web` typecheck, lint, build | pass |
+| `web` `test/cableDupes.test.ts` + the four existing cable test files | 11 + 26 + 8 + 8 + 8 pass |
+| `web` `npm test` | 3,540 tests: 3,522 pass, 2 fail, 12 cancelled with the MCP suite running beside it (all timeouts); the failing and timed-out files outside the known two (`hybridReplay`, `ocrPageRead`, `planSearch`, `resolutionInvariance`, `scheduleOcrReplay`, `sheetName`) re-run alone: 243 of 243 pass. Left: `pictures.test.ts` and `stageOcrModel.test.ts`, which also fail on the base commit here |
+| `web/bench/results.json` | unchanged |
+| `mcp` typecheck, all test files (as CI runs them) | 301 tests: 300 pass, 1 fail (`safewrite` "an unreadable file fails CLOSED", root container, as in §10) |
+| `mcp` check:tool-count (57 / 59 / 11), check:wiki, check:protocol-resources | pass, no `--write` needed |
+| `protocol` check, `node scripts/check-doc-links.mjs` | pass (62 tests; 44 files) |

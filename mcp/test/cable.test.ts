@@ -415,3 +415,54 @@ test("export_marked_pdf: route chips carry run ID + device condition + per-cable
   assert.ok(sheet.includes("MDF"), "the TR is named on the sheet");
   assert.equal(/ROUTE · 87\.5 LF/.test(sheet), false, "a linked route's generic chip gives way to its run chip");
 });
+
+test("duplicate device check: two place_count calls on one spot of a cable condition → a same-sheet warning in list_runs; counts unchanged; summary and report carry it", async () => {
+  const { client, devW } = await worked();
+  const clean = await ok(client, "list_runs", {});
+  assert.deepEqual({ count: clean.duplicates.count, same: clean.duplicates.same_sheet, cross: clean.duplicates.cross_sheet }, { count: 0, same: [], cross: [] });
+  assert.equal("duplicates" in (await ok(client, "takeoff_summary", {})).cable, false, "no finding, no key");
+  assert.equal("duplicates" in (await ok(client, "export_report", {})).cable, false);
+  const again = await ok(client, "place_count", { sheet: KEY, points: [[1000, 1000]], condition: "DATA-1" });   // the sweep's marker, clicked again
+  const runs = await ok(client, "list_runs", {});
+  assert.deepEqual(runs.duplicates.same_sheet, [{
+    sheet_id: KEY, sheet: "A-101", shape_ids: [devW, again.shape_ids[0]], finish_tags: ["DATA-1", "DATA-1"], condition_ids: [runs.duplicates.same_sheet[0].condition_ids[0]],
+    same_condition: true, distance: 0, basis: "ft", threshold: 1,
+  }]);
+  assert.ok(runs.warnings.includes("A-101: 1 position holds two or more device markers on cable conditions within 1 ft of each other — DATA-1 ×2. One device marked twice (a symbol sweep plus a click) doubles its pull and cable LF. Check each and remove an extra marker only once a person confirms it; this check never removes one."), JSON.stringify(runs.warnings));
+  const sum = await ok(client, "takeoff_summary", {});
+  assert.equal(sum.conditions.find((r: any) => r.finish_tag === "DATA-1").ea, 2, "a check never changes a count");
+  assert.equal(sum.cable.duplicates.same_sheet.length, 1);
+  const rep = await ok(client, "export_report", {});
+  assert.equal(rep.cable.duplicates.same_sheet[0].sheet, "A-101");
+  assert.ok(rep.cable.warnings.some((w: string) => /DATA-1 ×2/.test(w)));
+});
+
+test("duplicate device check across sheets: the demo plan loaded twice (overlay plans) → one group of 3; moving one set to a non-cable reference condition clears the warning", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "cable-dupes-"));
+  const comm = path.join(dir, "comm.pdf"), sec = path.join(dir, "sec.pdf");
+  const bytes = await readFile(PLAN);
+  await writeFile(comm, bytes);
+  await writeFile(sec, bytes);
+  const client = await pair();
+  await ok(client, "load_plan", { path: comm });
+  await ok(client, "load_plan", { path: sec, merge: true });
+  const pts = [[800, 900], [1600, 900], [2400, 900]];
+  const a = await ok(client, "place_count", { sheet: "comm.pdf", points: pts, condition: "CAM-1" });
+  const b = await ok(client, "place_count", { sheet: "sec.pdf", points: pts.map(([x, y]) => [x + 6, y - 4]), condition: "CAM-1" });
+  await ok(client, "edit_condition", { condition: "CAM-1", cable_setup: { device_type: "camera", cable_type: "CAT6" } });
+  const runs = await ok(client, "list_runs", {});
+  assert.equal(runs.duplicates.same_sheet.length, 0);
+  assert.equal(runs.duplicates.cross_sheet.length, 1);
+  const x = runs.duplicates.cross_sheet[0];
+  assert.deepEqual({ a: x.sheet_a, b: x.sheet_b, n: x.positions, g: x.groups.map((g: any) => [g.finish_tag_a, g.finish_tag_b, g.count, g.different_conditions]) },
+    { a: "A-101 (comm.pdf)", b: "A-101 (sec.pdf)", n: 3, g: [["CAM-1", "CAM-1", 3, false]] });
+  assert.deepEqual(x.groups[0].pairs, a.shape_ids.map((id: string, i: number) => [id, b.shape_ids[i]]));
+  assert.ok(runs.warnings.some((w: string) => w.startsWith("A-101 (comm.pdf) and A-101 (sec.pdf) share 3 device positions: CAM-1 on A-101 (comm.pdf) ↔ CAM-1 on A-101 (sec.pdf) (3).")), JSON.stringify(runs.warnings));
+  assert.equal(runs.summary.totals.ea, 6, "both sets still counted — the check flags, the estimator decides");
+  // the fix: the security plan's markers move to a non-cable reference condition
+  for (const id of b.shape_ids) await ok(client, "edit_shape", { shape_id: id, condition: "CAM-REF" });
+  const after = await ok(client, "list_runs", {});
+  assert.deepEqual([after.duplicates.cross_sheet, after.warnings.filter((w: string) => /share \d+ device position/.test(w))], [[], []]);
+  assert.deepEqual(after.duplicates.reference.map((r: any) => r.groups.map((g: any) => [g.finish_tag_a, g.finish_tag_b, g.count, g.cable_side])), [[["CAM-1", "CAM-REF", 3, "a"]]]);
+  assert.equal(after.summary.totals.ea, 3);
+});

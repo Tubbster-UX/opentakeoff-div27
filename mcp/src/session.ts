@@ -71,6 +71,7 @@ import { hasRollSetup, mintRollSetup, computeRollTakeoff, rollReportRows, seamLf
 // Division 27 cable runs (docs/design/CABLE_SETUP.md) — the ONE pure cable
 // library, shared with the canvas: setup defaults and validation, run
 // resolution, the summary rollups and the refusal texts all live there.
+import { hasDuplicateFindings } from "../../web/src/lib/cableDupes.js";
 import { hasCableSetup, mintCableSetup, isDeviceType, normalizeDeviceType, DEVICE_TYPES, DEVICE_TYPE_ALIASES, mintCableRun, mintCableHold, holdRefusal, isCableHold, computeCableTakeoff, cableReportBlock, linkRunRefusal, cableSetupProblems as cableSetupProblemsJs } from "../../web/src/lib/cable.js";
 import { gridPxPerFoot, drawGrid, drawShapes, drawMarks, type Ctx2D, type ToCanvas, type ViewMarks } from "./view.ts";
 
@@ -112,6 +113,12 @@ export interface CableTakeoff {
   };
   summary: { rows: (Record<string, unknown> & { condition_id: string })[]; by_tr: Record<string, unknown>[]; by_cable_type: Record<string, unknown>[]; totals: Record<string, number>; warnings: string[] };
   byCond: Map<string, Record<string, number>>;
+  /** The duplicate device check (web/src/lib/cableDupes.js) — always present
+   * here, because cableInputs() supplies sheetSize. Flags only. */
+  duplicates: {
+    same_sheet: Record<string, unknown>[]; cross_sheet: Record<string, unknown>[]; reference: Record<string, unknown>[];
+    not_compared: Record<string, unknown>[]; warnings: string[]; count: number; thresholds: Record<string, number>;
+  } | null;
 }
 const cableSetupProblemsOf = (c: Condition): string[] => cableSetupProblemsJs(c.cable_setup) as string[];
 // the JS module's report block, typed at the boundary (sheetLabel is optional there)
@@ -3857,7 +3864,7 @@ export class Session {
     const cableT = this.cableTakeoff();
     return {
       conditions: lean, totals: grandTotals(rows),
-      ...(cableT ? { cable: { rows: cableT.summary.rows, by_tr: cableT.summary.by_tr, by_cable_type: cableT.summary.by_cable_type, totals: cableT.summary.totals, unlinked_devices: cableT.resolved.unlinked.devices.length, unlinked_routes: cableT.resolved.unlinked.routes.length, held_devices: cableT.resolved.held.length, warnings: cableT.summary.warnings } } : {}),
+      ...(cableT ? { cable: { rows: cableT.summary.rows, by_tr: cableT.summary.by_tr, by_cable_type: cableT.summary.by_cable_type, totals: cableT.summary.totals, unlinked_devices: cableT.resolved.unlinked.devices.length, unlinked_routes: cableT.resolved.unlinked.routes.length, held_devices: cableT.resolved.held.length, warnings: cableT.summary.warnings, ...(hasDuplicateFindings(cableT.duplicates) ? { duplicates: cableT.duplicates } : {}) } } : {}),
       shared_floor_sf: scope.shared_floor_sf,
       ...(scope.unmeasured.length ? { shared_floor_unmeasured: scope.unmeasured } : {}),
       ...(unconfirmed.length ? { scale_unconfirmed: unconfirmed } : {}),
@@ -4365,6 +4372,12 @@ export class Session {
       // and is flagged, with one warning naming the sheets to confirm
       scaleUnconfirmed: (sheetId: string) => this.sheets.get(sheetId)?.scaleConfirmed === false,
       sheetLabel: (sheetId: string) => this.sheets.get(sheetId)?.sheetNumber || sheetId,
+      // the duplicate device check's page geometry, in the image px upp
+      // speaks: a stitched surface is not loaded here, so it is not compared
+      sheetSize: (sheetId: string) => {
+        const s = this.sheets.get(sheetId);
+        return s ? { w: s.widthPx, h: s.heightPx } : null;
+      },
     };
   }
 
@@ -4407,7 +4420,7 @@ export class Session {
    * the unlinked devices and routes, the leg warnings, and the summary. */
   listRuns() {
     const t = this.cableTakeoff();
-    if (!t) return { runs: [], unlinked: { devices: [], routes: [] }, held: [], holds: [], warnings: [], summary: null, count: 0, note: "No condition carries a cable_setup and no run exists — set one with edit_condition { cable_setup } first." };
+    if (!t) return { runs: [], unlinked: { devices: [], routes: [] }, held: [], holds: [], warnings: [], duplicates: null, summary: null, count: 0, note: "No condition carries a cable_setup and no run exists — set one with edit_condition { cable_setup } first." };
     const block = cableBlock(t) as { unlinked: Record<string, unknown>; held: Record<string, unknown>[]; warnings: string[] };
     return {
       runs: t.resolved.runs.map((r) => ({
@@ -4426,6 +4439,7 @@ export class Session {
       held: block.held,
       holds: t.resolved.holds,
       warnings: block.warnings,
+      duplicates: t.duplicates,
       summary: { rows: t.summary.rows, by_tr: t.summary.by_tr, by_cable_type: t.summary.by_cable_type, totals: t.summary.totals },
       count: t.resolved.runs.length,
     };

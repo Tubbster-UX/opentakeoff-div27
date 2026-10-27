@@ -201,7 +201,11 @@ Fifty-two tools, in the order an agent tends to reach for them:
   by cable type; `unlink_run` removes a link, shapes untouched. `hold_devices` records devices
   that deliberately get no run, with the reason—still out of totals, listed as held instead of
   unlinked. A run over 295 ft per cable (TIA-568 copper) is flagged and warned, and a route on an
-  agent-set scale no person confirmed is flagged. `takeoff_summary` and
+  agent-set scale no person confirmed is flagged. `list_runs` also carries a `duplicates` block
+  and warnings for the same device counted twice: two markers on cable conditions within 1 ft
+  on one sheet, or overlay plans (two sheets of one page size whose device markers coincide, 3
+  or more and at least half the smaller set). It flags and changes nothing; the fix, a reference
+  condition with no cable setup through `edit_shape { condition }`, is the estimator's call. `takeoff_summary` and
   `export_report` carry a `cable` block whenever a cable condition exists; agent-linked runs
   land pending and count exactly as pending agent shapes do
 - **Scope collision** (#366)—`takeoff_summary.shared_floor_sf` is the floor

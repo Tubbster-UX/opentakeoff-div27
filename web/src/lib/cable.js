@@ -26,6 +26,7 @@
 // shape makes the run `broken` rather than silently dropping it.
 import { mintUuid, nowIso } from "./provenance.js";
 import { round2 } from "./num.js";
+import { findCableDuplicates, hasDuplicateFindings } from "./cableDupes.js";
 
 /** The device types a cable setup can name. `custom` carries no starting values. */
 export const DEVICE_TYPES = Object.freeze(["wall_outlet", "wap", "camera", "access_door", "ceiling_other", "custom"]);
@@ -593,12 +594,19 @@ export function cableByCondition(summary) {
 
 /** The whole cable takeoff, figured once: conditions + shapes + runs → what
  *  every surface reads. `null` when no condition carries a cable setup, so a
- *  project that never used the feature pays nothing and exports byte-identically. */
+ *  project that never used the feature pays nothing and exports byte-identically.
+ *  `duplicates` is the duplicate device check (lib/cableDupes.js): it runs
+ *  when the caller supplies `opts.sheetSize` (the canvas and the MCP session
+ *  both do — the page geometry it compares), its warnings join
+ *  summary.warnings, and it never changes a quantity. Without sheetSize it
+ *  is null. */
 export function computeCableTakeoff(conditions, shapes, runs, opts = {}) {
   if (!(conditions || []).some((c) => hasCableSetup(c) || isRouteCondition(c)) && !(runs || []).length) return null;
   const resolved = resolveCableRuns(conditions, shapes, runs, opts);
   const summary = cableSummary(resolved, conditions, shapes);
-  return { resolved, summary, byCond: cableByCondition(summary) };
+  const duplicates = typeof opts.sheetSize === "function" ? findCableDuplicates(conditions, shapes, opts) : null;
+  if (duplicates) summary.warnings.push(...duplicates.warnings);
+  return { resolved, summary, byCond: cableByCondition(summary), duplicates };
 }
 
 /** Short, still-unique display ids for runs and holds — what a marked-set
@@ -664,6 +672,9 @@ export function cableReportBlock(takeoff, sheetLabel = null) {
     held: (takeoff.resolved.held || []).map((d) => ({ ...d, sheet: label(d.sheet_id) })),
     holds: takeoff.resolved.holds || [],
     warnings: takeoff.summary.warnings,
+    // the duplicate device check rides only when it found something, so a
+    // cable report with no finding is unchanged
+    ...(hasDuplicateFindings(takeoff.duplicates) ? { duplicates: takeoff.duplicates } : {}),
   };
 }
 

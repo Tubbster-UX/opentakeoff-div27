@@ -1563,10 +1563,17 @@ export default function TakeoffCanvas() {
   // included); lengths come from the shapes' stored plan feet, never estimated.
   // scaleUnconfirmed flags a route on an agent-set scale no person confirmed
   // (the scale gate's map: false = awaiting a human); tabLabel names it.
+  // sheetSize feeds the duplicate device check (lib/cableDupes.js): the dims
+  // of every sheet rendered this session (panelImgs holds only the open
+  // group, so they accumulate in a ref; a sheet's dims never change).
+  const cableSheetDimsRef = useRef({});
   const cableTakeoff = useMemo(
-    () => computeCableTakeoff(conditions, shapes, cableRuns, { uppFor: (k) => uppFor(k), scaleUnconfirmed: (k) => scaleUnconfirmed[k] === false, sheetLabel: (k) => tabLabel(k) }),
+    () => {
+      Object.assign(cableSheetDimsRef.current, panelImgs);
+      return computeCableTakeoff(conditions, shapes, cableRuns, { uppFor: (k) => uppFor(k), scaleUnconfirmed: (k) => scaleUnconfirmed[k] === false, sheetLabel: (k) => tabLabel(k), sheetSize: (k) => cableSheetDimsRef.current[k] || null });
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- uppFor reads scales (listed) + renderScalesRef pinned to RENDER_SCALE, the roll memo's rule; tabLabel only words a warning
-    [conditions, shapes, cableRuns, scales, scaleUnconfirmed]
+    [conditions, shapes, cableRuns, scales, scaleUnconfirmed, panelImgs]
   );
   // Phase 2 wiring: which conditions hold TR markers (the overlay names them),
   // the Link Run readout (lib/cableLink.js → lib/cable.js), and the handlers.

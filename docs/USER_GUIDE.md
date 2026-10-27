@@ -445,6 +445,18 @@ stands, the run needs a closer TR or a length test and an owner notice. A route 
 whose scale an agent set and no person has confirmed is flagged the same way. Confirm the
 scale before pricing, because every cable length on that sheet rests on it.
 
+**Devices counted twice.** The Runs panel's **Possible duplicates** list and a warning catch
+the same device marked twice. On one sheet, two markers on cable conditions within 1 ft of each
+other (a symbol sweep plus a click) are flagged; on a sheet with no scale the limit is 0.35% of
+the sheet instead, and the warning says so. Across sheets, two sheets of the same page size
+whose device markers sit at the same positions, 3 or more and at least half of the smaller
+set, are flagged as overlay plans: "T3.1 and T4.1 share 14 device positions: CAM-1 on T3.1 ↔
+CAM-1 on T4.1 (14)". That happens when the comms plan draws camera outlets and the security
+plan draws the same cameras. Nothing is changed for you, and every marker still counts. Use ⌖
+to look, then move the reference sheet's markers to a condition with no cable setup, or remove
+a marker clicked twice. Markers already on a non-cable condition are not flagged. The canvas
+compares the sheets you have opened in this session.
+
 Per cable LF = measured route + vertical + both loops. Pulls are per location and cables per
 pull; the condition's waste % applies only to the order figure and ×N to the whole row.
 Linking, unlinking and accepting are on the undo stack (`⌘Z`); cable setup field edits, like

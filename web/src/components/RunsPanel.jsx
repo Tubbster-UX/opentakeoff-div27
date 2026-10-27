@@ -4,7 +4,9 @@
 // (linked / withheld / broken with the reason) and review state, the
 // Unlinked list (check devices and Hold them with a reason when they
 // deliberately get no run), the Held list, and the telecom rooms with their
-// names. A run over 295 ft per cable carries a flag. Clicking an item
+// names. A run over 295 ft per cable carries a flag. Possible duplicates
+// (lib/cableDupes.js: markers stacked on one sheet, overlay plans) list with
+// a ⌖ per side; they are flags only. Clicking an item
 // puts it on screen. A pure view over the canvas's computeCableTakeoff
 // result — the records change only through the callbacks, which the canvas
 // puts on its undo stack.
@@ -56,6 +58,7 @@ export default function RunsPanel({ takeoff, conditions, shapes, units = "imperi
   const warnings = takeoff?.summary?.warnings || [];
   const held = takeoff?.resolved?.held || [];
   const holds = takeoff?.resolved?.holds || [];
+  const dupes = takeoff?.duplicates || null;   // lib/cableDupes.js — its warnings are in `warnings` too
   const pendingIds = [...runs.filter((r) => r.pending).map((r) => r.id), ...holds.filter((h) => h.pending).map((h) => h.id)];
   // a checked device that got linked or deleted since drops out of the pick
   const unlinkedIds = new Set(unlinked.devices.map((d) => d.shape_id));
@@ -178,6 +181,30 @@ export default function RunsPanel({ takeoff, conditions, shapes, units = "imperi
               <div key={"r" + r.shape_id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, padding: "2px 0" }}>
                 <span style={{ ...mono, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.reason}>route · {r.finish_tag} · {L(r.length_lf)}</span>
                 {locBtn(r.shape_id, "Put this route segment on screen")}
+              </div>
+            ))}
+          </div>
+        )}
+        {dupes && (dupes.same_sheet.length > 0 || dupes.cross_sheet.length > 0) && (
+          <div style={section} data-cable-duplicates>
+            <div style={head}>Possible duplicates — flagged, nothing changed</div>
+            {dupes.cross_sheet.map((x) => x.groups.map((g) => (
+              <div key={`x${x.sheet_a_id}\u0000${x.sheet_b_id}\u0000${g.condition_a}\u0000${g.condition_b}`} data-cable-dup="cross" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, padding: "2px 0" }}>
+                <span style={{ ...mono, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  title={`${g.count} device positions coincide on ${x.sheet_a} and ${x.sheet_b}${g.different_conditions ? " — on different cable conditions" : ""}. If one sheet shows them for reference only, move that set to a non-cable reference condition.`}>
+                  {g.finish_tag_a} {x.sheet_a} ↔ {g.finish_tag_b} {x.sheet_b} ({g.count})
+                </span>
+                {locBtn(g.pairs[0][0], `Put the first ${g.finish_tag_a} on ${x.sheet_a} on screen`)}
+                {locBtn(g.pairs[0][1], `Put the first ${g.finish_tag_b} on ${x.sheet_b} on screen`)}
+              </div>
+            )))}
+            {dupes.same_sheet.map((d) => (
+              <div key={`s${d.shape_ids.join("\u0000")}`} data-cable-dup="same" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, padding: "2px 0" }}>
+                <span style={{ ...mono, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  title={`${d.shape_ids.length} markers within ${d.basis === "ft" ? `${d.threshold} ft` : `${r2(d.threshold * 100)}% of the sheet (no scale)`} — one device marked twice?`}>
+                  {d.sheet} · {d.same_condition ? `${d.finish_tags[0]} ×${d.shape_ids.length}` : [...new Set(d.finish_tags)].join(" + ")}
+                </span>
+                {locBtn(d.shape_ids[0], "Put these markers on screen")}
               </div>
             ))}
           </div>

@@ -458,6 +458,35 @@ const cableHolds = z.array(z.object({ id: z.string(), reason: z.string(), device
 const cableSummaryBlock = z.object({
   rows: z.array(cableSummaryRow), by_tr: z.array(cableGroupRow), by_cable_type: z.array(cableGroupRow), totals: cableGroupRow,
 });
+// the duplicate device check (web/src/lib/cableDupes.js) — flags only; no
+// count, run or shape is changed by it
+const dupPairGroup = z.object({
+  condition_a: z.string(), finish_tag_a: z.string(), condition_b: z.string(), finish_tag_b: z.string(),
+  count: z.number().int().describe("Coinciding positions in this condition pair"),
+  pairs: z.array(z.array(z.string())).describe("[shape on sheet_a, shape on sheet_b] per coinciding position"),
+  max_offset: z.number().describe("Largest offset between a pair, as a fraction of the sheet's long edge"),
+}).passthrough();
+export const cableDuplicatesBlock = z.object({
+  same_sheet: z.array(z.object({
+    sheet_id: z.string(), sheet: z.string(), shape_ids: z.array(z.string()), finish_tags: z.array(z.string()),
+    condition_ids: z.array(z.string()), same_condition: z.boolean(),
+    distance: z.number().describe("Largest distance between markers in the cluster, in `basis` units"),
+    basis: z.enum(["ft", "sheet_fraction"]).describe("ft = real feet (the sheet's scale and page size are known); sheet_fraction = a fraction of the sheet's long edge (no scale)"),
+    threshold: z.number(),
+  }).passthrough()).describe("Device markers on cable conditions stacked on one spot of one sheet — one device marked twice?"),
+  cross_sheet: z.array(z.object({
+    sheet_a_id: z.string(), sheet_a: z.string(), sheet_b_id: z.string(), sheet_b: z.string(),
+    positions: z.number().int().describe("Coinciding device positions across the two sheets (pattern groups only)"),
+    groups: z.array(dupPairGroup.extend({ different_conditions: z.boolean().describe("The two sides sit on different cable conditions — two setups figure the same devices") })),
+    below_pattern: z.number().int().optional().describe("Further cable-to-cable coincidences too few to be a pattern"),
+  }).passthrough()).describe("Overlay plans: two sheets of one page size whose cable markers coincide in position often enough to be the same devices drawn twice"),
+  reference: z.array(z.object({ sheet_a_id: z.string(), sheet_a: z.string(), sheet_b_id: z.string(), sheet_b: z.string(), groups: z.array(dupPairGroup.extend({ cable_side: z.enum(["a", "b"]) })), note: z.string() }).passthrough())
+    .describe("Coinciding positions where one side is on a NON-cable condition — not a duplicate for cable purposes (the reference-set fix), listed for the record, never warned"),
+  not_compared: z.array(z.object({ sheet_id: z.string(), sheet: z.string(), reason: z.string() }).passthrough()).describe("Sheets with cable markers this surface could not compare across sheets"),
+  warnings: z.array(z.string()).describe("The human warnings — also in the cable warnings"),
+  count: z.number().int().describe("same_sheet + cross_sheet findings"),
+  thresholds: z.record(z.number()),
+});
 
 export const linkRunOutput = {
   run_id: z.string().describe("The run's id — unlink_run takes it; it rides export_takeoff's cable_runs"),
@@ -478,7 +507,8 @@ export const listRunsOutput = {
   unlinked: cableUnlinked.describe("Devices on a cable condition with no linked run and no hold, and route segments no linked run uses — excluded from totals, never assigned a length"),
   held: cableHeld.describe("Devices held by hold_devices: no run by decision, with the reason — excluded from totals like unlinked devices"),
   holds: cableHolds.describe("The hold records — unlink_run takes a hold id to release it"),
-  warnings: z.array(z.string()).describe("One per condition whose route segments carry rise/drop legs: that condition's LF in the regular report is not a cable length"),
+  warnings: z.array(z.string()).describe("One per condition whose route segments carry rise/drop legs: that condition's LF in the regular report is not a cable length; the over-length, unconfirmed-scale and hold warnings; and the duplicate device check's warnings"),
+  duplicates: cableDuplicatesBlock.nullable().describe("The duplicate device check: device markers on cable conditions stacked on one spot, and overlay plans whose device positions coincide. Flags only — move one set to a non-cable reference condition (edit_shape { condition }) or remove an extra marker only with the estimator; never delete on this alone"),
   summary: cableSummaryBlock.nullable(),
   count: z.number().int(),
   note: z.string().optional(),
@@ -497,7 +527,7 @@ export const holdDevicesOutput = {
 
 export const takeoffSummaryOutput = {
   conditions: z.array(summaryRow),
-  cable: cableSummaryBlock.extend({ unlinked_devices: z.number().int(), unlinked_routes: z.number().int(), held_devices: z.number().int(), warnings: z.array(z.string()) }).optional().describe("Division 27 cable rollups — present only when a condition carries a cable_setup or a run exists (list_runs has the per-run detail)"),
+  cable: cableSummaryBlock.extend({ unlinked_devices: z.number().int(), unlinked_routes: z.number().int(), held_devices: z.number().int(), warnings: z.array(z.string()), duplicates: cableDuplicatesBlock.optional().describe("The duplicate device check — present only when it found something (list_runs always carries it)") }).optional().describe("Division 27 cable rollups — present only when a condition carries a cable_setup or a run exists (list_runs has the per-run detail)"),
   totals: z.object({
     total_sf: z.number(),
     total_sf_net: z.number(),
@@ -824,6 +854,7 @@ export const exportReportOutput = {
     summary: z.array(cableSummaryRow), by_tr: z.array(cableGroupRow), by_cable_type: z.array(cableGroupRow), totals: cableGroupRow,
     runs: z.array(z.record(z.unknown())).describe("One row per run, unmultiplied, with a multiplier column and its status / review status"),
     unlinked: cableUnlinked, warnings: z.array(z.string()),
+    duplicates: cableDuplicatesBlock.optional().describe("The duplicate device check — present only when it found something, so a cable report with no finding is unchanged"),
   }).optional().describe("Division 27 cable schedule (docs/design/CABLE_SETUP.md) — present only when a cable condition or a run exists, so every other report is byte-identical"),
 };
 
