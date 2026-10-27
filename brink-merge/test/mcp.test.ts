@@ -32,7 +32,7 @@ describe("brink MCP server (headless)", () => {
 
   it("lists its tools and tells the agent how to link with OpenTakeoff", async () => {
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(names).toEqual(["bom", "catalog", "export_bom", "export_schematic", "get_schematic", "import_takeoff", "list_issues", "list_projects", "map_condition"]);
+    expect(names).toEqual(["bom", "catalog", "export_bom", "export_schematic", "get_schematic", "import_takeoff", "list_issues", "list_projects", "map_cable_part", "map_condition", "portal_push"]);
     expect(client.getInstructions()).toContain("export_takeoff");
   });
 
@@ -84,5 +84,27 @@ describe("brink MCP server (headless)", () => {
     const csv = join(out, "bom.csv");
     expect((await call("export_bom", { project: PROJECT, path: csv })).structuredContent).toMatchObject({ format: "csv" });
     expect(readFileSync(csv, "utf8").split("\n")[0]).toMatch(/^lineNo,kind,conditionKey/);
+  });
+
+  it("portal_push is a dry run: unconfirmed rows abort it and nothing is sent", async () => {
+    const r = await call("portal_push", { project: PROJECT });
+    expect(r.isError).toBeFalsy();
+    expect(r.structuredContent).toMatchObject({ outcome: "aborted", sent_to_portal: false });
+    // CAM-1 was confirmed above but has no partId; the rest are still proposed; cable parts are seeded proposed
+    const codes = r.structuredContent!.errors.map((e: { code: string; conditionKey?: string }) => `${e.code}:${e.conditionKey}`);
+    expect(codes).toContain("missing_portal_sku:CAM-1");
+    expect(codes).toContain("not_confirmed:DATA-1");
+    expect(codes).toContain("cable_not_confirmed:CAM-1");
+  });
+
+  it("map_condition and map_cable_part refuse a portal_sku that is not a partId", async () => {
+    const a = await call("map_condition", { condition_key: "CAM-1", kind: "device", es_device_type: "turret-camera", portal_sku: "CAM-100", status: "confirmed" });
+    expect(a.isError).toBe(true);
+    const b = await call("map_cable_part", { cable_type: "CAT6 CMP", portal_sku: "1.5", order_basis: "box", status: "confirmed" });
+    expect(b.isError).toBe(true);
+    const c = await call("map_cable_part", { cable_type: "CAT6 CMP", portal_sku: "2002", order_basis: "box", package_ft: 1000, portal_unit_of_measure: "Box", status: "confirmed" });
+    expect(c.isError).toBeFalsy();
+    const parts = (await call("catalog")).structuredContent!;
+    expect(parts.cable_parts.find((p: { cableType: string }) => p.cableType === "CAT6 CMP")).toMatchObject({ portalSku: "2002", status: "confirmed" });
   });
 });

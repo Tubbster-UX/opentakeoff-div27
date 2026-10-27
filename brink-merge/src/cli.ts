@@ -11,6 +11,7 @@ import { migrate, openDb } from "./db/db.js";
 import { loadCatalog, saveMerge, seedCatalog } from "./db/repository.js";
 import { loadInput } from "./load.js";
 import { merge } from "./pipeline.js";
+import { portalPushMain } from "./portal/cli.js";
 
 const USAGE = `usage: brink-merge <takeoff.json> --report <report.json> [--map data/catalog-map.json]
                    [--out schematic.json] [--bom bom.csv] [--bom-json bom.json]
@@ -22,9 +23,12 @@ const USAGE = `usage: brink-merge <takeoff.json> --report <report.json> [--map d
   --out           EasySchematic file to write (default schematic.json)
   --bom           BOM CSV to write (default bom.csv); --bom-json also writes JSON
   --db            persist to Postgres/Supabase: --db-url, else DATABASE_URL, else local PGlite (BRINK_PGLITE_DIR)
-  --strict        exit 1 on warnings too`;
+  --strict        exit 1 on warnings too
+
+       brink-merge portal-push --help   (Draft Portal proposal from a project's import; dry run by default)`;
 
 export async function main(argv: string[]): Promise<number> {
+  if (argv[0] === "portal-push") return portalPushMain(argv.slice(1));
   let parsed;
   try {
     parsed = parseArgs({
