@@ -109,6 +109,7 @@ The schema is in `supabase/migrations/`. It is applied automatically by the CLI 
 | `brink_bom_lines` | BOM lines |
 | `brink_issues` | Issues |
 | `brink_schematics`, `brink_schematic_nodes`, `brink_schematic_connections` | The schematic, one row per node and per connection; `cable_length_ft` is the measured per-cable LF |
+| `brink_schematic_edits` | People's edits to the schematic (moves, renames, room changes, connections), kept as a layer over every import and keyed by ids that survive a re-import; see [docs/schematic-edits.md](docs/schematic-edits.md) |
 
 **Access:** every table has row-level security on and no policies, so only the service role can read or write.
 

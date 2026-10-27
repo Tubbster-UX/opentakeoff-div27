@@ -14,14 +14,14 @@ describe.each(targets)("system of record on %s", (_name, open) => {
   let db: Db;
   beforeAll(async () => {
     db = await open();
-    expect(await migrate(db)).toEqual(["20261027000000_brink_merge_init.sql"]);
+    expect(await migrate(db)).toEqual(["20261027000000_brink_merge_init.sql", "20261027120000_brink_schematic_edits.sql"]);
   });
   afterAll(() => db.close());
 
   it("migrations are idempotent and RLS is on with no policies", async () => {
     expect(await migrate(db)).toEqual([]);
     const tables = (await db.query<{ relname: string; relrowsecurity: boolean }>("select relname, relrowsecurity from pg_class where relname like 'brink\\_%' and relkind = 'r' and relname <> 'brink_schema_migrations'")).rows;
-    expect(tables.length).toBe(8);
+    expect(tables.length).toBe(9);
     for (const t of tables) expect(t.relrowsecurity, t.relname).toBe(true);
     expect((await db.query("select * from pg_policies where tablename like 'brink\\_%'")).rows).toEqual([]);
   });
