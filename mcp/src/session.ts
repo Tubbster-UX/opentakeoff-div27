@@ -72,7 +72,7 @@ import { hasRollSetup, mintRollSetup, computeRollTakeoff, rollReportRows, seamLf
 // library, shared with the canvas: setup defaults and validation, run
 // resolution, the summary rollups and the refusal texts all live there.
 import { hasDuplicateFindings } from "../../web/src/lib/cableDupes.js";
-import { hasCableSetup, mintCableSetup, isDeviceType, normalizeDeviceType, DEVICE_TYPES, DEVICE_TYPE_ALIASES, mintCableRun, mintCableHold, holdRefusal, isCableHold, computeCableTakeoff, cableReportBlock, linkRunRefusal, cableQtyByShape, isCableMaterialBasis, routeSplit, cableSetupProblems as cableSetupProblemsJs } from "../../web/src/lib/cable.js";
+import { hasCableSetup, mintCableSetup, isDeviceType, normalizeDeviceType, DEVICE_TYPES, DEVICE_TYPE_ALIASES, mintCableRun, mintCableHold, holdRefusal, isCableHold, computeCableTakeoff, cableReportBlock, linkRunRefusal, cableQtyByShape, isCableMaterialBasis, routeSplit, cableSetupProblems as cableSetupProblemsJs, cableLimitRefusal, normalizeCableMedium, withCableLimit, cableLinkLimit, cableMediumOf, statedLinkLimit, TIA_MAX_LINK_FT } from "../../web/src/lib/cable.js";
 import { gridPxPerFoot, drawGrid, drawShapes, drawMarks, type Ctx2D, type ToCanvas, type ViewMarks } from "./view.ts";
 
 // Conditions and snap behavior minted here are identical to the browser's
@@ -103,6 +103,7 @@ export interface CableTakeoff {
       id: string; status: "linked" | "withheld" | "broken"; condition_id: string | null; finish_tag: string; device_type: string; cable_type: string;
       device_shape_ids: string[]; route_shape_ids: string[]; tr_id: string; tr_name: string; sheet_ids: string[];
       device_sheet_ids: string[]; tr_sheet_id: string; over_length?: true; scale_unconfirmed?: true; vertical_override?: number; cables_override?: number;
+      medium?: CableMedium; limit_ft?: number | null; limit_source?: LimitSource;
       route_lf: number; trunk_lf: number; branch_lf: number; other_lf: number;
       vertical_ft: number | null; loop_device_ft: number | null; loop_tr_ft: number | null;
       per_cable_lf: number | null; cables: number | null; location_lf: number | null;
@@ -127,6 +128,24 @@ export interface CableTakeoff {
 /** A run's route LF by kind, rounded (web/src/lib/cable.js routeSplit). */
 const runSplit = routeSplit as unknown as (r: unknown) => { branch_lf: number; trunk_lf: number; other_lf: number };
 const cableSetupProblemsOf = (c: Condition): string[] => cableSetupProblemsJs(c.cable_setup) as string[];
+/** A run's medium and limit on the wire — present once any cable condition
+ * states a medium or a limit (the library sets limit_source only then). */
+const runLimit = (r: CableTakeoff["resolved"]["runs"][number]) =>
+  r.limit_source ? { ...(r.medium ? { medium: r.medium } : {}), limit_ft: r.limit_ft ?? null, limit_source: r.limit_source } : {};
+/** edit_condition's cable.limit: the check each run on the condition gets,
+ * and why (web/src/lib/cable.js cableLinkLimit). */
+function limitEcho(setup: CableSetup, mediumNote?: string) {
+  const { limit_ft, limit_source } = cableLinkLimit(setup) as { limit_ft: number | null; limit_source: LimitSource };
+  const medium = cableMediumOf(setup) as CableMedium | null;
+  const note = limit_source === "stated"
+    ? `runs on this condition are checked against the stated ${limit_ft} ft limit per cable (max_link_ft) — the project spec or the system's datasheet governs`
+    : limit_source === "none"
+      ? `${medium} has no single length limit (${medium === "fiber" ? "it depends on the application and the fiber grade" : "it depends on the cable and the system"}): runs on this condition are NOT length-checked until max_link_ft states the spec's limit`
+      : medium
+        ? `copper: runs are checked at ${TIA_MAX_LINK_FT} ft per cable (TIA-568 permanent link, 90 m) unless max_link_ft states the spec's limit`
+        : `no medium stated: runs are checked as copper at ${TIA_MAX_LINK_FT} ft per cable (TIA-568 permanent link, 90 m) — state medium and the spec's max_link_ft`;
+  return { ...(medium ? { medium } : {}), limit_ft, limit_source, note, ...(mediumNote ? { medium_read_as: mediumNote } : {}) };
+}
 // the JS module's report block, typed at the boundary (sheetLabel is optional there)
 const cableBlock = cableReportBlock as unknown as (t: CableTakeoff | null, sheetLabel?: (k: string) => string) => Record<string, unknown> | null;
 
@@ -217,6 +236,13 @@ export type ConditionRole = "tr" | "route";
 /** On a role "route" condition: "trunk" = shared pathway (traced once, many
  * runs ride it), "branch" = one device out to the trunk. Absent = unspecified. */
 export type RouteKind = "trunk" | "branch";
+/** What a cable setup states its cable is (absent = unspecified). Never read
+ * from cable_type. */
+export type CableMedium = "copper" | "fiber" | "coax";
+/** What a run's per-cable LF was checked against: the setup's max_link_ft,
+ * the TIA-568 copper 295 ft (copper or no medium), or nothing (fiber / coax
+ * with no stated limit). */
+export type LimitSource = "stated" | "tia_568_copper" | "none";
 
 /** A Division 27 cable setup on a count condition (web/src/lib/cable.js
  * mintCableSetup) — the opt-in that makes a condition a device condition. */
@@ -227,6 +253,10 @@ export interface CableSetup extends Record<string, unknown> {
   vertical_ft: number | null;
   loop_device_ft: number | null;
   loop_tr_ft: number | null;
+  /** Optional, item 6: the cable's medium, stated from the spec. */
+  medium?: CableMedium;
+  /** Optional, item 6: the longest link the spec or datasheet allows, feet > 0. */
+  max_link_ft?: number;
 }
 
 /** A cable run: one device location → its route segments, in order → the TR
@@ -4339,8 +4369,14 @@ export class Session {
         if (!isDeviceType(type)) throw new UserError(given.device_type !== undefined
           ? `cable_setup.device_type ${JSON.stringify(given.device_type)} is not a device type — use one of ${DEVICE_TYPES.join(", ")} (access control → access_door; aliases accepted: ${Object.keys(DEVICE_TYPE_ALIASES).join(", ")}).`
           : `cable_setup.device_type is required on a fresh opt-in — one of ${DEVICE_TYPES.join(", ")}.`);
-        const base = hasCableSetup(c) && type === prevType ? (c.cable_setup as object) : (mintCableSetup(type) as object);
-        c.cable_setup = { ...base, ...given, device_type: type } as CableSetup;
+        // medium and max_link_ft describe the CABLE, not the device type: a
+        // type change keeps them (as the canvas keeps them); null clears one
+        const { medium, max_link_ft, ...rest } = given as Record<string, unknown> & { medium?: unknown; max_link_ft?: unknown };
+        const prev = c.cable_setup;
+        const base = hasCableSetup(c) && type === prevType
+          ? (prev as object)
+          : (withCableLimit(mintCableSetup(type), { medium: prev ? cableMediumOf(prev) ?? undefined : undefined, max_link_ft: prev ? statedLinkLimit(prev) ?? undefined : undefined }) as object);
+        c.cable_setup = withCableLimit({ ...base, ...rest, device_type: type }, { medium, max_link_ft }) as CableSetup;
       }
     }
     if (opts.role !== undefined) {
@@ -4385,6 +4421,20 @@ export class Session {
         opts = { ...opts, cable_setup: { ...opts.cable_setup, device_type: canon } };
       }
     }
+    // medium / max_link_ft (item 6): refused, nothing written, unless each is
+    // a stated value or null. A medium is only ever the three names, case
+    // forgiven; it is never read from cable_type.
+    let mediumNote: string | undefined;
+    if (opts.cable_setup) {
+      const { medium, max_link_ft } = opts.cable_setup as { medium?: unknown; max_link_ft?: unknown };
+      const refusal = (cableLimitRefusal as (p: { medium?: unknown; max_link_ft?: unknown }) => string | null)({ medium, max_link_ft });
+      if (refusal) throw new UserError(refusal);
+      if (typeof medium === "string") {
+        const canon = normalizeCableMedium(medium) as string;
+        if (canon !== medium) mediumNote = `medium ${JSON.stringify(medium)} read as "${canon}"`;
+        opts = { ...opts, cable_setup: { ...opts.cable_setup, medium: canon } };
+      }
+    }
     const before = {
       waste_pct: c.waste_pct, multiplier: c.multiplier, height_ft: c.height_ft, rise_ft: c.rise_ft, drop_ft: c.drop_ft,
       roll_setup: c.roll_setup ? structuredClone(c.roll_setup) : undefined,
@@ -4423,6 +4473,7 @@ export class Session {
     // condition's figured summary row(s) so an agent learns at once whether
     // the condition's runs count — a withheld reason here is the next move
     let cable: Record<string, unknown> | undefined;
+    const limitTouched = !!opts.cable_setup && ((opts.cable_setup as Record<string, unknown>).medium !== undefined || (opts.cable_setup as Record<string, unknown>).max_link_ft !== undefined);
     if (hasCableSetup(c)) {
       const t = this.cableTakeoff();
       const rows = t ? t.summary.rows.filter((r) => r.condition_id === c.id) : [];
@@ -4430,6 +4481,9 @@ export class Session {
         problems: cableSetupProblemsOf(c), rows,
         ...(aliasNote ? { device_type_alias: aliasNote } : {}),
         ...(Object.keys(minted).length ? { minted, note: "starting values, not verified against spec — these came from the device type, not the project spec; confirm vertical_ft, loop_device_ft and loop_tr_ft (edit_condition patches them)" } : {}),
+        // the length check, once the setup states a medium or a limit or this
+        // call touched either — a reply that never did reads as it did before
+        ...(limitTouched || cableMediumOf(c.cable_setup) || statedLinkLimit(c.cable_setup) != null ? { limit: limitEcho(c.cable_setup as CableSetup, mediumNote) } : {}),
       };
     }
     // trunk / branch: a tagged route condition echoes its Pathway row (each
@@ -4515,6 +4569,7 @@ export class Session {
       ...(r.vertical_override != null ? { vertical_override: r.vertical_override } : {}),
       ...(r.cables_override != null ? { cables_override: r.cables_override } : {}),
       reviewed: false,
+      ...runLimit(r),
       ...(r.over_length ? { over_length: true as const } : {}),
       ...(r.scale_unconfirmed ? { scale_unconfirmed: true as const } : {}),
       ...(r.notes ? { notes: r.notes } : {}),
@@ -4536,6 +4591,7 @@ export class Session {
         route_lf: round2(r.route_lf),
         // trunk / branch: the split rides once a route condition is tagged
         ...(t.pathway ? runSplit(r) : {}),
+        ...runLimit(r),
         ...(r.over_length ? { over_length: true as const } : {}),
         ...(r.scale_unconfirmed ? { scale_unconfirmed: true as const } : {}),
         ...(r.status === "linked" ? { vertical_ft: r.vertical_ft, loop_device_ft: r.loop_device_ft, loop_tr_ft: r.loop_tr_ft, per_cable_lf: round2(r.per_cable_lf as number), cables: r.cables, location_lf: round2(r.location_lf as number) } : {}),

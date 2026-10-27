@@ -17,6 +17,7 @@ import { buildServer } from "../server.ts";
 import { Session } from "../src/session.ts";
 import { openPdf } from "../src/pdf.ts";
 import { runShortIds } from "../../web/src/lib/cable.js";
+import { cableMediumScenario } from "./fixtures/cableMediumScenario.ts";
 
 const PLAN = fileURLToPath(new URL("../../demo/sample-plan.pdf", import.meta.url));
 const KEY = "sample-plan.pdf";
@@ -651,4 +652,91 @@ test("trunk and branch over the wire: link_run [branch, trunk] splits route LF; 
   assert.deepEqual(back.runs.map((r: any) => [r.branch_lf, r.trunk_lf]), [[40, 100], [40, 100]]);
   assert.equal(back.pathway.totals.pathway_lf, 180);
   assert.deepEqual((await ok(two, "export_takeoff", {})).conditions.map((c: any) => c.route_kind).filter(Boolean), ["trunk", "branch"]);
+});
+
+// ── item 6: cable medium and per-condition length limits ────────────────────
+
+test("edit_condition cable_setup medium + max_link_ft over the wire: fiber unchecked, a stated limit flags with its own words, bad values refused with nothing written, null clears, a type change keeps them, undo restores", async () => {
+  const { client, tr, devW, devC, rtW, rtC } = await worked();
+  // CAM-1 at 140 + 435 + 15 + 10 = 600 ft per cable; DATA-1 at 130.5
+  await ok(client, "edit_condition", { condition: "CAM-1", cable_setup: { vertical_ft: 435 } });
+  await ok(client, "link_run", { device_shape_ids: [devW], route_shape_ids: [rtW], tr_id: tr });
+  const c = await ok(client, "link_run", { device_shape_ids: [devC], route_shape_ids: [rtC], tr_id: tr });
+  assert.deepEqual([c.per_cable_lf, c.over_length, "limit_ft" in c, "limit_source" in c], [600, true, false, false], "no medium, no limit: today's check and today's reply");
+  let list = await ok(client, "list_runs", {});
+  assert.ok(list.warnings.includes(`1 linked run exceeds 295 ft per cable, the TIA-568 limit for a 4-pair copper permanent link (90 m): CAM-1 ${c.run_id} 600 ft. Check the route; if it stands, the run needs a closer TR, or a length test and an owner notice. Fiber and coax are not bound by this limit.`), list.warnings.join("\n"));
+
+  // fiber with no stated limit: not checked, no warning; the reply says so
+  const fib = await ok(client, "edit_condition", { condition: "CAM-1", cable_setup: { medium: "Fiber" } });
+  assert.equal(fib.cable_setup.medium, "fiber", "case forgiven; the canonical name is stored");
+  assert.deepEqual(fib.cable.limit, { medium: "fiber", limit_ft: null, limit_source: "none", note: "fiber has no single length limit (it depends on the application and the fiber grade): runs on this condition are NOT length-checked until max_link_ft states the spec's limit", medium_read_as: 'medium "Fiber" read as "fiber"' });
+  list = await ok(client, "list_runs", {});
+  const cam = () => list.runs.find((r: any) => r.condition === "CAM-1");
+  const data = () => list.runs.find((r: any) => r.condition === "DATA-1");
+  assert.deepEqual([cam().over_length, cam().medium, cam().limit_ft, cam().limit_source, cam().per_cable_lf], [undefined, "fiber", null, "none", 600]);
+  assert.deepEqual([data().limit_ft, data().limit_source, "medium" in data()], [295, "tia_568_copper", false], "every run says its limit once any condition states one");
+  assert.equal(list.warnings.some((w: string) => /length limit|295 ft per cable/.test(w)), false);
+  assert.equal(list.summary.totals.over_length_runs, 0);
+
+  // refusals: nothing written
+  const before = JSON.stringify((await ok(client, "export_takeoff", {})).conditions);
+  await refused(client, "edit_condition", { condition: "CAM-1", cable_setup: { medium: "glass" } }, /cable_setup\.medium "glass" is not a medium — use "copper", "fiber" or "coax" \(or null to clear it\)\. State it from the spec; it is never read from cable_type\./);
+  await refused(client, "edit_condition", { condition: "CAM-1", waste_pct: 50, cable_setup: { max_link_ft: 0 } }, /cable_setup\.max_link_ft 0 is not a length limit — give the limit in feet, greater than 0/);
+  await refused(client, "edit_condition", { condition: "CAM-1", cable_setup: { max_link_ft: -300 } }, /is not a length limit/);
+  const bad: any = await client.callTool({ name: "edit_condition", arguments: { condition: "CAM-1", cable_setup: { max_link_ft: "500" } } });
+  assert.ok(bad.isError && /MCP error -32602/.test(bad.content[0].text) && /cable_setup/.test(bad.content[0].text), `a string limit is a schema violation: ${bad.content[0].text}`);
+  assert.equal(JSON.stringify((await ok(client, "export_takeoff", {})).conditions), before, "a refusal writes nothing, not even the waste in the same call");
+
+  // a stated limit: the 600 ft run is flagged in the stated limit's words
+  const lim = await ok(client, "edit_condition", { condition: "CAM-1", cable_setup: { max_link_ft: 500 } });
+  assert.deepEqual([lim.cable_setup.medium, lim.cable_setup.max_link_ft], ["fiber", 500]);
+  assert.deepEqual([lim.cable.limit.limit_ft, lim.cable.limit.limit_source], [500, "stated"]);
+  assert.deepEqual([lim.cable.rows[0].limit_ft, lim.cable.rows[0].limit_source, lim.cable.rows[0].over_length_runs], [500, "stated", 1]);
+  list = await ok(client, "list_runs", {});
+  assert.deepEqual([cam().over_length, cam().limit_ft, cam().limit_source], [true, 500, "stated"]);
+  assert.ok(cam().notes.includes("per cable 600 ft exceeds the stated 500 ft limit for CAM-1"), cam().notes.join("\n"));
+  assert.ok(list.warnings.includes(`1 linked run exceeds its length limit per cable. Over the stated 500 ft limit (CAM-1): CAM-1 ${c.run_id} 600 ft. Check the route; if it stands, the run needs a closer TR, or a length test and an owner notice.`), list.warnings.join("\n"));
+  assert.equal(list.summary.totals.cable_lf, 261 + 600, "a flag never changes a quantity");
+  const rep = await ok(client, "export_report", {});
+  const repCam = rep.cable.runs.find((r: any) => r.condition === "CAM-1");
+  assert.deepEqual([repCam.medium, repCam.limit_ft, repCam.limit_source, repCam.over_length], ["fiber", 500, "stated", true]);
+  assert.equal((await ok(client, "takeoff_summary", {})).cable.rows.find((r: any) => r.finish_tag === "CAM-1").limit_ft, 500);
+  // the marked set: the chip shows the run's own limit; the cover counts without naming one
+  const dir = await mkdtemp(path.join(tmpdir(), "ot-cable-medium-"));
+  const out = path.join(dir, "marked.pdf");
+  await ok(client, "export_marked_pdf", { path: out, project_name: "Invented Div 27" });
+  const doc = await openPdf(out);
+  const cover = (await doc.page(1)).textContent.items.map((i: any) => i.str).join("\n");
+  const sheet = (await doc.page(2)).textContent.items.map((i: any) => i.str).join("\n");
+  await doc.destroy();
+  assert.match(sheet, / · CAM-1 · 600 LF >500/);
+  assert.ok(cover.includes("1 over its length limit per cable"), cover);
+
+  // a type change keeps the medium and the limit (they describe the cable)
+  const typed = await ok(client, "edit_condition", { condition: "CAM-1", cable_setup: { device_type: "ceiling_other" } });
+  assert.deepEqual([typed.cable_setup.device_type, typed.cable_setup.medium, typed.cable_setup.max_link_ft], ["ceiling_other", "fiber", 500]);
+  assert.equal("medium" in typed.cable.minted || "max_link_ft" in typed.cable.minted, false, "never minted");
+  // null clears each; undo_last restores the last one
+  const noLimit = await ok(client, "edit_condition", { condition: "CAM-1", cable_setup: { max_link_ft: null } });
+  assert.equal("max_link_ft" in noLimit.cable_setup, false);
+  assert.equal(noLimit.cable.limit.limit_source, "none");
+  const noMedium = await ok(client, "edit_condition", { condition: "CAM-1", cable_setup: { medium: null } });
+  assert.equal("medium" in noMedium.cable_setup, false);
+  assert.deepEqual([noMedium.cable.limit.limit_ft, noMedium.cable.limit.limit_source], [295, "tia_568_copper"]);
+  assert.match(noMedium.cable.limit.note, /^no medium stated: runs are checked as copper at 295 ft per cable/);
+  await ok(client, "undo_last", { n: 1 });
+  assert.equal((await ok(client, "export_takeoff", {})).conditions.find((x: any) => x.finish_tag === "CAM-1").cable_setup.medium, "fiber");
+  // a fresh opt-in mints neither; stating them is the only way in
+  await ok(client, "place_count", { sheet: KEY, points: [[2600, 1000]], condition: "BB-1" });
+  const fresh = await ok(client, "edit_condition", { condition: "BB-1", cable_setup: { device_type: "custom", medium: "fiber", max_link_ft: 984 } });
+  assert.deepEqual(fresh.cable_setup, { device_type: "custom", cables_per_location: 1, cable_type: "", vertical_ft: null, loop_device_ft: null, loop_tr_ft: null, medium: "fiber", max_link_ft: 984 });
+  const plain = await ok(client, "edit_condition", { condition: "DATA-1", waste_pct: 10 });
+  assert.equal("limit" in plain.cable, false, "a condition that states neither, edited without touching them, replies as before");
+});
+
+test("a cable session that states no medium and no limit replies byte-for-byte as 28ea3cc did (edit_condition, link_run, hold_devices, list_runs, takeoff_summary, export_report, the marked set's text)", async () => {
+  const base = JSON.parse(await readFile(new URL("./fixtures/cableMediumScenario.base.json", import.meta.url), "utf8"));
+  const now = await cableMediumScenario(buildServer, Session, PLAN);
+  assert.deepEqual(Object.keys(now as object), Object.keys(base));
+  for (const k of Object.keys(base)) assert.equal(JSON.stringify((now as any)[k]), JSON.stringify(base[k]), k);
 });

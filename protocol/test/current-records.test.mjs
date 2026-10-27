@@ -259,6 +259,16 @@ test("Division 27 cable setup, TR role and cable runs conform as additive record
   checkBoth(tb);
   const tt = computeCableTakeoff(tb.conditions, tb.shapes, tb.cable_runs);
   assert.deepEqual({ route: tt.resolved.runs[0].route_lf, branch: tt.resolved.runs[0].branch_lf, trunk: tt.resolved.runs[0].trunk_lf, pathway: tt.pathway.totals.pathway_lf }, { route: 140, branch: 40, trunk: 100, pathway: 140 });
+  // medium and max_link_ft (item 6): optional cable_setup fields; a stated
+  // limit replaces the 295 ft copper check for that condition's runs
+  const fib = { ...d, conditions: d.conditions.map((c) => (c.id === "condition-data" ? { ...c, cable_setup: { ...c.cable_setup, medium: "fiber", max_link_ft: 100 } } : c)) };
+  checkBoth(fib);
+  const tf = computeCableTakeoff(fib.conditions, fib.shapes, fib.cable_runs);
+  assert.deepEqual({ per: tf.resolved.runs[0].per_cable_lf, over: tf.resolved.runs[0].over_length, limit: tf.resolved.runs[0].limit_ft, source: tf.resolved.runs[0].limit_source }, { per: 130.5, over: true, limit: 100, source: "stated" });
+  const withSetup = (patch) => ({ ...structuredClone(fib), schema: draftId, conditions: fib.conditions.map((c) => (c.id === "condition-data" ? { ...c, cable_setup: { ...c.cable_setup, ...patch } } : c)) });
+  assert.equal(draftCheck(withSetup({ medium: "glass" })), false, "a medium outside copper / fiber / coax does not conform");
+  assert.equal(draftCheck(withSetup({ max_link_ft: 0 })), false, "a limit of 0 does not conform");
+  assert.equal(draftCheck(withSetup({ medium: "coax" })), true);
   // the MCP writer emits none of the keys for a session without cable work
   const session = new Session();
   await session.loadPlan(plan);

@@ -423,6 +423,10 @@ estimated: horizontal length comes only from route segments you trace.
   **Loop dev** and **Loop TR** to match it. An Access control door has no starting vertical;
   until you enter one, its runs are withheld and the reason shows in red under the fields,
   except a run that states its own vertical.
+  **Medium** (Unspecified, Copper, Fiber, Coax) and **Limit** (the longest link per cable the
+  spec or the system's datasheet allows, in ft, or m in metric) set the length check each run
+  gets; see *Flags you should not price past* below. Neither is filled in for you, and the
+  **Type** text never sets the medium.
 - **Telecom room (TR)** makes a count condition's markers the rooms runs home to.
 - **Cable route (linear)** on a linear condition marks its lines as routes. Any route
   segment that no run uses is listed as unlinked. Its **Kind** is **Trunk** (shared pathway,
@@ -486,10 +490,25 @@ unlinked ones do, but they move to a **Held** list with your reason, wear a grey
 the sheet instead of the amber one, and print as held in the Report, the exports and the marked
 set. **release** returns them to the unlinked list; holding and releasing are undoable.
 
-**Flags you should not price past.** A run longer than **295 ft per cable** (the TIA-568 limit
-for a 4-pair copper permanent link, 90 m) still counts, because the measured length is the
-truth, but it is flagged in the Runs panel and named in a warning. Check the route; if it
-stands, the run needs a closer TR or a length test and an owner notice. A route on a sheet
+**Flags you should not price past.** A run longer than its condition's length limit per cable
+still counts, because the measured length is the truth, but it is flagged in the Runs panel
+(`>295`, or `>1000` against a stated 1000 ft limit) and named in a warning. Check the route; if it
+stands, the run needs a closer TR or a length test and an owner notice. The limit comes from
+the condition's cable setup:
+
+- a **Limit** you enter replaces the default for that condition's runs; the flag reads *exceeds
+  the stated 1000 ft limit for FIBER-1*;
+- with no Limit, **Copper** or an unspecified medium is checked at **295 ft** (the TIA-568 limit
+  for a 4-pair copper permanent link, 90 m), as it always was;
+- with no Limit, **Fiber** and **Coax** are not checked at all. They have no single limit (it
+  depends on the application and the fiber grade, or the cable and the system), so enter the
+  spec's.
+
+The line under the setup fields says which check applies. Once any condition states a medium
+or a limit, the Cable summary's *Runs over 295 ft* column reads *Runs over length limit*, the
+Cable runs sheet gains *Limit ft* and *Limit source* before *Reason / notes*, and the warning
+groups the runs by the limit they were checked against. A takeoff that states neither exports
+exactly as before. A route on a sheet
 whose scale an agent set and no person has confirmed is flagged the same way. Confirm the
 scale before pricing, because every cable length on that sheet rests on it.
 
@@ -523,8 +542,8 @@ CSV, Excel and JSON carry the same tables plus a per-run sheet naming each run's
 route sheet(s) and TR sheet.
 
 **The marked set** draws each run's route with a chip reading its run ID, device condition and
-per-cable length (`run-c711ef · DATA-1 · 54.6 LF`). The chip is amber with `>295` for an
-over-length run and red with the status for a withheld or broken one. The same run ID is
+per-cable length (`run-c711ef · DATA-1 · 54.6 LF`). The chip is amber with `>295` (or the
+run's stated limit, such as `>1000`) for an over-length run and red with the status for a withheld or broken one. The same run ID is
 printed beside the device marker, so a device on the comms plan connects to its route on
 the ceiling plan. The chips are placed clear of each other along the route. Unlinked devices
 get an amber ring and held ones a grey ring, and each TR prints its name. The cover adds pulls,

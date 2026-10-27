@@ -7,7 +7,8 @@
 //
 // What a sheet gets, all in image px at the marked set's render scale:
 //   • a chip per run on its route — "run-c711ef · DATA-1 · 54.6 LF", with
-//     " >295" when the run is over the TIA-568 copper limit and the status in
+//     " >295" when the run is over the TIA-568 copper limit (" >1000" over a
+//     condition's stated max_link_ft — the run's own limit) and the status in
 //     place of the length when the run is withheld or broken. The route
 //     segment's own generic "ROUTE · 16.6 LF" chip is suppressed: the run chip
 //     says more, and a corridor of overlapping generic chips was unreadable on
@@ -19,7 +20,11 @@
 // Chips and tags are placed greedily against everything already placed (the
 // markers included), trying points along the route and beside it, so dense
 // corridors spread out instead of stacking.
-import { runShortIds, hasCableSetup, isTrCondition, isRouteCondition, routeKindOf, TIA_MAX_LINK_FT } from "./cable.js";
+import { runShortIds, hasCableSetup, isTrCondition, isRouteCondition, routeKindOf, TIA_MAX_LINK_FT, takeoffUsesLimits } from "./cable.js";
+
+/** The chip's over-length mark: the run's own limit (a stated max_link_ft,
+ *  else 295), rounded to 0.01 ft. */
+const overMark = (r) => ` >${Math.round((typeof r.limit_ft === "number" ? r.limit_ft : TIA_MAX_LINK_FT) * 100) / 100}`;
 
 /** Font sizes, points. */
 export const CHIP_PT = 7;
@@ -153,7 +158,7 @@ export function cableSheetMarks(cable, { sheetId, shapes, conditions, W, H, ptSc
     for (const s of segs) out.suppress.add(s.id);
     const tag = r.finish_tag || "?";
     const text = r.status === "linked"
-      ? `${short.get(r.id)} · ${tag} · ${fmtLen(r.per_cable_lf)}${r.over_length ? ` >${TIA_MAX_LINK_FT}` : ""}`
+      ? `${short.get(r.id)} · ${tag} · ${fmtLen(r.per_cable_lf)}${r.over_length ? overMark(r) : ""}`
       : `${short.get(r.id)} · ${tag} · ${r.status}`;
     const b = box(text, CHIP_PT);
     const candidates = [];
@@ -187,7 +192,9 @@ export function cableLegend(cable, conditions, { fmtLen }) {
   const meta = [
     `Cable runs: ${n(t.pulls, "pull")} linked`, `${n(t.pending_runs, "run")} pending review`, n(t.unlinked_devices, "unlinked device"),
     ...(t.held_devices ? [n(t.held_devices, "held device")] : []),
-    ...(t.over_length_runs ? [`${t.over_length_runs} over ${TIA_MAX_LINK_FT} ft per cable`] : []),
+    // once a condition states a medium or a limit, runs are checked against
+    // different limits: the count names none
+    ...(t.over_length_runs ? [takeoffUsesLimits(cable) ? `${t.over_length_runs} over ${t.over_length_runs === 1 ? "its" : "their"} length limit per cable` : `${t.over_length_runs} over ${TIA_MAX_LINK_FT} ft per cable`] : []),
   ].join(" · ");
   const byCond = cable.byCond instanceof Map ? cable.byCond : new Map();
   const lines = new Map();

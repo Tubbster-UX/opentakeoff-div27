@@ -624,3 +624,67 @@ with its reason in the reply and the report; an ordinary `edit_materials` reply 
 | `protocol` check, doc links | pass |
 | Browser `verify-cable-runs.mjs` | 38 of 38, no console errors |
 | A marked set with no cable work vs `d680c88`, clock frozen | identical SHA-256 |
+
+### 15.1 Cable medium and length limits
+
+Item 6. Every linked run over 295 ft per cable carried the TIA-568 copper flag, whatever the
+cable was, because the library could not tell the medium from free-text `cable_type`. A cable
+setup can now state its `medium` (copper, fiber, coax) and a `max_link_ft`. A run is checked
+against the stated limit, else 295 ft for copper or no medium (unchanged), else not at all for
+fiber or coax. Nothing is inferred or minted, and the check never changes a quantity. The
+decisions are in the spec's Decisions ("Recorded while building item 6").
+
+| File | Change |
+|---|---|
+| `web/src/lib/cable.js` | `CABLE_MEDIA`, `LIMIT_SOURCES`, `isCableMedium`, `isLinkLimit`, `cableMediumOf`, `statedLinkLimit`, `cableLinkLimit`, `usesCableLimits` (the gate), `cableLimitText`, `normalizeCableMedium`, `cableLimitRefusal`, `withCableLimit`; `resolveCableRuns` checks each linked run against its own limit, adds `medium` / `limit_ft` / `limit_source` to runs once the gate is open, words a stated limit's note, groups the warning by limit and warns on an invalid stored value; `cableSummary` rows carry the condition's limit; `cableRunRows` adds the three fields; `cableTables` renames the summary column *Runs over length limit* and inserts *Limit ft* / *Limit source* before *Reason / notes*; `CABLE_SUMMARY_LIMIT_COLUMN`, `CABLE_RUNS_LIMIT_HEADER`, `limitSourceLabel`, `takeoffUsesLimits` |
+| `web/src/lib/cableMarks.js` | The chip's over mark is the run's own limit (`>500`); the cover counts `N over their length limit per cable` once the gate is open |
+| `web/src/components/CableSetupEditor.jsx` | **Medium** select and **Limit** field (display units, placeholder 295 or *none*), a line naming the check; a device-type change keeps both |
+| `web/src/components/RunsPanel.jsx` | The `>N` flag and its tooltip use the run's own limit |
+| `mcp/src/session.ts`, `tools.ts`, `outputs.ts` | `edit_condition { cable_setup: { medium, max_link_ft } }`: refused before anything is written unless valid or `null`; `null` clears; a type change keeps both; the reply's `cable.limit`; `limit_ft` / `limit_source` / `medium` on `link_run` and `list_runs` rows (and through the library on summary rows and `export_report`). Descriptions updated. No new tool (57 / 59 / 11) |
+| `protocol/v1/condition.schema.json`, `protocol/INVENTORY.md`, `protocol/test/current-records.test.mjs` | `cable_setup.medium` (enum) and `max_link_ft` (number, exclusive minimum 0); an inventory row; a conforming record and two that do not. Generated: `protocol/README.md`, `mcp/src/protocol.generated.ts` |
+| `web/test/cableMedium.test.ts` (new), `web/test/fixtures/cableMedium.fixture.ts`, `cableMedium.base.json` (new) | Below |
+| `mcp/test/cable.test.ts` (+2), `mcp/test/fixtures/cableMediumScenario.ts`, `cableMediumScenario.base.json` (new) | Below |
+| `web/scripts/verify-cable-runs.mjs` | 3 checks: Fiber with no Limit clears the flag; Limit 350 flags `>350` with the stated-limit warning; clearing both restores `>295` |
+| Docs | the spec's data model, summary column and Decisions; `USER_GUIDE.md` (cable setup fields, *Flags you should not price past*, the chip); `AGENT_GUIDE.md` (two refusal-table rows: state medium and the spec's limit, never infer them); `MCP.md`; `mcp/README.md` (`edit_condition`, `link_run`, `list_runs` rows); `docs/wiki/status.md` (+ regenerated `wiki.generated.ts`); `FEATURES.md`; `CHANGELOG.md` |
+
+**Tests.** `web/test/cableMedium.test.ts` (12): the vocabulary and the gate (invalid values
+read as absent and do not open it; no device type mints either field); refusal wording, and
+`withCableLimit` clearing back to the original setup, key order included; no medium: 295 ft per
+cable not flagged, 296 flagged, today's note, warning, header, chip `>295` and cover line;
+copper: the same flags and note, each run carrying `limit_ft: 295`, the grouped warning; fiber
+with no limit: a 600 ft run unflagged, no warning, *Limit source* `none (fiber: no limit
+stated)`, and the same fiber text in `cable_type` with no medium stated still checked as copper;
+fiber with `max_link_ft` 500: the 600 ft run flagged `per cable 600 ft exceeds the stated 500 ft
+limit for FIBER-1`, the exact warning, *Runs over length limit* with every other column in
+place, the row note, the runs-sheet columns and cells, report JSON, CSV, workbook, chip `>500`,
+cover, and metric *Limit m* 152.4; 1000 per cable not over a stated 1000, 1001 over it and
+chipped `>1000`; coax unchecked without a limit and flagged with one; five media in one takeoff
+grouped into one warning; an invalid stored value warned; a document and template round trip.
+The byte-identity test runs `cableMediumOutputs` (resolved runs, summary, `byCond`, run rows,
+tables imperial and metric, report JSON, CSV imperial and metric, workbook imperial and metric,
+legend, sheet marks on two sheets, each plain and with a tagged trunk: 26 outputs) and
+compares the full CSV, the warnings and 26 SHA-256 values with `cableMedium.base.json`,
+captured by the same function from `28ea3cc`'s `web/src/lib` (extracted with `git archive`).
+`mcp/test/cable.test.ts` adds: over the wire, a 600 ft camera run flagged with today's reply
+and warning, then `medium: "Fiber"` (read as fiber, `cable.limit` none, unflagged, DATA-1's
+run carrying 295), refusals of `"glass"`, `0` (with a waste % in the same call, nothing
+written), `-300` and a string limit, `max_link_ft: 500` (flag, note, grouped warning, quantity
+unchanged, `export_report`, `takeoff_summary`, chip `>500` and the cover in the marked PDF),
+a type change keeping both, `null` clearing each, `undo_last`, and a fresh opt-in minting
+neither; and a scripted session using neither field (seeded ids) whose `edit_condition`,
+`link_run`, `hold_devices`, `list_runs`, `takeoff_summary.cable`, `export_report.cable` and
+marked-set text equal, byte for byte, the replies captured from `28ea3cc`'s server.
+
+#### Check record (this container: Node 22, root, shared with two other agents)
+
+| Check | Result |
+|---|---|
+| `web` typecheck, lint, build | pass |
+| `web` `test/cable*.test.ts` | 103 pass (91 before + 12) |
+| `web` `npm test` | 3,607 tests: 3,595 pass, 1 fail, 7 cancelled, 4 skipped. The failure is `sheetName.test.ts` "cost grows about linearly with the page's text" (a timing ratio under load) and one cancellation is `planSearch.test.ts` (20 s file timeout); both files pass alone (115 of 115). The rest are the known environment-only `pictures.test.ts` timeout and the 5 in `stageOcrModel.test.ts` |
+| `web/bench/results.json`, `oneclick.ts`, `TakeoffCanvas.jsx` | unchanged |
+| `mcp` typecheck; all test files as CI runs them | pass; 322 tests: 321 pass, 1 fail (`safewrite` "an unreadable file fails CLOSED", root, as in §10) |
+| `mcp` check:tool-count (57 / 59 / 11), check:wiki, check:protocol-resources | pass after `-- --write` |
+| `protocol` `npm run check` | 62 tests pass; docs match 11 schemas; matrix 16 cases |
+| `node scripts/check-doc-links.mjs` | pass (44 files) |
+| Browser: `verify-cable-runs.mjs` on the invented fixture | 41 of 41 (the 38 existing + 3 for Medium and Limit), no console errors |

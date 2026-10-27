@@ -23,6 +23,10 @@
 // editor sets its own vertical (chip, per-cable LF, totals), ⌘Z / ⇧⌘Z, a
 // cables override beside it, a negative vertical refused inline, and clearing
 // both returns the run to the condition's values.
+// Added with item 6 (cable medium and length limits, CABLE_SETUP_PLAN.md
+// §15.1): Medium Fiber with no Limit clears the over-length flag; a stated
+// Limit flags the runs with its own value (">350"); clearing both restores
+// the 295 ft check.
 import { dirname, join, resolve } from 'node:path';
 import { mkdirSync, writeFileSync, readFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -166,6 +170,26 @@ try {
   const flagWarn = await page.locator('[data-cable-totals]').innerText();
   check('a 300 ft vertical flags both runs over 295 ft (still counted) and warns once', flags === 2 && /2 pulls/.test(flagWarn) && /2 linked runs exceed 295 ft per cable/.test(flagWarn), { flags, flagWarn: flagWarn.slice(0, 300) });
   await shot('09-over-295-flag.png');
+  // item 6: Medium and Limit. Fiber with no limit is not length-checked;
+  // a stated 350 ft limit flags both 353.33 ft runs ">350"; clearing both
+  // returns the 295 ft copper check with today's words
+  await page.locator('select[name="condition-cable-medium"]').selectOption('fiber');
+  await page.waitForTimeout(300);
+  const fibHint = await page.locator('[data-cable-limit]').innerText();
+  check('Medium Fiber with no Limit: no over-length flag, no warning, the line says it is not checked',
+    (await page.locator('[data-cable-flag="over-length"]').count()) === 0 && !/exceed/.test(await page.locator('[data-cable-totals]').innerText()) && /No length check: fiber has no single limit/.test(fibHint), fibHint);
+  await page.locator('input[name="condition-cable-max-link"]').fill('350');
+  await page.waitForSelector('[data-cable-flag="over-length"]');
+  const lim = await page.locator('[data-cable-flag="over-length"]').allInnerTexts();
+  const limWarn = await page.locator('[data-cable-totals]').innerText();
+  check('Limit 350 ft: both runs flagged >350 and the warning names the stated limit',
+    lim.length === 2 && lim.every((t) => t.trim() === '>350') && /Over the stated 350 ft limit \(DATA-1\)/.test(limWarn) && /stated 350 ft limit per cable/.test(await page.locator('[data-cable-limit]').innerText()), { lim, limWarn: limWarn.slice(0, 300) });
+  await shot('09b-stated-limit-flag.png');
+  await page.locator('input[name="condition-cable-max-link"]').fill('');
+  await page.locator('select[name="condition-cable-medium"]').selectOption('');
+  await page.waitForTimeout(300);
+  check('clearing Medium and Limit: back to the 295 ft check and its words',
+    (await page.locator('[data-cable-flag="over-length"]').allInnerTexts()).every((t) => t.trim() === '>295') && /2 linked runs exceed 295 ft per cable/.test(await page.locator('[data-cable-totals]').innerText()));
   await page.locator('input[name="condition-cable-vertical"]').fill('23');
   await page.waitForTimeout(300);
   check('back to 23 ft: no over-length flag', (await page.locator('[data-cable-flag="over-length"]').count()) === 0);
