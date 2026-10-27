@@ -2,8 +2,8 @@
 // the condition's finish tag: Task 0 found no part identity in an OpenTakeoff
 // export (lib_id points at a browser-local library entry that is not
 // exported; cable_type is free text), so the tag is the join key. Rows are
-// proposed until Alexavier confirms them; portalSku is reserved for the
-// Portal push and stays null here.
+// proposed until Alexavier confirms them. portalSku is Portal's numeric
+// partId, read only by the Portal push (src/portal/).
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 import type { Issues } from "./issues.js";
@@ -38,9 +38,32 @@ export const catalogRowSchema = z.object({
 });
 export type CatalogRow = z.infer<typeof catalogRowSchema>;
 
+/**
+ * Portal push (additive): the Portal part bought for one OpenTakeoff cable
+ * type. Cable is pushed from OpenTakeoff's cable order lines (one per
+ * cable_type), never from the per-condition cable lines. orderBasis says what
+ * the Portal part's quantity counts: "box" = OpenTakeoff's box / reel count
+ * (packageFt must equal the package OpenTakeoff rounded to), "ft" = whole feet
+ * (OpenTakeoff's order LF rounded up). portalUnitOfMeasure is the Portal
+ * part's unitOfMeasure exactly as /products/basicinfo returns it; a live push
+ * aborts when they differ. See docs/portal-push.md.
+ */
+export const cablePartSchema = z.object({
+  cableType: z.string().min(1),
+  portalSku: z.string().nullable(),
+  orderBasis: z.enum(["box", "ft"]),
+  packageFt: z.number().positive().nullable().optional(),
+  portalUnitOfMeasure: z.string().nullable().optional(),
+  status: z.enum(["proposed", "confirmed"]),
+  note: z.string().optional(),
+});
+export type CablePart = z.infer<typeof cablePartSchema>;
+
 export const catalogMapSchema = z.object({
   version: z.literal(1),
   rows: z.array(catalogRowSchema),
+  /** Portal push: cable type -> Portal part. Optional and additive. */
+  cableParts: z.array(cablePartSchema).optional(),
 });
 export type CatalogMap = z.infer<typeof catalogMapSchema>;
 
@@ -50,6 +73,11 @@ export function parseCatalogMap(value: unknown): CatalogMap {
   for (const r of map.rows) {
     if (seen.has(r.conditionKey)) throw new Error(`catalog map lists ${r.conditionKey} twice`);
     seen.add(r.conditionKey);
+  }
+  const cables = new Set<string>();
+  for (const c of map.cableParts ?? []) {
+    if (cables.has(c.cableType)) throw new Error(`catalog map lists cable part ${c.cableType} twice`);
+    cables.add(c.cableType);
   }
   return map;
 }

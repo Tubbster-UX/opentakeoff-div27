@@ -3,7 +3,7 @@
 // schematic as rows (one per node and connection). The EasySchematic file is
 // rendered back from those rows, so the database, not a file, is the truth.
 import type { BomLine } from "../bom.js";
-import { catalogRowSchema, parseCatalogMap, type CatalogMap, type CatalogRow } from "../catalog.js";
+import { cablePartSchema, catalogRowSchema, parseCatalogMap, type CablePart, type CatalogMap, type CatalogRow } from "../catalog.js";
 import type { Issue } from "../issues.js";
 import { parseInput, type LoadedInput } from "../load.js";
 import type { MergeResult } from "../pipeline.js";
@@ -34,7 +34,23 @@ export async function seedCatalog(db: Queryable, map: CatalogMap, opts: { overwr
     );
     n += res.rows.length;
   }
+  for (const c of map.cableParts ?? []) await seedCablePart(db, c, opts);
   return n;
+}
+
+/** Portal push: one cable type -> Portal part row (same never-overwrite rule as catalog rows). */
+async function seedCablePart(db: Queryable, c: CablePart, opts: { overwrite?: boolean }): Promise<void> {
+  await db.query(
+    `insert into brink_portal_cable_parts (cable_type, portal_sku, order_basis, package_ft, portal_unit_of_measure, status, note)
+     values ($1, $2, $3, $4, $5, $6, $7)
+     on conflict (cable_type) do ${opts.overwrite ? `update set portal_sku = excluded.portal_sku, order_basis = excluded.order_basis, package_ft = excluded.package_ft,
+       portal_unit_of_measure = excluded.portal_unit_of_measure, status = excluded.status, note = excluded.note, updated_at = now()` : "nothing"}`,
+    [c.cableType, c.portalSku, c.orderBasis, c.packageFt ?? null, c.portalUnitOfMeasure ?? null, c.status, c.note ?? null],
+  );
+}
+
+export async function upsertCablePart(db: Queryable, part: CablePart): Promise<void> {
+  await seedCablePart(db, cablePartSchema.parse(part), { overwrite: true });
 }
 
 export async function upsertCatalogRow(db: Queryable, row: CatalogRow): Promise<void> {
@@ -49,12 +65,21 @@ interface CatalogDbRow {
 
 export async function loadCatalog(db: Queryable): Promise<CatalogMap> {
   const { rows } = await db.query<CatalogDbRow>("select * from brink_catalog_map order by condition_key");
+  const cables = (await db.query<{ cable_type: string; portal_sku: string | null; order_basis: CablePart["orderBasis"]; package_ft: number | string | null; portal_unit_of_measure: string | null; status: CablePart["status"]; note: string | null }>(
+    "select * from brink_portal_cable_parts order by cable_type",
+  )).rows;
   return parseCatalogMap({
     version: 1,
     rows: rows.map((r) => ({
       conditionKey: r.condition_key, kind: r.kind, esDeviceType: r.es_device_type, esTemplateRef: r.es_template_ref, label: r.label,
       port: r.port, cableType: r.cable_type, portalSku: r.portal_sku, status: r.status, ...(r.note ? { note: r.note } : {}),
     })),
+    ...(cables.length ? {
+      cableParts: cables.map((c) => ({
+        cableType: c.cable_type, portalSku: c.portal_sku, orderBasis: c.order_basis, packageFt: c.package_ft == null ? null : Number(c.package_ft),
+        portalUnitOfMeasure: c.portal_unit_of_measure, status: c.status, ...(c.note ? { note: c.note } : {}),
+      })),
+    } : {}),
   });
 }
 
