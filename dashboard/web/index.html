@@ -4,18 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
-    <title>Brink Dashboard</title>
-    <link rel="stylesheet" href="./style.css" />
+    <title>Brink</title>
   </head>
   <body>
-    <header class="bar">
-      <a class="brand" href="/">Brink dashboard</a>
-      <span class="scope">internal · read-only</span>
-      <span id="live" class="live" data-state="offline" title="Live updates">
-        <span class="dot"></span><span id="live-text">Offline</span>
-      </span>
-    </header>
-    <main id="app" aria-live="polite"></main>
-    <script type="module" src="./main.ts"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

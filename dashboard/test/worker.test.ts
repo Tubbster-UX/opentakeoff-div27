@@ -13,7 +13,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import WebSocket from "ws";
-import type { ServerMessage, Snapshot } from "../src/shared/protocol.js";
+import type { ProjectList, ServerMessage, Snapshot } from "../src/shared/protocol.js";
+import { summarize } from "../src/shared/state.js";
 import { startMockRealtime, type MockRealtime } from "./mock-realtime.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -40,8 +41,9 @@ async function freePort(): Promise<number> {
 class Client {
   readonly messages: ServerMessage[] = [];
   readonly ws: WebSocket;
+  /** A project id, or "list" for the project-list socket. */
   constructor(projectId: string) {
-    this.ws = new WebSocket(`${base.replace("http", "ws")}/api/projects/${projectId}/live`);
+    this.ws = new WebSocket(`${base.replace("http", "ws")}${projectId === "list" ? "/api/live" : `/api/projects/${projectId}/live`}`);
     this.ws.on("message", (d) => this.messages.push(JSON.parse(String(d))));
   }
   open(): Promise<void> {
@@ -109,14 +111,22 @@ afterAll(async () => {
 
 describe("worker", () => {
   it("is read-only and validates ids", async () => {
-    expect((await fetch(`${base}/api/projects`, { method: "POST" })).status).toBe(405);
+    const post = await fetch(`${base}/api/projects`, { method: "POST" });
+    expect(post.status).toBe(405);
+    expect(post.headers.get("allow")).toBe("GET");
+    expect((await fetch(`${base}/api/projects/${P}`, { method: "DELETE" })).status).toBe(405);
     expect((await fetch(`${base}/api/projects/not-a-uuid`)).status).toBe(400);
+    expect((await fetch(`${base}/api/nothing-here`)).status).toBe(404);
     expect(await (await fetch(`${base}/api/health`)).json()).toEqual({ ok: true, realtime: true });
   });
 
-  it("never hands the service key to the browser", async () => {
-    const html = await (await fetch(`${base}/p/${P}`)).text();
-    expect(html).not.toContain("test-service-key");
+  it("serves the app shell for client-side routes and never hands the service key to the browser", async () => {
+    for (const path of ["/", `/projects/${P}`, `/projects/${P}/schematic`, `/p/${P}`]) {
+      const res = await fetch(`${base}${path}`);
+      expect(res.status, path).toBe(200);
+      expect(res.headers.get("content-type"), path).toContain("text/html");
+      expect(await res.text(), path).not.toContain("test-service-key");
+    }
   });
 });
 
@@ -165,6 +175,31 @@ describe("relay fan-out (mock Supabase Realtime)", () => {
     for (const c of [a, b, other]) c.ws.close();
   }, 30_000);
 
+  it("tells the project-list socket which tables changed, coalesced, and sends it no rows", async () => {
+    const list = new Client("list");
+    const page = new Client(P);
+    await Promise.all([list.open(), page.open()]);
+    page.watch(I1);
+    await list.waitFor((m) => m.type === "status" && m.upstream === "live");
+    await mock.waitJoined(1);
+
+    for (let i = 0; i < 20; i++) mock.push("brink_bom_lines", "INSERT", { import_id: I1, line_no: 100 + i, qty: 1 });
+    mock.push("brink_projects", "UPDATE", { id: OTHER, name: "Other", current_import_id: I2 });
+    const touch = await list.waitFor((m) => m.type === "touch");
+    await new Promise((r) => setTimeout(r, 600));
+    const touches = list.messages.filter((m) => m.type === "touch");
+    // 21 changes inside one coalescing window: one or two touches, never 21.
+    expect(touches.length).toBeLessThanOrEqual(2);
+    expect(new Set(touches.flatMap((m) => (m.type === "touch" ? m.tables : [])))).toEqual(new Set(["brink_bom_lines", "brink_projects"]));
+    expect(touch.type === "touch" && touch.tables).toContain("brink_bom_lines");
+    expect(list.changes()).toHaveLength(0);
+    // The project page still gets its rows.
+    await page.waitFor((m) => m.type === "change" && m.change.table === "brink_bom_lines" && m.change.record?.line_no === 119);
+
+    list.ws.close();
+    page.ws.close();
+  }, 30_000);
+
   it("closes the upstream when the last browser leaves", async () => {
     const end = Date.now() + 10_000;
     while (mock.joined() > 0 && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
@@ -173,10 +208,12 @@ describe("relay fan-out (mock Supabase Realtime)", () => {
 });
 
 describe.skipIf(!DB_URL)("read API over Hyperdrive (DASHBOARD_TEST_DATABASE_URL)", () => {
-  it("lists projects and reads a consistent snapshot", async () => {
-    const projects = (await (await fetch(`${base}/api/projects`)).json()) as { id: string; current_import_id: string }[];
-    expect(projects.length).toBeGreaterThan(0);
-    const p = projects[0]!;
+  it("lists projects with totals and reads a consistent snapshot", async () => {
+    const list = (await (await fetch(`${base}/api/projects`)).json()) as ProjectList;
+    expect(list.projects.length).toBeGreaterThan(0);
+    // CI's database has only brink-merge's init migration: no Portal push table, and that is not an error.
+    expect(typeof list.features.portalPushes).toBe("boolean");
+    const p = list.projects.find((x) => x.name === "Brink Div 27 sample (invented)") ?? list.projects[0]!;
     const snap = (await (await fetch(`${base}/api/projects/${p.id}`)).json()) as Snapshot;
     expect(snap.import?.id).toBe(p.current_import_id);
     expect(snap.bom.length).toBeGreaterThan(0);
@@ -184,5 +221,14 @@ describe.skipIf(!DB_URL)("read API over Hyperdrive (DASHBOARD_TEST_DATABASE_URL)
     for (const rows of [snap.bom, snap.issues, snap.nodes, snap.connections]) for (const r of rows) expect(r.import_id).toBe(p.current_import_id);
     expect(JSON.stringify(snap)).not.toMatch(/"(takeoff|report|node|edge|line)":/);
     expect((await fetch(`${base}/api/projects/${OTHER}`)).status).toBe(404);
+
+    // The list's SQL totals agree with the page's own totals over the snapshot rows.
+    const sum = summarize(snap);
+    expect({ devices: p.devices, trs: p.trs, cables: p.cables, netLf: p.net_lf, orderLf: p.order_lf }).toEqual(sum.bom);
+    expect({ errors: p.errors, warnings: p.warnings, bomLines: p.bom_lines }).toEqual({ errors: sum.errors, warnings: sum.warnings, bomLines: sum.bomLines });
+    if (p.name === "Brink Div 27 sample (invented)") {
+      // What brink-merge's CLI prints for this fixture (brink-merge/README.md).
+      expect(sum.bom).toMatchObject({ devices: 16, cables: 23, netLf: 1795.13, orderLf: 2007.79 });
+    }
   });
 });

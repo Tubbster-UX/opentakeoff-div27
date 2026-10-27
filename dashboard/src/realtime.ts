@@ -2,7 +2,7 @@
 // postgres_changes on every table the dashboard reflects. It runs inside the
 // Durable Object with the service-role key, which never leaves the Worker.
 import { RealtimeClient, type RealtimeChannel } from "@supabase/realtime-js";
-import { fromRealtimePayload, TABLES, type RowChange, type UpstreamStatus } from "./shared/protocol.js";
+import { CORE_TABLES, fromRealtimePayload, type RowChange, type TableName, type UpstreamStatus } from "./shared/protocol.js";
 
 export interface UpstreamHandlers {
   onChange(change: RowChange): void;
@@ -22,7 +22,14 @@ export function realtimeEndpoint(supabaseUrl: string): string {
   return u.toString();
 }
 
-export function connectSupabaseRealtime(opts: { supabaseUrl: string; serviceKey: string; channel?: string }, h: UpstreamHandlers): Upstream {
+/**
+ * `tables` must all exist and be in the supabase_realtime publication: Realtime rejects the whole
+ * channel join over one bad binding, so optional tables are added only after the relay has checked.
+ */
+export function connectSupabaseRealtime(
+  opts: { supabaseUrl: string; serviceKey: string; channel?: string; tables?: readonly TableName[] },
+  h: UpstreamHandlers,
+): Upstream {
   const client = new RealtimeClient(realtimeEndpoint(opts.supabaseUrl), {
     params: { apikey: opts.serviceKey },
     heartbeatIntervalMs: 25_000,
@@ -32,7 +39,7 @@ export function connectSupabaseRealtime(opts: { supabaseUrl: string; serviceKey:
   const channel: RealtimeChannel = client.channel(opts.channel ?? "brink-dashboard", {
     config: { postgres_changes_options: { wait: true } },
   });
-  for (const table of TABLES) {
+  for (const table of opts.tables ?? CORE_TABLES) {
     channel.on("postgres_changes", { event: "*", schema: "public", table }, (payload) => {
       const change = fromRealtimePayload(payload as Parameters<typeof fromRealtimePayload>[0]);
       if (change) h.onChange(change);

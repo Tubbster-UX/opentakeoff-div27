@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fromRealtimePayload, projectRow, type RowChange, type Snapshot } from "../src/shared/protocol.js";
+import { fromRealtimePayload, projectRow, selectList, type RowChange, type Snapshot } from "../src/shared/protocol.js";
 import { route } from "../src/shared/routing.js";
 import { applyChange, summarize } from "../src/shared/state.js";
 
@@ -70,6 +70,28 @@ describe("applyChange", () => {
   it("summarizes from rows", () => {
     expect(summarize(snap())).toMatchObject({ devices: 1, rooms: 1, connections: 1, cableLf: 40.25, warnings: 1, bomLines: 2 });
   });
+
+  it("totals the BOM the way brink-merge does", () => {
+    const s = snap();
+    s.bom = [
+      { import_id: I1, line_no: 1, kind: "device", qty: 3 },
+      { import_id: I1, line_no: 2, kind: "cable", qty: 120.5, cables: 3, pulls: 3, net_lf: 120.5, order_lf: 132.55 },
+      { import_id: I1, line_no: 3, kind: "tr", qty: 1 },
+      { import_id: I1, line_no: 4, kind: "cable", qty: 10, cables: 1, net_lf: 10.004, order_lf: 11 },
+      { import_id: I1, line_no: 5, kind: "cable_order", qty: 1, order_lf: 999 },
+      { import_id: I1, line_no: 6, kind: "issue", qty: 0 },
+    ];
+    expect(summarize(s).bom).toEqual({ devices: 3, trs: 1, cables: 4, netLf: 130.5, orderLf: 143.55 });
+  });
+});
+
+describe("selectList / jsonb extras", () => {
+  it("selects the slim jsonb extras and unpacks them, never the blob", () => {
+    expect(selectList("brink_bom_lines", "b")).toContain("jsonb_build_object('cables', b.line->'cables', 'pulls', b.line->'pulls') as line");
+    expect(selectList("brink_issues")).toBe("import_id, seq, severity, code, message, condition_key, refs");
+    const r = projectRow("brink_bom_lines", { import_id: I1, line_no: 2, kind: "cable", line: { cables: 3, pulls: "2", huge: "x".repeat(10) } })!;
+    expect(r).toEqual({ import_id: I1, line_no: 2, kind: "cable", cables: 3, pulls: 2 });
+  });
 });
 
 describe("route (relay fan-out)", () => {
@@ -90,5 +112,9 @@ describe("route (relay fan-out)", () => {
   it("routes import rows by project", () => {
     expect(route(ch({ table: "brink_imports", type: "INSERT", record: { id: I2, project_id: P } }), client).send).toBe(true);
     expect(route(ch({ table: "brink_imports", type: "INSERT", record: { id: I2, project_id: "other" } }), client).send).toBe(false);
+  });
+
+  it("keeps Portal push rows off project sockets", () => {
+    expect(route(ch({ table: "brink_portal_pushes", type: "INSERT", record: { id: "x", project_id: P, import_id: I1 } }), client).send).toBe(false);
   });
 });
