@@ -122,6 +122,8 @@ export default function RunsPanel({ takeoff, conditions, shapes, units = "imperi
   const held = takeoff?.resolved?.held || [];
   const holds = takeoff?.resolved?.holds || [];
   const dupes = takeoff?.duplicates || null;   // lib/cableDupes.js — its warnings are in `warnings` too
+  // trunk / branch split per run, once a route condition is tagged
+  const split = !!takeoff?.pathway;
   const pendingIds = [...runs.filter((r) => r.pending).map((r) => r.id), ...holds.filter((h) => h.pending).map((h) => h.id)];
   // a checked device that got linked or deleted since drops out of the pick
   const unlinkedIds = new Set(unlinked.devices.map((d) => d.shape_id));
@@ -168,7 +170,7 @@ export default function RunsPanel({ takeoff, conditions, shapes, units = "imperi
       <div data-cable-run={r.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0", fontSize: 11 }}>
         <span title={r.status === "linked" ? "Linked — counts in every total" : r.reason} style={{ width: 8, height: 8, flexShrink: 0, background: STATUS_COLOR[r.status] }} />
         <span style={{ ...mono, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-          title={`${r.id}\nroute ${L(r.route_lf)} over ${r.route_shape_ids.length} segment(s)${r.reason ? `\n${r.status}: ${r.reason}` : ""}${r.notes ? `\n${r.notes.join("\n")}` : ""}`}>
+          title={`${r.id}\nroute ${L(r.route_lf)} over ${r.route_shape_ids.length} segment(s)${split ? `\nbranch ${L(r.branch_lf)} · trunk ${L(r.trunk_lf)}${r.other_lf ? ` · unspecified ${L(r.other_lf)}` : ""}` : ""}${r.reason ? `\n${r.status}: ${r.reason}` : ""}${r.notes ? `\n${r.notes.join("\n")}` : ""}`}>
           → {r.tr_name || r.tr_id || "?"} · {r.status === "linked" ? `${L(r.per_cable_lf)} × ${r.cables}` : r.status}
         </span>
         {r.over_length && <span data-cable-flag="over-length" title={`Per cable ${L(r.per_cable_lf)} exceeds ${TIA_MAX_LINK_FT} ft — the TIA-568 copper permanent-link limit (90 m). It still counts: check the route; if it stands, it needs a closer TR or a length test and owner notice.`}

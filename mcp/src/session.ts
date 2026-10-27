@@ -72,7 +72,7 @@ import { hasRollSetup, mintRollSetup, computeRollTakeoff, rollReportRows, seamLf
 // library, shared with the canvas: setup defaults and validation, run
 // resolution, the summary rollups and the refusal texts all live there.
 import { hasDuplicateFindings } from "../../web/src/lib/cableDupes.js";
-import { hasCableSetup, mintCableSetup, isDeviceType, normalizeDeviceType, DEVICE_TYPES, DEVICE_TYPE_ALIASES, mintCableRun, mintCableHold, holdRefusal, isCableHold, computeCableTakeoff, cableReportBlock, linkRunRefusal, cableQtyByShape, isCableMaterialBasis, cableSetupProblems as cableSetupProblemsJs } from "../../web/src/lib/cable.js";
+import { hasCableSetup, mintCableSetup, isDeviceType, normalizeDeviceType, DEVICE_TYPES, DEVICE_TYPE_ALIASES, mintCableRun, mintCableHold, holdRefusal, isCableHold, computeCableTakeoff, cableReportBlock, linkRunRefusal, cableQtyByShape, isCableMaterialBasis, routeSplit, cableSetupProblems as cableSetupProblemsJs } from "../../web/src/lib/cable.js";
 import { gridPxPerFoot, drawGrid, drawShapes, drawMarks, type Ctx2D, type ToCanvas, type ViewMarks } from "./view.ts";
 
 // Conditions and snap behavior minted here are identical to the browser's
@@ -103,7 +103,8 @@ export interface CableTakeoff {
       id: string; status: "linked" | "withheld" | "broken"; condition_id: string | null; finish_tag: string; device_type: string; cable_type: string;
       device_shape_ids: string[]; route_shape_ids: string[]; tr_id: string; tr_name: string; sheet_ids: string[];
       device_sheet_ids: string[]; tr_sheet_id: string; over_length?: true; scale_unconfirmed?: true; vertical_override?: number; cables_override?: number;
-      route_lf: number; vertical_ft: number | null; loop_device_ft: number | null; loop_tr_ft: number | null;
+      route_lf: number; trunk_lf: number; branch_lf: number; other_lf: number;
+      vertical_ft: number | null; loop_device_ft: number | null; loop_tr_ft: number | null;
       per_cable_lf: number | null; cables: number | null; location_lf: number | null;
       review: "pending" | "accepted" | "human"; pending: boolean; reason?: string; reasons?: string[]; notes?: string[]; leg_warning?: true;
     }[];
@@ -120,7 +121,11 @@ export interface CableTakeoff {
     same_sheet: Record<string, unknown>[]; cross_sheet: Record<string, unknown>[]; reference: Record<string, unknown>[];
     not_compared: Record<string, unknown>[]; warnings: string[]; count: number; thresholds: Record<string, number>;
   } | null;
+  /** Trunk/branch pathway rollup — null until a route condition is tagged. */
+  pathway: { rows: (Record<string, unknown> & { condition_id: string })[]; by_kind: Record<string, unknown>[]; totals: Record<string, number> } | null;
 }
+/** A run's route LF by kind, rounded (web/src/lib/cable.js routeSplit). */
+const runSplit = routeSplit as unknown as (r: unknown) => { branch_lf: number; trunk_lf: number; other_lf: number };
 const cableSetupProblemsOf = (c: Condition): string[] => cableSetupProblemsJs(c.cable_setup) as string[];
 // the JS module's report block, typed at the boundary (sheetLabel is optional there)
 const cableBlock = cableReportBlock as unknown as (t: CableTakeoff | null, sheetLabel?: (k: string) => string) => Record<string, unknown> | null;
@@ -203,12 +208,15 @@ export interface ConditionEditFields {
 }
 
 /** The knobs edit_condition writes — one type, three call sites. */
-export type ConditionKnobPatch = { waste_pct?: number; multiplier?: number; height_ft?: number; rise_ft?: number; drop_ft?: number; roll_setup?: Record<string, unknown> | null; cable_setup?: Record<string, unknown> | null; role?: ConditionRole | null };
+export type ConditionKnobPatch = { waste_pct?: number; multiplier?: number; height_ft?: number; rise_ft?: number; drop_ft?: number; roll_setup?: Record<string, unknown> | null; cable_setup?: Record<string, unknown> | null; role?: ConditionRole | null; route_kind?: RouteKind | null };
 
 /** "tr": a count condition's markers are telecom rooms (link_run's tr_id
  * targets). "route": a linear condition's shapes are cable routes — every
  * one no linked run uses is reported unlinked (web/src/lib/cable.js). */
 export type ConditionRole = "tr" | "route";
+/** On a role "route" condition: "trunk" = shared pathway (traced once, many
+ * runs ride it), "branch" = one device out to the trunk. Absent = unspecified. */
+export type RouteKind = "trunk" | "branch";
 
 /** A Division 27 cable setup on a count condition (web/src/lib/cable.js
  * mintCableSetup) — the opt-in that makes a condition a device condition. */
@@ -284,6 +292,8 @@ export interface Condition {
    * IDF) — the run origins link_run homes to; "route" flags a linear
    * condition whose shapes are cable routes (unlinked ones are listed). */
   role?: ConditionRole;
+  /** Trunk or branch on a role "route" condition (absent = unspecified). */
+  route_kind?: RouteKind;
   materials: MaterialRow[];
 }
 
@@ -724,7 +734,7 @@ export type JournalPayload =
   | { op: "delete"; tool: string; removed: { shape: Shape; index: number }[] }
   | { op: "materials"; tool: string; condition_id: string; before: MaterialRow[]; dropped_before?: string[];
       family?: { condition_id: string; before: MaterialRow[]; dropped_before?: string[] }[] }
-  | { op: "condition"; tool: string; condition_id: string; before: { waste_pct: number; multiplier: number; height_ft?: number; rise_ft?: number; drop_ft?: number; roll_setup?: Record<string, unknown>; cable_setup?: CableSetup; role?: ConditionRole } }
+  | { op: "condition"; tool: string; condition_id: string; before: { waste_pct: number; multiplier: number; height_ft?: number; rise_ft?: number; drop_ft?: number; roll_setup?: Record<string, unknown>; cable_setup?: CableSetup; role?: ConditionRole; route_kind?: RouteKind } }
   // cable runs (Division 27): link mints one record, unlink removes one —
   // each its own step, the inverse exact (the approvals-family precedent)
   | { op: "run_link"; tool: string; id: string }
@@ -3910,7 +3920,7 @@ export class Session {
     // condition or a run exists — a flooring session's reply is unchanged
     return {
       conditions: lean, totals: grandTotals(rows),
-      ...(cableT ? { cable: { rows: cableT.summary.rows, by_tr: cableT.summary.by_tr, by_cable_type: cableT.summary.by_cable_type, totals: cableT.summary.totals, unlinked_devices: cableT.resolved.unlinked.devices.length, unlinked_routes: cableT.resolved.unlinked.routes.length, held_devices: cableT.resolved.held.length, warnings: cableT.summary.warnings, ...(hasDuplicateFindings(cableT.duplicates) ? { duplicates: cableT.duplicates } : {}) } } : {}),
+      ...(cableT ? { cable: { rows: cableT.summary.rows, by_tr: cableT.summary.by_tr, by_cable_type: cableT.summary.by_cable_type, totals: cableT.summary.totals, unlinked_devices: cableT.resolved.unlinked.devices.length, unlinked_routes: cableT.resolved.unlinked.routes.length, held_devices: cableT.resolved.held.length, warnings: cableT.summary.warnings, ...(hasDuplicateFindings(cableT.duplicates) ? { duplicates: cableT.duplicates } : {}), ...(cableT.pathway ? { pathway: cableT.pathway } : {}) } } : {}),
       shared_floor_sf: scope.shared_floor_sf,
       ...(scope.unmeasured.length ? { shared_floor_unmeasured: scope.unmeasured } : {}),
       ...(unconfirmed.length ? { scale_unconfirmed: unconfirmed } : {}),
@@ -4337,17 +4347,33 @@ export class Session {
       if (opts.role === null) delete c.role;
       else if (opts.role === "tr" || opts.role === "route") c.role = opts.role;
       else throw new UserError(`role must be "tr", "route" or null.`);
+      // a kind means something only on a route condition: leaving the role
+      // takes it along, so the document never carries a dangling one
+      if (c.role !== "route") delete c.route_kind;
+    }
+    if (opts.route_kind !== undefined) {
+      if (opts.route_kind === null) delete c.route_kind;
+      else c.route_kind = opts.route_kind;
     }
   }
 
   editCondition(tag: string, opts: ConditionKnobPatch) {
-    if (opts.waste_pct === undefined && opts.multiplier === undefined && opts.height_ft === undefined && opts.rise_ft === undefined && opts.drop_ft === undefined && opts.roll_setup === undefined && opts.cable_setup === undefined && opts.role === undefined) {
-      throw new UserError("Nothing to change — pass at least one of waste_pct, multiplier, height_ft, rise_ft, drop_ft, roll_setup, cable_setup, role.");
+    if (opts.waste_pct === undefined && opts.multiplier === undefined && opts.height_ft === undefined && opts.rise_ft === undefined && opts.drop_ft === undefined && opts.roll_setup === undefined && opts.cable_setup === undefined && opts.role === undefined && opts.route_kind === undefined) {
+      throw new UserError("Nothing to change — pass at least one of waste_pct, multiplier, height_ft, rise_ft, drop_ft, roll_setup, cable_setup, role, route_kind.");
     }
     const c = this.conditions.find((x) => x.finish_tag === tag);
     if (!c) {
       const known = this.conditions.map((x) => x.finish_tag);
       throw new UserError(`No condition ${JSON.stringify(tag)}.${known.length ? ` Known tags: ${known.join(", ")}.` : " Nothing has minted a condition yet — commit a measurement or add materials first."}`);
+    }
+    // route_kind tags a CABLE ROUTE condition — refused (before anything is
+    // written) on a condition that will not be role "route" after this call
+    if (opts.route_kind !== undefined && opts.route_kind !== null) {
+      if (opts.route_kind !== "trunk" && opts.route_kind !== "branch") throw new UserError(`route_kind must be "trunk", "branch" or null.`);
+      const roleAfter = opts.role !== undefined ? opts.role : c.role;
+      if (roleAfter !== "route") {
+        throw new UserError(`route_kind tags a cable-route condition, and ${JSON.stringify(tag)} is ${roleAfter ? `flagged role ${JSON.stringify(roleAfter)}` : "not flagged role \"route\""}. Flag it in the same call: edit_condition { condition: ${JSON.stringify(tag)}, role: "route", route_kind: ${JSON.stringify(opts.route_kind)} } — its measure_line shapes become route segments.`);
+      }
     }
     // a device-type ALIAS ("access_control") reads as its canonical type
     // before anything compares types; the reply says which it was read as
@@ -4364,6 +4390,7 @@ export class Session {
       roll_setup: c.roll_setup ? structuredClone(c.roll_setup) : undefined,
       cable_setup: c.cable_setup ? structuredClone(c.cable_setup) : undefined,
       role: c.role,
+      route_kind: c.route_kind,
     };
     // cable (Division 27): a fresh opt-in or a device-type change takes the
     // type's STARTING values for whatever the call did not state — the reply
@@ -4405,6 +4432,10 @@ export class Session {
         ...(Object.keys(minted).length ? { minted, note: "starting values, not verified against spec — these came from the device type, not the project spec; confirm vertical_ft, loop_device_ft and loop_tr_ft (edit_condition patches them)" } : {}),
       };
     }
+    // trunk / branch: a tagged route condition echoes its Pathway row (each
+    // segment once) so the agent sees the pathway LF its tag just exposed
+    let pathway: Record<string, unknown> | undefined;
+    if (c.route_kind && c.role === "route") pathway = this.cableTakeoff()?.pathway?.rows.find((r) => r.condition_id === c.id);
     return {
       condition: tag, condition_id: c.id, waste_pct: c.waste_pct, multiplier: c.multiplier,
       ...(c.height_ft !== undefined ? { height_ft: c.height_ft } : {}),
@@ -4414,7 +4445,9 @@ export class Session {
       ...(roll ? { roll } : {}),
       ...(c.cable_setup ? { cable_setup: c.cable_setup } : {}),
       ...(c.role ? { role: c.role } : {}),
+      ...(c.route_kind ? { route_kind: c.route_kind } : {}),
       ...(cable ? { cable } : {}),
+      ...(pathway ? { pathway } : {}),
     };
   }
 
@@ -4476,7 +4509,8 @@ export class Session {
     return {
       run_id: run.id, status: r.status, condition: r.finish_tag, device_type: r.device_type, cable_type: r.cable_type,
       tr: r.tr_name || r.tr_id, sheets: r.sheet_ids, device_sheets: r.device_sheet_ids, tr_sheet: r.tr_sheet_id,
-      route_lf: round2(r.route_lf), vertical_ft: r.vertical_ft, loop_device_ft: r.loop_device_ft, loop_tr_ft: r.loop_tr_ft,
+      route_lf: round2(r.route_lf), ...(t.pathway ? runSplit(r) : {}),
+      vertical_ft: r.vertical_ft, loop_device_ft: r.loop_device_ft, loop_tr_ft: r.loop_tr_ft,
       per_cable_lf: round2(r.per_cable_lf as number), cables: r.cables, location_lf: round2(r.location_lf as number),
       ...(r.vertical_override != null ? { vertical_override: r.vertical_override } : {}),
       ...(r.cables_override != null ? { cables_override: r.cables_override } : {}),
@@ -4500,6 +4534,8 @@ export class Session {
         tr: r.tr_name || r.tr_id, tr_id: r.tr_id, device_shape_ids: r.device_shape_ids, route_shape_ids: r.route_shape_ids, sheets: r.sheet_ids,
         device_sheets: r.device_sheet_ids, tr_sheet: r.tr_sheet_id,
         route_lf: round2(r.route_lf),
+        // trunk / branch: the split rides once a route condition is tagged
+        ...(t.pathway ? runSplit(r) : {}),
         ...(r.over_length ? { over_length: true as const } : {}),
         ...(r.scale_unconfirmed ? { scale_unconfirmed: true as const } : {}),
         ...(r.status === "linked" ? { vertical_ft: r.vertical_ft, loop_device_ft: r.loop_device_ft, loop_tr_ft: r.loop_tr_ft, per_cable_lf: round2(r.per_cable_lf as number), cables: r.cables, location_lf: round2(r.location_lf as number) } : {}),
@@ -4515,6 +4551,7 @@ export class Session {
       warnings: block.warnings,
       duplicates: t.duplicates,
       summary: { rows: t.summary.rows, by_tr: t.summary.by_tr, by_cable_type: t.summary.by_cable_type, totals: t.summary.totals },
+      ...(t.pathway ? { pathway: t.pathway } : {}),
       count: t.resolved.runs.length,
     };
   }
@@ -4723,6 +4760,8 @@ export class Session {
           else c.cable_setup = e.before.cable_setup;
           if (e.before.role === undefined) delete c.role;
           else c.role = e.before.role;
+          if (e.before.route_kind === undefined) delete c.route_kind;
+          else c.route_kind = e.before.route_kind;
           this.reflowLinears(c);
         }
         undone.push({ seq: e.seq, op: e.op, tool: e.tool, shapes: 0 });

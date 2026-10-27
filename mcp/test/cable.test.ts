@@ -553,3 +553,102 @@ test("edit_materials basis cables / pulls on DATA-1: the reply's computed lines 
   await ok(client, "undo_last", { n: 3 });
   assert.equal((await ok(client, "export_report", {})).materials.some((x: any) => x.name === "Stray jack"), false);
 });
+
+// ── trunk and branch routes (docs/design/CABLE_SETUP_PLAN.md §14.2) ─────────
+/** A shared 100 ft trunk (3600 px) on TRAY and two 40 ft branches (1440 px)
+ *  on BRANCH, two wall outlets, the MDF. */
+async function trunkBranch() {
+  const client = await pair();
+  await ok(client, "load_plan", { path: PLAN });
+  await ok(client, "set_scale", { sheet: KEY, upp: UPP });
+  const tr = await ok(client, "place_count", { sheet: KEY, points: [[200, 200]], condition: "TR" });
+  await ok(client, "edit_condition", { condition: "TR", role: "tr" });
+  await ok(client, "edit_shape", { shape_id: tr.shape_ids[0], label: "MDF" });
+  const d1 = await ok(client, "place_count", { sheet: KEY, points: [[1000, 1000]], condition: "DATA-1" });
+  const d2 = await ok(client, "place_count", { sheet: KEY, points: [[1400, 1000]], condition: "DATA-1" });
+  await ok(client, "edit_condition", { condition: "DATA-1", waste_pct: 12, cable_setup: { device_type: "wall_outlet", cables_per_location: 2, cable_type: "CAT6A" } });
+  const t1 = await ok(client, "measure_line", { sheet: KEY, pts: [[200, 300], [3800, 300]], condition: "TRAY" });
+  const b1 = await ok(client, "measure_line", { sheet: KEY, pts: [[200, 500], [1640, 500]], condition: "BRANCH" });
+  const b2 = await ok(client, "measure_line", { sheet: KEY, pts: [[200, 600], [1640, 600]], condition: "BRANCH" });
+  assert.deepEqual([t1.length_lf, b1.length_lf, b2.length_lf], [100, 40, 40]);
+  return { client, tr: tr.shape_ids[0] as string, d1: d1.shape_ids[0] as string, d2: d2.shape_ids[0] as string, t1: t1.shape_id as string, b1: b1.shape_id as string, b2: b2.shape_id as string };
+}
+
+test("edit_condition route_kind: refused off a route condition with the fix named, set with role in one call, cleared by null or by leaving the role, undo restores", async () => {
+  const { client } = await trunkBranch();
+  await refused(client, "edit_condition", { condition: "BRANCH", route_kind: "branch" }, /route_kind tags a cable-route condition, and "BRANCH" is not flagged role "route"\. Flag it in the same call: edit_condition \{ condition: "BRANCH", role: "route", route_kind: "branch" \}/);
+  await refused(client, "edit_condition", { condition: "TR", route_kind: "trunk" }, /"TR" is flagged role "tr"/);
+  await refused(client, "edit_condition", { condition: "TRAY", role: "tr", route_kind: "trunk" }, /flagged role "tr"/);
+  const bad: any = await client.callTool({ name: "edit_condition", arguments: { condition: "TRAY", role: "route", route_kind: "riser" } });
+  assert.ok(bad.isError && /MCP error -32602/.test(bad.content[0].text), "an unknown kind is a schema violation");
+  let pay = await ok(client, "export_takeoff", {});
+  assert.equal(pay.conditions.some((c: any) => "route_kind" in c || c.role === "route"), false, "a refusal writes nothing");
+  const trunk = await ok(client, "edit_condition", { condition: "TRAY", role: "route", route_kind: "trunk" });
+  assert.deepEqual({ role: trunk.role, kind: trunk.route_kind }, { role: "route", kind: "trunk" });
+  assert.deepEqual(trunk.pathway, { condition_id: trunk.condition_id, finish_tag: "TRAY", route_kind: "trunk", segments: 1, pathway_lf: 100, used_lf: 0, unused_lf: 100, linked_runs: 0, pathway_lf_total: 100, multiplier: 1 });
+  await ok(client, "edit_condition", { condition: "BRANCH", role: "route" });
+  const br = await ok(client, "edit_condition", { condition: "BRANCH", route_kind: "branch" });
+  assert.equal(br.route_kind, "branch");
+  // null clears; undo puts it back
+  const cleared = await ok(client, "edit_condition", { condition: "BRANCH", route_kind: null });
+  assert.deepEqual({ role: cleared.role, kind: cleared.route_kind }, { role: "route", kind: undefined });
+  await ok(client, "undo_last", { n: 1 });
+  pay = await ok(client, "export_takeoff", {});
+  assert.equal(pay.conditions.find((c: any) => c.finish_tag === "BRANCH").route_kind, "branch");
+  // leaving the role takes the kind along; undo restores both
+  const off = await ok(client, "edit_condition", { condition: "TRAY", role: null });
+  assert.deepEqual({ role: off.role, kind: off.route_kind }, { role: undefined, kind: undefined });
+  assert.equal("route_kind" in (await ok(client, "export_takeoff", {})).conditions.find((c: any) => c.finish_tag === "TRAY"), false);
+  await ok(client, "undo_last", { n: 1 });
+  const tray = (await ok(client, "export_takeoff", {})).conditions.find((c: any) => c.finish_tag === "TRAY");
+  assert.deepEqual({ role: tray.role, kind: tray.route_kind }, { role: "route", kind: "trunk" });
+});
+
+test("trunk and branch over the wire: link_run [branch, trunk] splits route LF; list_runs carries the split and the pathway block (trunk once); summary, report and re-import agree", async () => {
+  const { client, tr, d1, d2, t1, b1, b2 } = await trunkBranch();
+  // untagged route conditions: no split, no pathway (the pre-route_kind output)
+  await ok(client, "edit_condition", { condition: "TRAY", role: "route" });
+  await ok(client, "edit_condition", { condition: "BRANCH", role: "route" });
+  const plain = await ok(client, "link_run", { device_shape_ids: [d1], route_shape_ids: [b1, t1], tr_id: tr });
+  assert.equal("branch_lf" in plain || "trunk_lf" in plain, false);
+  const plainList = await ok(client, "list_runs", {});
+  assert.equal("pathway" in plainList || "branch_lf" in plainList.runs[0], false);
+  assert.equal("pathway" in (await ok(client, "takeoff_summary", {})).cable, false);
+  assert.equal("pathway" in (await ok(client, "export_report", {})).cable, false);
+  await ok(client, "unlink_run", { run_id: plain.run_id });
+
+  await ok(client, "edit_condition", { condition: "TRAY", route_kind: "trunk" });
+  await ok(client, "edit_condition", { condition: "BRANCH", route_kind: "branch" });
+  const r1 = await ok(client, "link_run", { device_shape_ids: [d1], route_shape_ids: [b1, t1], tr_id: tr });
+  assert.deepEqual({ route: r1.route_lf, branch: r1.branch_lf, trunk: r1.trunk_lf, other: r1.other_lf, per: r1.per_cable_lf }, { route: 140, branch: 40, trunk: 100, other: 0, per: 183 });
+  await ok(client, "link_run", { device_shape_ids: [d2], route_shape_ids: [b2, t1], tr_id: tr });
+  const list = await ok(client, "list_runs", {});
+  assert.deepEqual(list.runs.map((r: any) => [r.route_lf, r.branch_lf, r.trunk_lf, r.other_lf]), [[140, 40, 100, 0], [140, 40, 100, 0]]);
+  assert.equal(list.summary.totals.route_lf, 280, "cable route LF counts the shared trunk on each run");
+  assert.deepEqual(list.pathway.rows.map((r: any) => [r.finish_tag, r.route_kind, r.segments, r.pathway_lf, r.used_lf, r.unused_lf, r.linked_runs, r.multiplier]),
+    [["TRAY", "trunk", 1, 100, 100, 0, 2, 1], ["BRANCH", "branch", 2, 80, 80, 0, 2, 1]], "the trunk is 100 ft of pathway, counted once");
+  assert.deepEqual(list.pathway.totals, { segments: 3, pathway_lf: 180, used_lf: 180, unused_lf: 0, linked_runs: 2, pathway_lf_total: 180 });
+  assert.deepEqual(list.warnings.filter((w: string) => !/scale no person has confirmed/.test(w)), [], "no new warning (every MCP scale lands unconfirmed)");
+  const sum = await ok(client, "takeoff_summary", {});
+  assert.deepEqual(sum.cable.pathway, list.pathway);
+  // J-hooks: a linear materials row on the branch condition, each segment once
+  await ok(client, "edit_materials", { condition: "BRANCH", add: [{ name: "J-hook", per: 5, basis: "linear", unit: "EA" }] });
+  await ok(client, "edit_condition", { condition: "BRANCH", multiplier: 2 });
+  const rep = await ok(client, "export_report", {});
+  const brRow = rep.conditions.find((c: any) => c.finish_tag === "BRANCH");
+  assert.deepEqual({ basis: brRow.materials[0].basis_qty, qty: brRow.materials[0].qty }, { basis: 160, qty: 32 }, "ceil(80 × 2 / 5)");
+  assert.equal(rep.cable.pathway.rows.find((r: any) => r.finish_tag === "BRANCH").pathway_lf_total, 160, "the pathway's ×N column is the same basis");
+  assert.deepEqual([rep.cable.runs[0].branch_lf, rep.cable.runs[0].trunk_lf], [40, 100]);
+  // export → import: route_kind and the split survive
+  const payload = await ok(client, "export_takeoff", {});
+  const dir = await mkdtemp(path.join(tmpdir(), "ot-cable-tb-"));
+  const file = path.join(dir, "trunk-branch.json");
+  await writeFile(file, JSON.stringify(payload));
+  const two = await pair();
+  await ok(two, "load_plan", { path: PLAN });
+  await ok(two, "import_takeoff", { path: file });
+  const back = await ok(two, "list_runs", {});
+  assert.deepEqual(back.runs.map((r: any) => [r.branch_lf, r.trunk_lf]), [[40, 100], [40, 100]]);
+  assert.equal(back.pathway.totals.pathway_lf, 180);
+  assert.deepEqual((await ok(two, "export_takeoff", {})).conditions.map((c: any) => c.route_kind).filter(Boolean), ["trunk", "branch"]);
+});

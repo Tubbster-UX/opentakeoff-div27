@@ -251,7 +251,15 @@ Fifty-two tools, in the order an agent tends to reach for them:
   cable → `per: 1`) or `basis: "pulls"` (a faceplate or mount per location → `per: 1`): the
   condition's linked cables and pulls, ×N applied, unlinked and held devices excluded. Use
   them instead of `basis: "count"` with `per` = 1 ÷ cables per location; the reply's `computed`
-  lines and `export_report`'s buy list carry the result
+  lines and `export_report`'s buy list carry the result. **Trunk and branch:** trace the
+  shared trunk once under a route condition tagged `edit_condition { route_kind: "trunk" }` and
+  each device's branch as its own segment under one tagged `"branch"`, then `link_run` with
+  `[branch, trunk…]` in order from the device. Each run then carries `branch_lf`, `trunk_lf` and
+  `other_lf` (untagged) beside `route_lf`, and `list_runs`, `takeoff_summary.cable` and
+  `export_report.cable` gain a `pathway` block, one row per route condition with each segment
+  counted once. J-hooks are an `edit_materials` row on the branch condition (basis `"linear"`,
+  `per` = spacing), whose basis is that condition's LF counted once. Never derive branch LF by
+  dividing a full-route LF
 - **Scope collision** (#366)—`takeoff_summary.shared_floor_sf` is the floor
   claimed by more than one shape across the takeoff (Σ areas − union, once per
   cell), the number that has to read zero before a total means anything;

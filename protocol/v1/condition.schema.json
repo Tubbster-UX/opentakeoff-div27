@@ -136,6 +136,13 @@
       ],
       "description": "\"tr\" flags a count condition whose markers are telecom rooms (the origins cable runs home to); \"route\" flags a linear condition whose shapes are cable routes (the ones no linked run uses are reported unlinked). Absent on every other condition."
     },
+    "route_kind": {
+      "enum": [
+        "trunk",
+        "branch"
+      ],
+      "description": "On a role \"route\" condition only: \"trunk\" = shared pathway many runs ride, traced once; \"branch\" = one device out to the trunk. Splits each run's route LF into branch, trunk and unspecified LF and drives the pathway rollup (each segment counted once). Absent = unspecified; ignored on any other condition."
+    },
     "tile_setup": {
       "type": [
         "object",

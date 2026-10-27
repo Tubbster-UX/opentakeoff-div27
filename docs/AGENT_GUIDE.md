@@ -272,6 +272,29 @@ identically in both modes.
 Hand back both paths, the totals, anything `withheld`, and the fact that the scale is
 agent-set and awaiting the estimator's confirmation.
 
+### Division 27 cable runs: trace the trunk once, each branch on its own
+
+A route traced as one polyline from the device back to the TR carries the shared tray footage,
+and its branch length cannot be recovered from it. Trace pathway the way it is built:
+
+1. `measure_line` the shared trunk (cable tray, corridor run) **once** under its own condition,
+   then tag it (the first `measure_line` mints the condition):
+   `edit_condition { condition: "TRAY", role: "route", route_kind: "trunk" }`.
+2. `measure_line` **each device's branch** as its own segment, from the device out to the
+   trunk, under a branch condition: `edit_condition { condition: "BRANCH", role: "route",
+   route_kind: "branch" }`.
+3. `link_run { device_shape_ids: [device], route_shape_ids: [branch, trunk…], tr_id }`, segments
+   in order from the device. Every run on that tray names the same trunk segment.
+4. `list_runs` gives each run's `branch_lf`, `trunk_lf` and `other_lf` (untagged segments) beside
+   `route_lf`, and a `pathway` block with each segment counted once.
+5. J-hooks: `edit_materials { condition: "BRANCH", add: [{ name: "J-hook", basis: "linear",
+   per: 5, unit: "EA" }] }`. The row divides the branch condition's own LF (each segment once,
+   ×N applied), so it is never a lump allowance and never multiplied by the runs.
+
+Never derive branch LF by dividing or subtracting a full-route LF: a branch length exists only
+as a traced branch segment. A run whose segments are all untagged is still valid, and so is a
+branch with no trunk segment; `route_kind` adds no warning.
+
 ## 8. Refusals, and the move that answers each one
 
 Refusals are actionable strings by design—*"a silent zero doesn't tell a model what to do
@@ -298,6 +321,7 @@ next."*
 | `list_runs` warns of duplicate device positions (`duplicates.same_sheet` / `duplicates.cross_sheet`) | two markers on cable conditions within 1 ft on one sheet, or overlay plans (same page size, 3+ coinciding positions and at least half the smaller set); every marker still counts | tell the estimator; when one sheet shows the devices for reference only, move that set to a non-cable reference condition with `edit_shape { condition }`. Never delete a marker without the estimator |
 | `list_runs` warns a scale *no person has confirmed* | every MCP `set_scale` lands unconfirmed; the cable lengths rest on it | tell the estimator to confirm those sheets' scales in the canvas before pricing |
 | `edit_condition` replies with `cable.minted` | a fresh cable opt-in took the device type's starting values for what the call did not state—*starting values, not verified against spec* | confirm each against the project spec and patch with `edit_condition { cable_setup: { … } }` |
+| `edit_condition`: *route_kind tags a cable-route condition* | `route_kind` means something only on a `role: "route"` condition | pass `role: "route"` in the same call, or tag the route condition instead |
 | `list_runs` lists a route under *unlinked* | a linear shape on a `role: "route"` condition that no linked run uses | `link_run` it, or trace it under another condition if it is not a route |
 | a `list_runs` run reads *broken* | a linked shape was deleted, or sits on a sheet this session cannot scale (a stitched composite) — its stored length is kept, it is excluded from totals and listed under unlinked | re-trace and `link_run` again, or hand it to the canvas |
 | an export refuses a path | OpenTakeoff didn't write that file, and overwriting it would destroy someone's work | pass `overwrite: true`, or pick another path |

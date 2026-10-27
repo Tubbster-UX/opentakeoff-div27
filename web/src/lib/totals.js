@@ -517,6 +517,12 @@ export function totalsToCsv(rows, projectName = "", bySheet = null, sheetLabel =
       lines.push("", "Unlinked");
       for (const row of cableT.unlinked) lines.push(row.map(esc).join(","));
     }
+    // trunk/branch pathway (each segment once) — only once a route
+    // condition is tagged, so an untagged cable CSV is byte-identical
+    if (cableT.pathway) {
+      lines.push("", "Pathway");
+      for (const row of cableT.pathway) lines.push(row.map(esc).join(","));
+    }
   }
 
   const title = projectName ? `# ${projectName} — ${brandName} report\n` : "";

@@ -425,7 +425,28 @@ estimated: horizontal length comes only from route segments you trace.
   except a run that states its own vertical.
 - **Telecom room (TR)** makes a count condition's markers the rooms runs home to.
 - **Cable route (linear)** on a linear condition marks its lines as routes. Any route
-  segment that no run uses is listed as unlinked.
+  segment that no run uses is listed as unlinked. Its **Kind** is **Trunk** (shared pathway,
+  such as the cable tray), **Branch** (one device out to the trunk) or **Unspecified**;
+  **Cable route: trunk** and **Cable route: branch** in the **+ cable…** menu set both at once.
+
+**Trace the trunk once, each branch on its own.** Put the cable tray or corridor run on a
+Trunk condition and trace it once. Put each device's run from the device out to the tray on a
+Branch condition, one segment per device. When you link, click the device, its branch, then
+the trunk segment(s) toward the TR. Every run that rides the tray lists the same trunk segment,
+so each run's cable still counts the trunk in full, and nothing has to be split by hand. Don't
+trace one line from the device all the way back to the TR: that line holds the trunk footage
+too, and its branch length can't be read back out of it. Once any route condition has a kind,
+the Cable runs sheet adds **Branch LF** and **Trunk LF**, and the Report, CSV and Excel add a
+**Pathway** table with one row per route condition: segments, pathway LF with each segment
+counted once, the LF linked runs use and don't use, linked runs, and ×N. A takeoff with no kind
+set exports exactly as before.
+
+**J-hooks come from a material row on the branch condition.** Add a supporting material to the
+Branch condition with basis **Linear** and **per** set to the hook spacing (5 for one hook every
+5 ft). Its basis is that condition's own LF, each segment counted once and multiplied by ×N, so
+40 ft and 35 ft of branch at 5 ft is 15 hooks, however many cables ride them. That LF is the
+condition's regular LF, so it includes any rise or drop legs set on the condition; the Pathway
+table reads plan length only.
 
 **Place and trace.** Count the devices (Count or Symbol), count each TR, and trace each route
 segment with Linear under the route condition. A route may continue on another sheet; each
