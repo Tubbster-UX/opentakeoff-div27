@@ -1,5 +1,6 @@
-# Brink dashboard: one Worker serving the static app (dist/), a read-only JSON
-# API over Hyperdrive, and the live WebSocket relay (Durable Object).
+# Brink dashboard: one Worker serving the static app (dist/, including the
+# EasySchematic editor frame), a JSON API over Hyperdrive (reads, plus the
+# schematic edit-layer writes), and the live WebSocket relay (Durable Object).
 # Local only for now: `npm run dev`. Nothing in this repository deploys it.
 name = "brink-dashboard"
 main = "src/index.ts"
@@ -31,6 +32,14 @@ new_sqlite_classes = ["RealtimeRelay"]
 binding = "HYPERDRIVE"
 id = "00000000000000000000000000000000"
 localConnectionString = "postgres://postgres:postgres@127.0.0.1:54322/postgres"
+
+# Cloudflare Access (required for schematic edits; reads rely on Access being on the route).
+# The owner sets them for the deployed Worker; they are not secrets:
+# [vars]
+# ACCESS_TEAM_DOMAIN = "https://<team>.cloudflareaccess.com"
+# ACCESS_AUD = "<the Access application's AUD tag>"
+# Without them every edit is refused (503). The local-only dev bypass is configured in
+# .dev.vars, never here (test/access.test.ts fails if this file names it outside a comment).
 
 # SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are secrets: .dev.vars locally
 # (copy .dev.vars.example); on a real account the owner sets them with

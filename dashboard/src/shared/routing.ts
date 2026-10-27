@@ -37,5 +37,7 @@ export function route(change: RowChange, client: ProjectClient): { send: boolean
   }
   // Portal pushes feed the project list only (touch); the project page does not show them in Phase 1.
   if (change.table === "brink_portal_pushes") return { send: false, next: client };
+  // Schematic edits belong to the project (they carry across imports), not to an import.
+  if (change.table === "brink_schematic_edits") return { send: scope.projectId === client.projectId, next: client };
   return { send: scope.importId !== undefined && scope.importId === client.importId, next: client };
 }

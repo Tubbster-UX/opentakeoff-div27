@@ -110,7 +110,8 @@ export class RealtimeRelay extends DurableObject<Env> {
     for (const ws of this.openSockets()) {
       const st = ws.deserializeAttachment() as ClientState;
       if (isListClient(st)) {
-        lists = true;
+        // The project list shows nothing from the schematic edit layer: no re-read for it.
+        lists = change.table !== "brink_schematic_edits";
         continue;
       }
       const { send, next } = route(change, st);

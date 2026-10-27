@@ -5,7 +5,11 @@
 //
 // With DASHBOARD_TEST_DATABASE_URL set (a Postgres that brink-merge has
 // imported a project into), it also reads /api/projects and a snapshot
-// through the Hyperdrive binding.
+// through the Hyperdrive binding, and writes schematic edits through it.
+//
+// Access is configured against a local stand-in team (test/access-keys.ts), with
+// the dev bypass variable ALSO set, to prove a configuration with Access never
+// takes the bypass.
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
@@ -15,6 +19,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import type { ProjectList, ServerMessage, Snapshot } from "../src/shared/protocol.js";
 import { summarize } from "../src/shared/state.js";
+import { Client as PgClient } from "pg";
+import type { EditResponse, SchematicView } from "../src/shared/protocol.js";
+import { startTestTeam, type TestTeam } from "./access-keys.js";
 import { startMockRealtime, type MockRealtime } from "./mock-realtime.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -25,6 +32,7 @@ const I1 = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const I2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
 let mock: MockRealtime;
+let team: TestTeam;
 let wrangler: ChildProcess;
 let base: string;
 let output = "";
@@ -71,6 +79,7 @@ class Client {
 
 beforeAll(async () => {
   mock = await startMockRealtime();
+  team = await startTestTeam();
   const port = await freePort();
   base = `http://127.0.0.1:${port}`;
   if (!existsSync(join(ROOT, "dist"))) mkdirSync(join(ROOT, "dist"));
@@ -78,7 +87,9 @@ beforeAll(async () => {
   wrangler = spawn(
     process.execPath,
     [join(ROOT, "node_modules/wrangler/bin/wrangler.js"), "dev", "--port", String(port), "--ip", "127.0.0.1", "--inspector-port", String(await freePort()),
-      "--var", `SUPABASE_URL:${mock.url}`, "--var", "SUPABASE_SERVICE_ROLE_KEY:test-service-key", "--persist-to", join(ROOT, ".wrangler/test-state")],
+      "--var", `SUPABASE_URL:${mock.url}`, "--var", "SUPABASE_SERVICE_ROLE_KEY:test-service-key",
+      "--var", `ACCESS_TEAM_DOMAIN:${team.url}`, "--var", `ACCESS_AUD:${team.aud}`, "--var", "DEV_ONLY_ACCESS_BYPASS_EMAIL:bypass@brink.test",
+      "--persist-to", join(ROOT, ".wrangler/test-state")],
     {
       cwd: ROOT,
       env: {
@@ -107,21 +118,48 @@ beforeAll(async () => {
 afterAll(async () => {
   wrangler?.kill("SIGTERM");
   await mock?.close();
+  await team?.close();
 });
 
+const editsUrl = (p: string) => `${base}/api/projects/${p}/schematic/edits`;
+const postEdits = (p: string, body: unknown, headers: Record<string, string> = {}) =>
+  fetch(editsUrl(p), { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+
 describe("worker", () => {
-  it("is read-only and validates ids", async () => {
+  it("reads are GET-only, the one write route needs an identity, and ids are validated", async () => {
     const post = await fetch(`${base}/api/projects`, { method: "POST" });
     expect(post.status).toBe(405);
     expect(post.headers.get("allow")).toBe("GET");
     expect((await fetch(`${base}/api/projects/${P}`, { method: "DELETE" })).status).toBe(405);
+    expect((await fetch(`${base}/api/projects/${P}/schematic`, { method: "POST" })).status).toBe(405);
+    expect((await fetch(editsUrl(P))).headers.get("allow")).toBe("POST");
+    // The write route: same-origin JSON from a verified Access identity only.
+    const body = { importId: I1, clientRef: "test-client-1", ops: [{ kind: "rename", target: "x", payload: { label: "y" } }] };
+    expect((await postEdits(P, body, { origin: "https://evil.example" })).status).toBe(403);
+    expect((await fetch(editsUrl(P), { method: "POST", headers: { "content-type": "text/plain" }, body: "{}" })).status).toBe(415);
+    const anon = await postEdits(P, body);
+    expect(anon.status).toBe(401); // the dev bypass variable is set, but Access is configured: no bypass
+    expect((await anon.json()) as { error: string }).toMatchObject({ error: expect.stringMatching(/no Cloudflare Access identity/) });
+    expect((await postEdits(P, body, { "cf-access-jwt-assertion": await team.token({ aud: ["another-app"] }) })).status).toBe(401);
+    // Identified, but the body is checked before the database is touched.
+    const token = await team.token();
+    expect((await postEdits(P, { ...body, ops: [] }, { "cf-access-jwt-assertion": token })).status).toBe(400);
+    expect((await postEdits(P, { ...body, importId: "nope" }, { "cf-access-jwt-assertion": token })).status).toBe(400);
+    expect((await postEdits("not-a-uuid", body, { "cf-access-jwt-assertion": token })).status).toBe(400);
     expect((await fetch(`${base}/api/projects/not-a-uuid`)).status).toBe(400);
     expect((await fetch(`${base}/api/nothing-here`)).status).toBe(404);
     expect(await (await fetch(`${base}/api/health`)).json()).toEqual({ ok: true, realtime: true });
   });
 
+  it("GET /api/me is the verified Access identity", async () => {
+    expect(await (await fetch(`${base}/api/me`)).json()).toMatchObject({ email: null, auth: null, error: expect.stringMatching(/no Cloudflare Access identity/) });
+    const me = await fetch(`${base}/api/me`, { headers: { "cf-access-jwt-assertion": await team.token({ email: "Sam@Brink.test" }) } });
+    expect(await me.json()).toEqual({ email: "sam@brink.test", auth: "cloudflare-access" });
+    expect(await (await fetch(`${base}/api/me`, { headers: { "cf-access-jwt-assertion": await team.token({ exp: 1 }) } })).json()).toMatchObject({ email: null, error: expect.stringMatching(/expired/) });
+  });
+
   it("serves the app shell for client-side routes and never hands the service key to the browser", async () => {
-    for (const path of ["/", `/projects/${P}`, `/projects/${P}/schematic`, `/p/${P}`]) {
+    for (const path of ["/", `/projects/${P}`, `/projects/${P}/schematic`, `/p/${P}`, `/es-frame.html?project=${P}`]) {
       const res = await fetch(`${base}${path}`);
       expect(res.status, path).toBe(200);
       expect(res.headers.get("content-type"), path).toContain("text/html");
@@ -230,5 +268,62 @@ describe.skipIf(!DB_URL)("read API over Hyperdrive (DASHBOARD_TEST_DATABASE_URL)
       // What brink-merge's CLI prints for this fixture (brink-merge/README.md).
       expect(sum.bom).toMatchObject({ devices: 16, cables: 23, netLf: 1795.13, orderLf: 2007.79 });
     }
+  });
+});
+
+describe.skipIf(!DB_URL)("schematic edits over Hyperdrive (DASHBOARD_TEST_DATABASE_URL)", () => {
+  const PROJECT = "Brink Div 27 sample (invented)";
+  let pid: string;
+  let view: SchematicView;
+  let pg: PgClient;
+  const auth = async (email = "alex@brink.test") => ({ "cf-access-jwt-assertion": await team.token({ email }) });
+
+  beforeAll(async () => {
+    const list = (await (await fetch(`${base}/api/projects`)).json()) as ProjectList;
+    pid = (list.projects.find((x) => x.name === PROJECT) ?? list.projects[0]!).id;
+    pg = new PgClient({ connectionString: DB_URL });
+    await pg.connect();
+  });
+  afterAll(() => pg?.end());
+
+  const read = async () => (await (await fetch(`${base}/api/projects/${pid}/schematic`)).json()) as SchematicView;
+
+  it("serves the schematic as rows + edit layer, and saves an edit under the Access email", async () => {
+    view = await read();
+    const nodes = view.file.nodes as { id: string; type: string; data: { label: string } }[];
+    const dev = nodes.find((n) => n.id.startsWith("dev-"))!;
+    expect(dev).toBeTruthy();
+    const active = view.edits.find((e) => e.target_key === dev.id && e.kind === "rename")?.id ?? null;
+    const label = `Renamed ${Date.now()}`;
+    const res = await postEdits(pid, { importId: view.import_id, clientRef: "test-client-1", ops: [{ kind: "rename", target: dev.id, payload: { label }, expect: active }] }, await auth("Alex@Brink.test"));
+    expect(res.status).toBe(200);
+    const out = (await res.json()) as EditResponse;
+    expect(out.editor).toBe("alex@brink.test");
+    expect(out.results[0]).toMatchObject({ i: 0, status: "saved", edit: { target_key: dev.id, kind: "rename", editor_email: "alex@brink.test" }, superseded: active });
+    const saved = out.results[0]!.status === "saved" ? out.results[0]!.edit.id : "";
+    const row = (await pg.query("select editor_email, editor_auth, client_ref, base_import_id, payload from brink_schematic_edits where id = $1", [saved])).rows[0];
+    expect(row).toEqual({ editor_email: "alex@brink.test", editor_auth: "cloudflare-access", client_ref: "test-client-1", base_import_id: view.import_id, payload: { label } });
+    const after = await read();
+    expect((after.file.nodes as { id: string; data: { label: string } }[]).find((n) => n.id === dev.id)!.data.label).toBe(label);
+
+    // Someone saved since this editor last looked: the stale op is a conflict, the saved edit wins.
+    const stale = (await (await postEdits(pid, { importId: view.import_id, clientRef: "test-client-2", ops: [{ kind: "rename", target: dev.id, payload: { label: "stale" }, expect: active }] }, await auth("sam@brink.test"))).json()) as EditResponse;
+    expect(stale.results[0]).toMatchObject({ status: "conflict", current: { id: saved, editor_email: "alex@brink.test" } });
+    // Targets that do not exist, and ops the layer does not take, are refused one by one.
+    const bad = (await (await postEdits(pid, { importId: view.import_id, clientRef: "test-client-2", ops: [
+      { kind: "rename", target: "dev-shp-nope-1", payload: { label: "x" } },
+      { kind: "move", target: dev.id, payload: { x: 1, y: 2, parent: "room-nope-00000000" }, expect: view.edits.find((e) => e.target_key === dev.id && e.kind === "move")?.id ?? null },
+      { kind: "property", target: dev.id, payload: {} },
+      { kind: "disconnect", target: "cable-nope", payload: {} },
+    ] }, await auth())).json()) as EditResponse;
+    expect(bad.results.map((r) => r.status)).toEqual(["invalid", "invalid", "invalid", "invalid"]);
+    // A request built on an older import is refused as a whole.
+    const old = await postEdits(pid, { importId: I1, clientRef: "test-client-2", ops: [{ kind: "rename", target: dev.id, payload: { label: "x" }, expect: saved }] }, await auth());
+    expect(old.status).toBe(409);
+    expect(await old.json()).toMatchObject({ currentImportId: view.import_id });
+    // Revert: the generated label comes back.
+    const rev = (await (await postEdits(pid, { importId: view.import_id, clientRef: "test-client-1", ops: [{ kind: "revert", edit: saved }] }, await auth())).json()) as EditResponse;
+    expect(rev.results[0]).toEqual({ i: 0, status: "reverted", edit: saved });
+    expect((await pg.query("select reverted_by from brink_schematic_edits where id = $1", [saved])).rows[0]).toEqual({ reverted_by: "alex@brink.test" });
   });
 });

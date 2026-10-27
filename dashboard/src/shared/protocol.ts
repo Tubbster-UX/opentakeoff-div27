@@ -14,12 +14,15 @@ export const TABLE_COLUMNS = {
   // OPTIONAL: created by brink-merge's Portal push migration, which not every database has. The relay
   // subscribes to it only when it is in the supabase_realtime publication; the API reads it only when it exists.
   brink_portal_pushes: ["id", "project_id", "import_id", "dry_run", "status", "portal_proposal_id", "error", "created_at", "finished_at"],
+  // The schematic edit layer (brink-merge/docs/schematic-edits.md). Project-scoped, not import-scoped. OPTIONAL
+  // like the Portal pushes: a database that has not had brink-merge's edits migration does not have it.
+  brink_schematic_edits: ["id", "project_id", "target_key", "kind", "payload", "target_context", "editor_email", "editor_auth", "client_ref", "base_import_id", "created_at", "superseded_at", "superseded_by", "reverted_at", "reverted_by"],
 } as const;
 
 export type TableName = keyof typeof TABLE_COLUMNS;
 export const TABLES = Object.keys(TABLE_COLUMNS) as TableName[];
 /** Tables that may be absent (a migration this database has not had). Never assumed present. */
-export const OPTIONAL_TABLES: readonly TableName[] = ["brink_portal_pushes"];
+export const OPTIONAL_TABLES: readonly TableName[] = ["brink_portal_pushes", "brink_schematic_edits"];
 /** Tables every brink-merge database has (the init migration). */
 export const CORE_TABLES: readonly TableName[] = TABLES.filter((t) => !OPTIONAL_TABLES.includes(t));
 
@@ -32,6 +35,7 @@ export const PRIMARY_KEY: Record<TableName, readonly string[]> = {
   brink_schematic_nodes: ["import_id", "node_id"],
   brink_schematic_connections: ["import_id", "edge_id"],
   brink_portal_pushes: ["id"],
+  brink_schematic_edits: ["id"],
 };
 
 /** Child tables: one import's rows. */
@@ -140,6 +144,8 @@ export function changeScope(c: RowChange): { projectId?: string; importId?: stri
       return { projectId: r.project_id as string | undefined, importId: r.id as string | undefined };
     case "brink_portal_pushes":
       return { projectId: r.project_id as string | undefined, importId: r.import_id as string | undefined };
+    case "brink_schematic_edits":
+      return { projectId: r.project_id as string | undefined };
     default:
       return { importId: r.import_id as string | undefined };
   }
@@ -206,6 +212,52 @@ export interface PortalPushSummary {
   created_at: string;
   finished_at: string | null;
 }
+
+/** One edit of the schematic edit layer, as the app sees it. */
+export interface EditSummary {
+  id: string;
+  target_key: string;
+  kind: string;
+  payload: Record<string, unknown>;
+  editor_email: string;
+  created_at: string;
+}
+
+/** GET /api/projects/:id/schematic: the current import's schematic as people see it (rows + the active edit layer). */
+export interface SchematicView {
+  project_id: string;
+  project_name: string;
+  import_id: string;
+  /** The EasySchematic file (brink-merge's render with the edits applied). */
+  file: Record<string, unknown>;
+  /** The project's active edits; the editor sends their ids back as `expect`. */
+  edits: EditSummary[];
+  /** Active edits this import cannot carry (orphaned / conflict), as brink-merge reports them. */
+  issues: { severity: string; code: string; message: string; refs?: Record<string, unknown> }[];
+  readAt: string;
+}
+
+/** POST /api/projects/:id/schematic/edits. `expect`: the active edit of (target, kind) the editor last saw (null: none). */
+export interface EditRequest {
+  importId: string;
+  clientRef: string;
+  ops: ({ kind: string; target?: string; payload?: Record<string, unknown>; expect?: string | null } | { kind: "revert"; edit: string })[];
+}
+
+export type EditResult =
+  | { i: number; status: "saved"; edit: EditSummary; superseded: string | null }
+  | { i: number; status: "reverted"; edit: string }
+  | { i: number; status: "conflict"; error: string; current: EditSummary | null }
+  | { i: number; status: "invalid"; error: string };
+
+export interface EditResponse {
+  importId: string;
+  editor: string;
+  results: EditResult[];
+}
+
+/** GET /api/me: who a save would be recorded under; `email: null` (with the reason) when nobody. */
+export type Me = { email: string; auth: "cloudflare-access" | "dev-bypass" } | { email: null; auth: null; error: string };
 
 /** GET /api/projects. */
 export interface ProjectList {

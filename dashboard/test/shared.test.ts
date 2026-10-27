@@ -117,4 +117,14 @@ describe("route (relay fan-out)", () => {
   it("keeps Portal push rows off project sockets", () => {
     expect(route(ch({ table: "brink_portal_pushes", type: "INSERT", record: { id: "x", project_id: P, import_id: I1 } }), client).send).toBe(false);
   });
+
+  it("routes schematic edits by project, whatever import the socket shows", () => {
+    const edit = fromRealtimePayload({ table: "brink_schematic_edits", eventType: "INSERT", new: { id: "e1", project_id: P, target_key: "dev-shp-1-1", kind: "move", payload: { x: 1 }, client_ref: "tab-1", editor_email: "a@b.c" } })!;
+    expect(edit.record).toMatchObject({ project_id: P, payload: { x: 1 }, client_ref: "tab-1" });
+    expect(route(edit, client).send).toBe(true);
+    expect(route(edit, { projectId: P, importId: null }).send).toBe(true);
+    expect(route(edit, { projectId: "other", importId: I1 }).send).toBe(false);
+    // not part of the snapshot: applyChange leaves it alone
+    expect(applyChange(snap(), edit).kind).toBe("ignored");
+  });
 });
