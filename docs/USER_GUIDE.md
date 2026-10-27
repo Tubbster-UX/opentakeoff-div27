@@ -113,7 +113,7 @@ Drag onto the canvas (or click the **Open your plans** target on the empty scree
 
 - **PDF** plan sets—multi-page, multiple files at once.
 - **Images**—scans, screenshots, photos of a sheet. They're wrapped into PDF pages in your browser.
-- **`.zip` plan sets**—the whole download off a bid platform. Unzipped in the browser; every PDF inside opens. (Hostile-archive guards cap entry counts, sizes, and nesting, so a malformed zip fails cleanly instead of ballooning the tab.)
+- **`.zip` plan sets**—the whole download off a bid platform. Unzipped in the browser; every PDF inside opens. An unreadable image is skipped individually, without stopping the remaining plans or valid images. (Hostile-archive guards cap entry counts, sizes, and nesting, so a malformed zip fails cleanly instead of ballooning the tab.)
 
 Nothing uploads anywhere. The file is read locally, rendered locally, and stored locally.
 
@@ -148,6 +148,19 @@ Notes: align the match line **before** tracing—once takeoffs live on a stitch 
 Stitching and aligning are yours alone—an AI agent driving OpenTakeoff [over MCP](MCP.md) has no stitch verb, on purpose: judging that two wall junctions are the same drawn point is human work, and a sloppy join quietly skews everything measured across the seam. MCP cannot create, align, or measure on a stitched surface. The current MCP import/export path omits stitch records, so a browser stitch is not a lossless MCP handoff. Keep the browser's own takeoff export or project archive as the editable master, or have the MCP agent measure the member sheets individually with explicit scope boundaries.
 
 **If a control seems missing:** **Stitch N into one surface** is in the gallery footer and requires 2–4 selected sheets. **Align** appears only while a stitched surface is open. Reopen one from its tab or the gallery's **Stitched surfaces** strip. If Align refuses because takeoffs already exist, create a fresh stitch and align it before tracing. Deleting a stitch also refuses while takeoffs or markups exist.
+
+### Split screen (reference pane)
+
+Side-by-side groups and stitches share one canvas; **split screen** gives the sheet you are measuring a companion pane. **Drag a sheet tab** toward a screen edge—left, right, top, or bottom—and drop it: the canvas splits in two and the dragged sheet opens in the new pane. Dropping on the center zone adds the tab to a side-by-side group instead, as before.
+
+The two panes are not equals, on purpose:
+
+- **The primary pane measures.** Every tool, snap grid, and keyboard shortcut stays where it was; the split changes nothing about how you take off.
+- **The reference pane looks.** It frames one open sheet at its own pan and zoom—crisp detail tiles included—and mirrors the primary sheet's committed shapes and markups read-only, so a door schedule or an adjacent room can sit beside the room you trace, revision clouds and notes included. Mirrored ink is ink, not a control: click it and the pane pans, exactly as if the markup were printed on the sheet; select a cloud in the primary and the mirror shows the cloud, never the selection. Notes size themselves to the pane's own zoom, so they stay legible at any zoom on that side. Hiding the markup layer (the canvas's **Hide layer** control) hides it in both panes. A pane cannot frame a stitch yet: give it a single sheet.
+
+The divider between the panes drags to resize; **⟳** flips the split between side-by-side and stacked; **✕** closes the reference pane and the primary folds back to full width. The layout saves with the project and reopens with it.
+
+Limits: the panes together keep at most **6 sheets** live, and split screen turns itself off on a narrow window or a low-memory device rather than thrash the tile pool.
 
 ### Levels (multi-floor sets)
 
@@ -227,7 +240,7 @@ No usable note? **Calibrate two points…**: click both ends of something the dr
 
 ### Check a dimension (`K`) — make it a habit
 
-`K` is calibrate's read-only twin, for *verifying* a scale before you trace. Click both ends of a printed dimension string; the bar reads what that span **measures** at the current scale (the live cursor chip shows the running length while you pick the second point). Then type what the drawing **says** (`12.5`, `12'6`, `12' 6"`, `12-6`, and `6"` all parse), and a verdict chip grades the error:
+`K` is calibrate's read-only twin, for *verifying* a scale before you trace. Click both ends of a printed dimension string; the bar reads what that span **measures** at the current scale (the live cursor chip shows the running length while you pick the second point). Then type what the drawing **says** (`12.5`, `12'6`, `12' 6"`, `12-6`, `12-6"`, and `6"` all parse), and a verdict chip grades the error:
 
 - **Green**, within 1%: *matches — scale checks out*.
 - **Amber**, within 5%: *off — re-check or recalibrate*.
@@ -749,6 +762,41 @@ RFIs export as **RFI CSV** and **RFI JSON** from the Report, and they ride the M
 
 Open **Report** for the whole takeoff on one page: a per-condition table, the supporting-materials buy list, per-sheet base quantities, and your markups noted—with a project-name field and a print masthead up top (client, reference, date, prepared-by, and an optional trade-name identity so the output brands as your company).
 
+### Company setup
+
+**File → Company setup…** (also in **Find an action**, and from **Report → Project info**) holds who you are and how you price, once per device:
+
+- **Company**—trade name, address, phone, email, license number and logo, for your proposals. You can keep several trade names; **Project info** picks which one brands a project.
+- **Estimating defaults**—overhead %, profit % (a markup on cost, or a margin of the price: a 25% margin is cost × 1.333), sales tax % on material, and how many days a proposal stays valid.
+- **Proposal text**—your inclusions, exclusions and terms, in your own words.
+
+Nothing is pre-filled. Every field saves as you type, stays in this browser, and travels in **Export profile**. Importing a profile made before company setup existed leaves yours alone; **Reset profile to defaults** keeps it too.
+
+### Estimate
+
+**Estimate** (in the toolbar, in **Find an action**, and in the Report header) prices what you measured. Each condition that has takeoffs gets a row:
+
+- **Unit**—SF, SY, LF or EA. It starts as what you measured (area, then length, then count).
+- **Material $/unit** prices the **order quantity**, with the condition's waste. **Labor $/unit** prices the **measured quantity**, without waste. EA never carries waste.
+- **▸ materials** opens the condition's supporting materials (adhesive, grout and so on) to price per package. Quantities are already rounded up to whole packages.
+- Across the top: **Overhead**, **Profit** (markup or margin) and **Sales tax** on material for this project. The first time a project's estimate opens they're copied from **Company setup**. After that they belong to the project: changing your defaults never re-prices a bid you already worked up. **Company defaults** copies them again when you ask.
+
+An empty box means *not entered*, never $0. Type 0 for scope you aren't charging for. Until every line is priced, a banner names what's missing, the row says **PARTLY PRICED** or **UNPRICED**, and the total reads **Base bid — priced so far**.
+
+**Excel** downloads `<project> - estimate.xlsx`: **Estimate** (every line, then material, labor, tax, overhead, profit and the base bid), **Materials** (each supply's packages, price and cost) and, when anything is missing, **Unpriced**. Rates you didn't enter stay empty cells. Every tab ends with *Prepared with OpenTakeoff*.
+
+Prices are saved with the project. Condition templates never carry them, so every new job starts unpriced.
+
+### Proposal
+
+**Estimate → Proposal PDF…** builds the bid proposal you send: your letterhead from **Company setup** (name, logo, address, phone, email, license), **Prepared for** (client, address and reference, saved with the project), the scope (each condition, its spec description and measured quantity), the **base bid**, then inclusions, exclusions, terms and a signature block for both sides.
+
+- **Lump sum** prints one base bid. **Itemized** prints a price on each line: the base bid spread over the lines in proportion to their cost, to the cent, so the lines add up to the base bid exactly.
+- The first time you open it, the inclusions, exclusions, terms and validity are copied from Company setup. Edits here change **this job only**. **Reset text to Company setup** copies them again.
+- If the estimate isn't fully priced, the dialog says which lines and still lets you download.
+
+Every page of the proposal, the marked set and the printed report carries **Prepared with OpenTakeoff · opentakeoff.kentucky-ai.com**. The proposal and the marked set also carry a light diagonal *OpenTakeoff* watermark. Branding as your trade name puts your company on the document; it doesn't remove these.
+
 ### The numbers, honestly
 
 - **Measured versus w/Waste.** Waste lives only in the w/Waste column: *SF w/Waste = measured × (1 + waste %)*. The measured quantity is never inflated, so your takeoff and your buy list stay honest about which is which. Waste applies to SF and LF, never EA.
@@ -1030,7 +1078,7 @@ What's sent, and only while an agent run you started is going: your goal, the pr
 
 The same engine speaks [MCP](https://modelcontextprotocol.io), one command away:
 `npx -y opentakeoff-mcp` (or the one-click `opentakeoff-mcp.mcpb` bundle for Claude Desktop). **Help → Connect your AI** in the app (also on the opening screen and in the **⋯** menu) has the setup for Claude Desktop, Claude Code, Codex and Cursor with copy buttons, and a first question to ask about the sample plan; [CONNECT.md](CONNECT.md) is the same walk-through. An
-MCP client gets **<!--tool-count-->53<!--/tool-count--> tools** plus browsable sheet resources, over the very same measuring engine,
+MCP client gets **<!--tool-count-->58<!--/tool-count--> tools** plus browsable sheet resources, over the very same measuring engine,
 with the same scale gate and the same provenance receipts:
 
 | Group | Tools |

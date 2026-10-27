@@ -1,5 +1,6 @@
 // OpenTakeoff brand marks. Neutral, paper/ink/cobalt — the same token palette as
 // the rest of the app. (No relation to any private branding.)
+import { scanStarRows } from "../lib/scanStar.js";
 
 export function Wordmark({ size = 96, color = "var(--ink)", weight = 800, letterSpacing = "-0.03em" }) {
   return (
@@ -37,6 +38,22 @@ export function Mark({ size = 100, ink = "var(--ink)", paper = "var(--paper-crea
       <circle cx="66" cy="26" r="4" fill={accent} />
       <circle cx="78" cy="74" r="4" fill={accent} />
       <circle cx="22" cy="74" r="4" fill={accent} />
+    </svg>
+  );
+}
+
+// The scan star — the agent's mark (geometry in lib/scanStar.js, shared with the PDF watermark).
+// `size` is the star's height; it is `reach` times as wide. `working` ripples the rows out from
+// the centre line (the agent is running).
+export function ScanStar({ size = 24, rows, reach = 1, working = false, color = "currentColor", title, style }) {
+  const n = rows || (size <= 24 ? 7 : size <= 56 ? 11 : 23);
+  const a11y = title ? { role: "img", "aria-label": title } : { "aria-hidden": "true" };
+  return (
+    <svg className={`ot-scan-star${working ? " is-working" : ""}`} width={Math.round(size * reach)} height={size}
+      viewBox={`${-reach} -1 ${2 * reach} 2`} style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0, ...style }} focusable="false" {...a11y}>
+      {scanStarRows(n, reach).map((r) => (
+        <rect key={r.y} x={r.x} y={r.y} width={r.w} height={r.h} fill={color} style={{ "--ring": r.ring }} />
+      ))}
     </svg>
   );
 }
