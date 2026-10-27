@@ -43,7 +43,42 @@ export function ProjectsPage() {
       <h1 className="mt-1 mb-0.5 text-xl font-semibold">Projects</h1>
       <p className="m-0 text-xs text-muted">Every brink-merge project and its current import. Totals are the current import&apos;s BOM; they update live.</p>
       {error && <Notice tone="error">Last refresh failed ({error}); showing the previous read.</Notice>}
-      <div className="mt-3.5">
+      {/* Phone: one card per project, totals visible without sideways scrolling. */}
+      <ul className="mt-3.5 mb-3.5 list-none space-y-2 p-0 sm:hidden" aria-label="All projects">
+        {list.projects.length === 0 && <li className="border border-line bg-surface p-4 text-center text-muted">No projects yet. Import one with brink-merge --db.</li>}
+        {list.projects.map((p) => (
+          <li key={`${p.id}:${changed[p.id] ?? 0}`} data-project-card={p.id} className={`border border-line bg-surface p-3 ${changed[p.id] ? "card-flash" : ""}`}>
+            <Link to={`/projects/${p.id}`} className="font-semibold">
+              {p.name}
+            </Link>
+            <div className="text-xs text-muted">{p.current_import_id ? `imported ${when(p.imported_at)}` : "no current import"}</div>
+            <dl className="m-0 mt-2 grid grid-cols-3 gap-x-2 gap-y-1.5 font-mono text-sm tabular-nums">
+              {(
+                [
+                  ["Devices", fmt(p.devices), ""],
+                  ["Cables", fmt(p.cables), ""],
+                  ["Errors", fmt(p.errors), p.errors ? "text-error font-semibold" : ""],
+                  ["Net LF", fmt(p.net_lf), ""],
+                  ["Order LF", fmt(p.order_lf), ""],
+                  ["Warnings", fmt(p.warnings), p.warnings ? "text-warn" : ""],
+                ] as const
+              ).map(([k, v, cls]) => (
+                <div key={k}>
+                  <dt className="font-sans text-[11px] text-muted">{k}</dt>
+                  <dd className={`m-0 ${cls}`}>{v}</dd>
+                </div>
+              ))}
+            </dl>
+            {pushes && (
+              <div className="mt-2 text-xs">
+                <span className="text-muted">Portal push </span>
+                <PushCell push={p.portal_push} />
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3.5 hidden sm:block">
         <Panel title="All projects" count={list.projects.length}>
           <DataTable
             columns={columns}

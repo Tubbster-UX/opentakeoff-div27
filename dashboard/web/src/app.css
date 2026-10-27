@@ -140,6 +140,18 @@
   tr.flash > td {
     animation: flash 2.4s ease-out;
   }
+  .card-flash {
+    animation: flash-card 2.4s ease-out;
+  }
+}
+
+@keyframes flash-card {
+  from {
+    background: var(--flash);
+  }
+  to {
+    background: var(--surface);
+  }
 }
 
 @keyframes flash {
