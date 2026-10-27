@@ -1,0 +1,293 @@
+{
+  "schema": "opentakeoff.report.v1",
+  "project_name": "Brink Div 27 minimal (invented)",
+  "generated_with": "OpenTakeoff",
+  "sheets": [
+    {
+      "sheet_id": "sample-plan.pdf",
+      "sheet": "sample-plan.pdf",
+      "scale_source": "upp",
+      "scale_confirmed": false
+    }
+  ],
+  "conditions": [
+    {
+      "id": "cnd-17b98553-8f07-4c9f-a7dd-a8ff44906011",
+      "finish_tag": "TR",
+      "color": "#c96442",
+      "fill": "#c96442",
+      "hatch": "diag",
+      "multiplier": 1,
+      "waste_pct": 0,
+      "shape_count": 1,
+      "floor_sf": 0,
+      "wall_sf": 0,
+      "border_sf": 0,
+      "lf": 0,
+      "ea": 1,
+      "total_sf": 0,
+      "floor_sf_net": 0,
+      "wall_sf_net": 0,
+      "border_sf_net": 0,
+      "lf_net": 0,
+      "total_sf_net": 0,
+      "sy_net": 0,
+      "materials": [],
+      "columns": []
+    },
+    {
+      "id": "cnd-6a7c5cc2-1951-448e-9b95-024c7d3f0352",
+      "finish_tag": "DATA-1",
+      "color": "#2f7d54",
+      "fill": "#2f7d54",
+      "hatch": "diag2",
+      "multiplier": 1,
+      "waste_pct": 12,
+      "shape_count": 3,
+      "floor_sf": 0,
+      "wall_sf": 0,
+      "border_sf": 0,
+      "lf": 0,
+      "ea": 3,
+      "total_sf": 0,
+      "floor_sf_net": 0,
+      "wall_sf_net": 0,
+      "border_sf_net": 0,
+      "lf_net": 0,
+      "total_sf_net": 0,
+      "sy_net": 0,
+      "materials": [],
+      "columns": []
+    },
+    {
+      "id": "cnd-c5f9a813-e4df-4bd0-aa53-a290b2db4f7d",
+      "finish_tag": "ROUTE",
+      "color": "#2563eb",
+      "fill": "#2563eb",
+      "hatch": "cross",
+      "multiplier": 1,
+      "waste_pct": 0,
+      "shape_count": 3,
+      "floor_sf": 0,
+      "wall_sf": 0,
+      "border_sf": 0,
+      "lf": 99.99,
+      "ea": 0,
+      "total_sf": 0,
+      "floor_sf_net": 0,
+      "wall_sf_net": 0,
+      "border_sf_net": 0,
+      "lf_net": 99.99,
+      "total_sf_net": 0,
+      "sy_net": 0,
+      "materials": [],
+      "columns": []
+    }
+  ],
+  "by_sheet": [
+    {
+      "sheet_id": "sample-plan.pdf",
+      "sheet": "sample-plan.pdf",
+      "rows": [
+        {
+          "id": "cnd-17b98553-8f07-4c9f-a7dd-a8ff44906011",
+          "finish_tag": "TR",
+          "color": "#c96442",
+          "multiplier": 1,
+          "shape_count": 1,
+          "floor_sf": 0,
+          "wall_sf": 0,
+          "border_sf": 0,
+          "lf": 0,
+          "ea": 1
+        },
+        {
+          "id": "cnd-6a7c5cc2-1951-448e-9b95-024c7d3f0352",
+          "finish_tag": "DATA-1",
+          "color": "#2f7d54",
+          "multiplier": 1,
+          "shape_count": 3,
+          "floor_sf": 0,
+          "wall_sf": 0,
+          "border_sf": 0,
+          "lf": 0,
+          "ea": 3
+        },
+        {
+          "id": "cnd-c5f9a813-e4df-4bd0-aa53-a290b2db4f7d",
+          "finish_tag": "ROUTE",
+          "color": "#2563eb",
+          "multiplier": 1,
+          "shape_count": 3,
+          "floor_sf": 0,
+          "wall_sf": 0,
+          "border_sf": 0,
+          "lf": 99.99,
+          "ea": 0
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "total_sf": 0,
+    "total_sf_net": 0,
+    "lf": 99.99,
+    "lf_net": 99.99,
+    "ea": 4,
+    "sy_net": 0
+  },
+  "materials": [],
+  "markups": [],
+  "rfis": [],
+  "condition_columns": [],
+  "shape_labels": [],
+  "by_label": [],
+  "units": "imperial (SF/LF — raw internal values)",
+  "display_units": "imperial",
+  "roll_goods": [],
+  "cable": {
+    "summary": [
+      {
+        "condition_id": "cnd-6a7c5cc2-1951-448e-9b95-024c7d3f0352",
+        "finish_tag": "DATA-1",
+        "device_type": "wall_outlet",
+        "cable_type": "CAT6A",
+        "tr_id": "shp-22a0d33d-f40d-4938-bea7-51d184884fad",
+        "tr_name": "MDF",
+        "multiplier": 1,
+        "waste_pct": 12,
+        "ea": 3,
+        "pulls": 1,
+        "cables": 2,
+        "route_lf": 33.33,
+        "cable_lf": 152.66,
+        "cable_lf_order": 170.98,
+        "unlinked_devices": 2,
+        "held_devices": 0,
+        "pending_runs": 1,
+        "over_length_runs": 0,
+        "leg_warning": false
+      }
+    ],
+    "by_tr": [
+      {
+        "tr_id": "shp-22a0d33d-f40d-4938-bea7-51d184884fad",
+        "tr_name": "MDF",
+        "ea": 3,
+        "pulls": 1,
+        "cables": 2,
+        "route_lf": 33.33,
+        "cable_lf": 152.66,
+        "cable_lf_order": 170.98,
+        "unlinked_devices": 2,
+        "held_devices": 0,
+        "pending_runs": 1,
+        "over_length_runs": 0
+      }
+    ],
+    "by_cable_type": [
+      {
+        "cable_type": "CAT6A",
+        "ea": 3,
+        "pulls": 1,
+        "cables": 2,
+        "route_lf": 33.33,
+        "cable_lf": 152.66,
+        "cable_lf_order": 170.98,
+        "unlinked_devices": 2,
+        "held_devices": 0,
+        "pending_runs": 1,
+        "over_length_runs": 0
+      }
+    ],
+    "totals": {
+      "ea": 3,
+      "pulls": 1,
+      "cables": 2,
+      "route_lf": 33.33,
+      "cable_lf": 152.66,
+      "cable_lf_order": 170.98,
+      "unlinked_devices": 2,
+      "held_devices": 0,
+      "pending_runs": 1,
+      "over_length_runs": 0
+    },
+    "runs": [
+      {
+        "run_id": "run-34f8ff06-0694-48e8-9f26-227e1dea9070",
+        "condition": "DATA-1",
+        "device_type": "wall_outlet",
+        "cable_type": "CAT6A",
+        "tr": "MDF",
+        "sheets": "A-101",
+        "sheet_ids": [
+          "sample-plan.pdf"
+        ],
+        "device_sheets": "A-101",
+        "device_sheet_ids": [
+          "sample-plan.pdf"
+        ],
+        "tr_sheet": "A-101",
+        "tr_sheet_id": "sample-plan.pdf",
+        "route_lf": 33.33,
+        "vertical_ft": 23,
+        "loop_device_ft": 10,
+        "loop_tr_ft": 10,
+        "per_cable_lf": 76.33,
+        "cables": 2,
+        "location_lf": 152.66,
+        "multiplier": 1,
+        "status": "linked",
+        "review_status": "pending",
+        "reason": "",
+        "scale_unconfirmed": true,
+        "notes": "route scale on A-101 not confirmed by a person"
+      }
+    ],
+    "unlinked": {
+      "devices": [
+        {
+          "shape_id": "shp-6f9a6ea0-ae32-4fbb-a845-19f416ab30ed",
+          "condition_id": "cnd-6a7c5cc2-1951-448e-9b95-024c7d3f0352",
+          "finish_tag": "DATA-1",
+          "sheet_id": "sample-plan.pdf",
+          "reason": "no run links this device",
+          "sheet": "A-101"
+        },
+        {
+          "shape_id": "shp-01bc9227-4258-4e01-9bc5-4eec187d2c82",
+          "condition_id": "cnd-6a7c5cc2-1951-448e-9b95-024c7d3f0352",
+          "finish_tag": "DATA-1",
+          "sheet_id": "sample-plan.pdf",
+          "reason": "no run links this device",
+          "sheet": "A-101"
+        }
+      ],
+      "routes": [
+        {
+          "shape_id": "shp-fdd4a5e1-60e1-4641-b658-81d9787d7351",
+          "condition_id": "cnd-c5f9a813-e4df-4bd0-aa53-a290b2db4f7d",
+          "finish_tag": "ROUTE",
+          "sheet_id": "sample-plan.pdf",
+          "length_lf": 33.33,
+          "reason": "no run links this segment",
+          "sheet": "A-101"
+        },
+        {
+          "shape_id": "shp-bdb02308-915d-4ea6-9735-94dc63adf2af",
+          "condition_id": "cnd-c5f9a813-e4df-4bd0-aa53-a290b2db4f7d",
+          "finish_tag": "ROUTE",
+          "sheet_id": "sample-plan.pdf",
+          "length_lf": 33.33,
+          "reason": "no run links this segment",
+          "sheet": "A-101"
+        }
+      ]
+    },
+    "held": [],
+    "holds": [],
+    "warnings": [
+      "1 linked run takes route length from a sheet whose scale no person has confirmed (A-101). Every cable length there rests on that scale: confirm it in the canvas before pricing."
+    ]
+  }
+}

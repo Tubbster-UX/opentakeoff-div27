@@ -1,0 +1,19 @@
+# Local Supabase for brink-merge (`npx supabase start` from brink-merge/, needs Docker).
+# Migrations in supabase/migrations/ apply on start; the CLI and MCP server also
+# apply them (tracked in brink_schema_migrations), and every one is idempotent.
+project_id = "brink-merge"
+
+[api]
+enabled = true
+port = 54321
+
+[db]
+port = 54322
+major_version = 15
+
+[realtime]
+enabled = true
+
+[studio]
+enabled = true
+port = 54323

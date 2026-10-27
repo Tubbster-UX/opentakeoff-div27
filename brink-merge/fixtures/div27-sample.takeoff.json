@@ -1,0 +1,1522 @@
+{
+  "schema": "opentakeoff.takeoff_canvas.v1",
+  "project_name": "",
+  "sheets": [
+    {
+      "sheet_id": "sample-plan.pdf",
+      "units_per_px": 0.027777777777777776,
+      "scale_source": "upp",
+      "scale_confirmed": false
+    }
+  ],
+  "conditions": [
+    {
+      "id": "cnd-6cfe0749-7623-4114-966c-e08be6397b08",
+      "created_at": "2026-10-27T16:41:36.136Z",
+      "finish_tag": "TR",
+      "color": "#c96442",
+      "fill": "#c96442",
+      "hatch": "diag",
+      "multiplier": 1,
+      "waste_pct": 0,
+      "materials": [],
+      "role": "tr"
+    },
+    {
+      "id": "cnd-e90afb40-4c7c-44f1-8241-d4bb32a6c57d",
+      "created_at": "2026-10-27T16:41:36.136Z",
+      "finish_tag": "DATA-1",
+      "color": "#2f7d54",
+      "fill": "#2f7d54",
+      "hatch": "diag2",
+      "multiplier": 1,
+      "waste_pct": 12,
+      "materials": [
+        {
+          "id": "mat-94fcfd1f-7a39-4502-8b7e-f819b5e97739",
+          "name": "CAT6A jack",
+          "per": 1,
+          "basis": "cables",
+          "unit": "EA",
+          "round": true
+        },
+        {
+          "id": "mat-5598d65e-e709-48e0-83e8-8b2b164033f5",
+          "name": "2-port faceplate",
+          "per": 1,
+          "basis": "pulls",
+          "unit": "EA",
+          "round": true
+        }
+      ],
+      "cable_setup": {
+        "device_type": "wall_outlet",
+        "cables_per_location": 2,
+        "cable_type": "CAT6A CMP",
+        "vertical_ft": 23,
+        "loop_device_ft": 10,
+        "loop_tr_ft": 10,
+        "package_ft": 1000,
+        "medium": "copper"
+      }
+    },
+    {
+      "id": "cnd-e2cf76e7-ddb1-40c1-9382-9460ab2b1257",
+      "created_at": "2026-10-27T16:41:36.136Z",
+      "finish_tag": "WAP-1",
+      "color": "#2563eb",
+      "fill": "#2563eb",
+      "hatch": "cross",
+      "multiplier": 2,
+      "waste_pct": 12,
+      "materials": [],
+      "cable_setup": {
+        "device_type": "wap",
+        "cables_per_location": 2,
+        "cable_type": "CAT6A CMP",
+        "vertical_ft": 13,
+        "loop_device_ft": 20,
+        "loop_tr_ft": 10
+      }
+    },
+    {
+      "id": "cnd-10ed4c86-ed1d-4fdb-b7cd-4fd172bb2b46",
+      "created_at": "2026-10-27T16:41:36.136Z",
+      "finish_tag": "CAM-1",
+      "color": "#9333ea",
+      "fill": "#9333ea",
+      "hatch": "diagdense",
+      "multiplier": 1,
+      "waste_pct": 12,
+      "materials": [
+        {
+          "id": "mat-71edc31e-7dc2-47b8-83a2-113828c2c9cf",
+          "name": "Camera mount",
+          "per": 1,
+          "basis": "pulls",
+          "unit": "EA",
+          "round": true
+        }
+      ],
+      "cable_setup": {
+        "device_type": "camera",
+        "cables_per_location": 1,
+        "cable_type": "CAT6 CMP",
+        "vertical_ft": 13,
+        "loop_device_ft": 15,
+        "loop_tr_ft": 10,
+        "package_ft": 1000,
+        "medium": "copper"
+      }
+    },
+    {
+      "id": "cnd-8f31a56d-6c0c-429e-aff6-2e43b1fe2971",
+      "created_at": "2026-10-27T16:41:36.136Z",
+      "finish_tag": "ACS-1",
+      "color": "#b8860b",
+      "fill": "#b8860b",
+      "hatch": "horiz",
+      "multiplier": 1,
+      "waste_pct": 10,
+      "materials": [],
+      "cable_setup": {
+        "device_type": "access_door",
+        "cables_per_location": 1,
+        "cable_type": "18/4 SHLD CMP",
+        "vertical_ft": null,
+        "loop_device_ft": 15,
+        "loop_tr_ft": 10
+      }
+    },
+    {
+      "id": "cnd-b6d83eef-73de-4ba0-a83e-26268d2a44cf",
+      "created_at": "2026-10-27T16:41:36.140Z",
+      "finish_tag": "TRUNK",
+      "color": "#0d9488",
+      "fill": "#0d9488",
+      "hatch": "vert",
+      "multiplier": 1,
+      "waste_pct": 0,
+      "materials": [],
+      "role": "route",
+      "route_kind": "trunk"
+    },
+    {
+      "id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+      "created_at": "2026-10-27T16:41:36.141Z",
+      "finish_tag": "BRANCH",
+      "color": "#be185d",
+      "fill": "#be185d",
+      "hatch": "grid",
+      "multiplier": 1,
+      "waste_pct": 0,
+      "materials": [],
+      "role": "route",
+      "route_kind": "branch"
+    }
+  ],
+  "shapes": [
+    {
+      "id": "shp-d37b8ba5-6ce2-4501-970e-7f8ed064c9bd",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-6cfe0749-7623-4114-966c-e08be6397b08",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.12254901960784313,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        },
+        "agent_edits": 1
+      },
+      "label": "MDF"
+    },
+    {
+      "id": "shp-4437a653-6f5b-4642-bf48-646073eb4ea7",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-6cfe0749-7623-4114-966c-e08be6397b08",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.9803921568627451,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        },
+        "agent_edits": 1
+      },
+      "label": "IDF-1"
+    },
+    {
+      "id": "shp-afda9d7a-928e-4093-a553-50455d31ad92",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-e90afb40-4c7c-44f1-8241-d4bb32a6c57d",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.24509803921568626,
+          0.3282828282828283
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        },
+        "agent_edits": 1
+      },
+      "label": "OPEN OFFICE 110"
+    },
+    {
+      "id": "shp-af00fb2c-0fe6-45d8-acd7-0fd3a878ed06",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-e90afb40-4c7c-44f1-8241-d4bb32a6c57d",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.36764705882352944,
+          0.3282828282828283
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        },
+        "agent_edits": 1
+      },
+      "label": "OPEN OFFICE 110"
+    },
+    {
+      "id": "shp-81ed5aae-685a-4cec-8f82-ff596e503b30",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-e90afb40-4c7c-44f1-8241-d4bb32a6c57d",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.49019607843137253,
+          0.3282828282828283
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        },
+        "agent_edits": 1
+      },
+      "label": "OPEN OFFICE 110"
+    },
+    {
+      "id": "shp-94c3c4ad-bad8-4033-b423-082cbf473cdc",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-e90afb40-4c7c-44f1-8241-d4bb32a6c57d",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.6127450980392157,
+          0.3282828282828283
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        },
+        "agent_edits": 1
+      },
+      "label": "CONFERENCE 120"
+    },
+    {
+      "id": "shp-703530b0-1f44-4439-b822-d60cfc6d39fb",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-e90afb40-4c7c-44f1-8241-d4bb32a6c57d",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.7352941176470589,
+          0.3282828282828283
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        },
+        "agent_edits": 1
+      },
+      "label": "CONFERENCE 120"
+    },
+    {
+      "id": "shp-72ea31a4-b9f4-4fe8-8163-f29aca73e034",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-e2cf76e7-ddb1-40c1-9382-9460ab2b1257",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.28594771241830064,
+          0.6818181818181818
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        },
+        "agent_edits": 1
+      },
+      "label": "CORRIDOR 100"
+    },
+    {
+      "id": "shp-4a3d5a0f-0266-4391-8bc2-6c827b0ae179",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-e2cf76e7-ddb1-40c1-9382-9460ab2b1257",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.7761437908496732,
+          0.6818181818181818
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        },
+        "agent_edits": 1
+      },
+      "label": "CORRIDOR 100"
+    },
+    {
+      "id": "shp-80204e76-92d2-49fe-817d-882d6548bb55",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-10ed4c86-ed1d-4fdb-b7cd-4fd172bb2b46",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.4084967320261438,
+          0.7449494949494949
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        },
+        "agent_edits": 1
+      },
+      "label": "CORRIDOR 100"
+    },
+    {
+      "id": "shp-1f0581b7-baeb-4d9e-b174-2c1881dd6470",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-10ed4c86-ed1d-4fdb-b7cd-4fd172bb2b46",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.6535947712418301,
+          0.7449494949494949
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        },
+        "agent_edits": 1
+      },
+      "label": "CORRIDOR 100"
+    },
+    {
+      "id": "shp-c1dd2446-8e41-4cad-ae23-242cb048a899",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-10ed4c86-ed1d-4fdb-b7cd-4fd172bb2b46",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.8986928104575164,
+          0.7449494949494949
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        },
+        "agent_edits": 1
+      },
+      "label": "LOBBY 101"
+    },
+    {
+      "id": "shp-9320b5e4-3b75-4db2-9831-c091082c3bf7",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-8f31a56d-6c0c-429e-aff6-2e43b1fe2971",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.5718954248366013,
+          0.1893939393939394
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        },
+        "agent_edits": 1
+      },
+      "label": "CONFERENCE 120"
+    },
+    {
+      "id": "shp-1df4edc2-c510-41df-b967-9dd4ce89db22",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-8f31a56d-6c0c-429e-aff6-2e43b1fe2971",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.8169934640522876,
+          0.1893939393939394
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        },
+        "agent_edits": 1
+      },
+      "label": "LOBBY 101"
+    },
+    {
+      "id": "shp-5da37891-58e6-499c-8429-8633b6f95463",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-e90afb40-4c7c-44f1-8241-d4bb32a6c57d",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.9191176470588235,
+          0.3282828282828283
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        },
+        "agent_edits": 1
+      },
+      "label": "LOBBY 101"
+    },
+    {
+      "id": "shp-e8746c04-d90a-4b0f-8e97-d8149bdb2143",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-e90afb40-4c7c-44f1-8241-d4bb32a6c57d",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.9191176470588235,
+          0.1893939393939394
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        },
+        "agent_edits": 1
+      },
+      "label": "LOBBY 101"
+    },
+    {
+      "id": "shp-04510410-1f1a-4b71-a6f5-eb88943cebc3",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-b6d83eef-73de-4ba0-a83e-26268d2a44cf",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.12254901960784313,
+          0.5050505050505051
+        ],
+        [
+          0.24509803921568626,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 8.33
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-ec6277f4-6311-4021-9585-1929149603d8",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-b6d83eef-73de-4ba0-a83e-26268d2a44cf",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.24509803921568626,
+          0.5050505050505051
+        ],
+        [
+          0.28594771241830064,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 2.78
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-558ea755-e8aa-4a7d-b122-c38fd4086947",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-b6d83eef-73de-4ba0-a83e-26268d2a44cf",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.28594771241830064,
+          0.5050505050505051
+        ],
+        [
+          0.36764705882352944,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 5.56
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-b5505cc5-61f6-4ecb-9cab-5bc63fd73acb",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-b6d83eef-73de-4ba0-a83e-26268d2a44cf",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.36764705882352944,
+          0.5050505050505051
+        ],
+        [
+          0.4084967320261438,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 2.78
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-d1098813-2a84-4821-9478-57f9d61ff5c6",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-b6d83eef-73de-4ba0-a83e-26268d2a44cf",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.4084967320261438,
+          0.5050505050505051
+        ],
+        [
+          0.49019607843137253,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 5.56
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-ac0db7eb-b0eb-440a-bf79-4ead96348cc9",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-b6d83eef-73de-4ba0-a83e-26268d2a44cf",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.9803921568627451,
+          0.5050505050505051
+        ],
+        [
+          0.8986928104575164,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 5.56
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-24306b7b-b106-46c1-8bc7-a44a7d716079",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-b6d83eef-73de-4ba0-a83e-26268d2a44cf",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.8986928104575164,
+          0.5050505050505051
+        ],
+        [
+          0.8169934640522876,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 5.56
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-4d99effc-2124-47da-bff3-6d6089db2104",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-b6d83eef-73de-4ba0-a83e-26268d2a44cf",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.8169934640522876,
+          0.5050505050505051
+        ],
+        [
+          0.7761437908496732,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 2.78
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-8d5f7602-6b9d-45a5-96a6-908e0c47506b",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-b6d83eef-73de-4ba0-a83e-26268d2a44cf",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.7761437908496732,
+          0.5050505050505051
+        ],
+        [
+          0.7352941176470589,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 2.78
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-39efebef-5082-4250-95c3-23c2ae714c29",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-b6d83eef-73de-4ba0-a83e-26268d2a44cf",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.7352941176470589,
+          0.5050505050505051
+        ],
+        [
+          0.6535947712418301,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 5.56
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-9aee11b9-c95d-430c-8bcc-3a2e71297307",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-b6d83eef-73de-4ba0-a83e-26268d2a44cf",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.6535947712418301,
+          0.5050505050505051
+        ],
+        [
+          0.6127450980392157,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 2.78
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-bc3f438a-dd46-4216-bd82-470987cc86e3",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-b6d83eef-73de-4ba0-a83e-26268d2a44cf",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.6127450980392157,
+          0.5050505050505051
+        ],
+        [
+          0.5718954248366013,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 2.78
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-c1750653-e6c9-4eff-88aa-439ba9ef699e",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.24509803921568626,
+          0.3282828282828283
+        ],
+        [
+          0.24509803921568626,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 7.78
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-d7859bde-f984-4b00-8410-d186ff45644f",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.36764705882352944,
+          0.3282828282828283
+        ],
+        [
+          0.36764705882352944,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 7.78
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-88963b5b-3bff-47fa-a2ec-11dd88696a91",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.49019607843137253,
+          0.3282828282828283
+        ],
+        [
+          0.49019607843137253,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 7.78
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-beb95961-f9bc-43ba-872d-b0c3c5b713fd",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.6127450980392157,
+          0.3282828282828283
+        ],
+        [
+          0.6127450980392157,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 7.78
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-da7028f9-b7d3-49df-bbf4-020f379940cf",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.7352941176470589,
+          0.3282828282828283
+        ],
+        [
+          0.7352941176470589,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 7.78
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-a32b6d09-cac2-441c-a8ec-ef2a391a5cbe",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.28594771241830064,
+          0.6818181818181818
+        ],
+        [
+          0.28594771241830064,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 7.78
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-289faa75-a7c7-4ebe-82c4-372cf1c00a66",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.7761437908496732,
+          0.6818181818181818
+        ],
+        [
+          0.7761437908496732,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 7.78
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-cbdcf9fb-f5da-4e63-a6c6-ec5a81b7041e",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.4084967320261438,
+          0.7449494949494949
+        ],
+        [
+          0.4084967320261438,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 10.56
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-fd5b6e66-f948-4d8a-8cb7-e74598b9df84",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.6535947712418301,
+          0.7449494949494949
+        ],
+        [
+          0.6535947712418301,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 10.56
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-baa32b6b-e28c-4a8a-aa91-f088fd5555e5",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.8986928104575164,
+          0.7449494949494949
+        ],
+        [
+          0.8986928104575164,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 10.56
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-9aae3924-e83b-4d83-b5e1-bf7bc1013fd4",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.5718954248366013,
+          0.1893939393939394
+        ],
+        [
+          0.5718954248366013,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 13.89
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-5dc66f0c-e8f4-463e-93ba-c6a7f3b6a217",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.8169934640522876,
+          0.1893939393939394
+        ],
+        [
+          0.8169934640522876,
+          0.5050505050505051
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 13.89
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-ed5d9fa4-0449-4c31-b29f-953839ba3c8f",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.9191176470588235,
+          0.1893939393939394
+        ],
+        [
+          0.9191176470588235,
+          0.41035353535353536
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 9.72
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    }
+  ],
+  "markups": [],
+  "rfis": [],
+  "cable_runs": [
+    {
+      "id": "run-dfa1e64e-6d27-41ae-b571-06af84369ec7",
+      "device_shape_ids": [
+        "shp-afda9d7a-928e-4093-a553-50455d31ad92"
+      ],
+      "route_shape_ids": [
+        "shp-c1750653-e6c9-4eff-88aa-439ba9ef699e",
+        "shp-04510410-1f1a-4b71-a6f5-eb88943cebc3"
+      ],
+      "tr_id": "shp-d37b8ba5-6ce2-4501-970e-7f8ed064c9bd",
+      "provenance": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "created_at": "2026-10-27T16:41:36.141Z"
+      }
+    },
+    {
+      "id": "run-10fa28d6-4b48-43f1-b739-f82a026ee92b",
+      "device_shape_ids": [
+        "shp-af00fb2c-0fe6-45d8-acd7-0fd3a878ed06"
+      ],
+      "route_shape_ids": [
+        "shp-d7859bde-f984-4b00-8410-d186ff45644f",
+        "shp-558ea755-e8aa-4a7d-b122-c38fd4086947",
+        "shp-ec6277f4-6311-4021-9585-1929149603d8",
+        "shp-04510410-1f1a-4b71-a6f5-eb88943cebc3"
+      ],
+      "tr_id": "shp-d37b8ba5-6ce2-4501-970e-7f8ed064c9bd",
+      "provenance": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "created_at": "2026-10-27T16:41:36.141Z"
+      }
+    },
+    {
+      "id": "run-66e44f6e-dd34-4d0c-a7ea-6357a54dd680",
+      "device_shape_ids": [
+        "shp-81ed5aae-685a-4cec-8f82-ff596e503b30"
+      ],
+      "route_shape_ids": [
+        "shp-88963b5b-3bff-47fa-a2ec-11dd88696a91",
+        "shp-d1098813-2a84-4821-9478-57f9d61ff5c6",
+        "shp-b5505cc5-61f6-4ecb-9cab-5bc63fd73acb",
+        "shp-558ea755-e8aa-4a7d-b122-c38fd4086947",
+        "shp-ec6277f4-6311-4021-9585-1929149603d8",
+        "shp-04510410-1f1a-4b71-a6f5-eb88943cebc3"
+      ],
+      "tr_id": "shp-d37b8ba5-6ce2-4501-970e-7f8ed064c9bd",
+      "provenance": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "created_at": "2026-10-27T16:41:36.142Z"
+      }
+    },
+    {
+      "id": "run-fa73740c-41d6-45c6-9b21-dbc06e1ac8e9",
+      "device_shape_ids": [
+        "shp-94c3c4ad-bad8-4033-b423-082cbf473cdc"
+      ],
+      "route_shape_ids": [
+        "shp-beb95961-f9bc-43ba-872d-b0c3c5b713fd",
+        "shp-9aee11b9-c95d-430c-8bcc-3a2e71297307",
+        "shp-39efebef-5082-4250-95c3-23c2ae714c29",
+        "shp-8d5f7602-6b9d-45a5-96a6-908e0c47506b",
+        "shp-4d99effc-2124-47da-bff3-6d6089db2104",
+        "shp-24306b7b-b106-46c1-8bc7-a44a7d716079",
+        "shp-ac0db7eb-b0eb-440a-bf79-4ead96348cc9"
+      ],
+      "tr_id": "shp-4437a653-6f5b-4642-bf48-646073eb4ea7",
+      "provenance": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "created_at": "2026-10-27T16:41:36.142Z"
+      }
+    },
+    {
+      "id": "run-ed7c5969-ee3e-497e-8bda-df2c69d6cb4c",
+      "device_shape_ids": [
+        "shp-703530b0-1f44-4439-b822-d60cfc6d39fb"
+      ],
+      "route_shape_ids": [
+        "shp-da7028f9-b7d3-49df-bbf4-020f379940cf",
+        "shp-8d5f7602-6b9d-45a5-96a6-908e0c47506b",
+        "shp-4d99effc-2124-47da-bff3-6d6089db2104",
+        "shp-24306b7b-b106-46c1-8bc7-a44a7d716079",
+        "shp-ac0db7eb-b0eb-440a-bf79-4ead96348cc9"
+      ],
+      "tr_id": "shp-4437a653-6f5b-4642-bf48-646073eb4ea7",
+      "provenance": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "created_at": "2026-10-27T16:41:36.142Z"
+      }
+    },
+    {
+      "id": "run-1841d439-c0cb-4382-b708-ec6a452d3742",
+      "device_shape_ids": [
+        "shp-72ea31a4-b9f4-4fe8-8163-f29aca73e034"
+      ],
+      "route_shape_ids": [
+        "shp-a32b6d09-cac2-441c-a8ec-ef2a391a5cbe",
+        "shp-ec6277f4-6311-4021-9585-1929149603d8",
+        "shp-04510410-1f1a-4b71-a6f5-eb88943cebc3"
+      ],
+      "tr_id": "shp-d37b8ba5-6ce2-4501-970e-7f8ed064c9bd",
+      "provenance": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "created_at": "2026-10-27T16:41:36.143Z"
+      }
+    },
+    {
+      "id": "run-37948565-8d03-4239-834c-4a563aab0626",
+      "device_shape_ids": [
+        "shp-4a3d5a0f-0266-4391-8bc2-6c827b0ae179"
+      ],
+      "route_shape_ids": [
+        "shp-289faa75-a7c7-4ebe-82c4-372cf1c00a66",
+        "shp-4d99effc-2124-47da-bff3-6d6089db2104",
+        "shp-24306b7b-b106-46c1-8bc7-a44a7d716079",
+        "shp-ac0db7eb-b0eb-440a-bf79-4ead96348cc9"
+      ],
+      "tr_id": "shp-4437a653-6f5b-4642-bf48-646073eb4ea7",
+      "provenance": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "created_at": "2026-10-27T16:41:36.143Z"
+      }
+    },
+    {
+      "id": "run-ac588853-059f-464b-b525-9a1372bcc197",
+      "device_shape_ids": [
+        "shp-80204e76-92d2-49fe-817d-882d6548bb55"
+      ],
+      "route_shape_ids": [
+        "shp-cbdcf9fb-f5da-4e63-a6c6-ec5a81b7041e",
+        "shp-b5505cc5-61f6-4ecb-9cab-5bc63fd73acb",
+        "shp-558ea755-e8aa-4a7d-b122-c38fd4086947",
+        "shp-ec6277f4-6311-4021-9585-1929149603d8",
+        "shp-04510410-1f1a-4b71-a6f5-eb88943cebc3"
+      ],
+      "tr_id": "shp-d37b8ba5-6ce2-4501-970e-7f8ed064c9bd",
+      "vertical_override": 280,
+      "provenance": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "created_at": "2026-10-27T16:41:36.143Z"
+      }
+    },
+    {
+      "id": "run-0af21fd1-1294-4c53-b3b7-33e895d031c8",
+      "device_shape_ids": [
+        "shp-1f0581b7-baeb-4d9e-b174-2c1881dd6470"
+      ],
+      "route_shape_ids": [
+        "shp-fd5b6e66-f948-4d8a-8cb7-e74598b9df84",
+        "shp-39efebef-5082-4250-95c3-23c2ae714c29",
+        "shp-8d5f7602-6b9d-45a5-96a6-908e0c47506b",
+        "shp-4d99effc-2124-47da-bff3-6d6089db2104",
+        "shp-24306b7b-b106-46c1-8bc7-a44a7d716079",
+        "shp-ac0db7eb-b0eb-440a-bf79-4ead96348cc9"
+      ],
+      "tr_id": "shp-4437a653-6f5b-4642-bf48-646073eb4ea7",
+      "provenance": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "created_at": "2026-10-27T16:41:36.144Z"
+      }
+    },
+    {
+      "id": "run-75b8de42-ba7f-4396-8f97-7e96b4227060",
+      "device_shape_ids": [
+        "shp-c1dd2446-8e41-4cad-ae23-242cb048a899"
+      ],
+      "route_shape_ids": [
+        "shp-baa32b6b-e28c-4a8a-aa91-f088fd5555e5",
+        "shp-ac0db7eb-b0eb-440a-bf79-4ead96348cc9"
+      ],
+      "tr_id": "shp-4437a653-6f5b-4642-bf48-646073eb4ea7",
+      "provenance": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "created_at": "2026-10-27T16:41:36.144Z"
+      }
+    },
+    {
+      "id": "run-59669b8c-eb02-45e0-83ca-e235f49471dd",
+      "device_shape_ids": [
+        "shp-9320b5e4-3b75-4db2-9831-c091082c3bf7"
+      ],
+      "route_shape_ids": [
+        "shp-9aae3924-e83b-4d83-b5e1-bf7bc1013fd4",
+        "shp-bc3f438a-dd46-4216-bd82-470987cc86e3",
+        "shp-9aee11b9-c95d-430c-8bcc-3a2e71297307",
+        "shp-39efebef-5082-4250-95c3-23c2ae714c29",
+        "shp-8d5f7602-6b9d-45a5-96a6-908e0c47506b",
+        "shp-4d99effc-2124-47da-bff3-6d6089db2104",
+        "shp-24306b7b-b106-46c1-8bc7-a44a7d716079",
+        "shp-ac0db7eb-b0eb-440a-bf79-4ead96348cc9"
+      ],
+      "tr_id": "shp-4437a653-6f5b-4642-bf48-646073eb4ea7",
+      "vertical_override": 9,
+      "provenance": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "created_at": "2026-10-27T16:41:36.145Z"
+      }
+    },
+    {
+      "id": "run-0eccdba1-f074-4221-8f70-e7fd00fb9a57",
+      "device_shape_ids": [
+        "shp-1df4edc2-c510-41df-b967-9dd4ce89db22"
+      ],
+      "route_shape_ids": [
+        "shp-5dc66f0c-e8f4-463e-93ba-c6a7f3b6a217",
+        "shp-24306b7b-b106-46c1-8bc7-a44a7d716079",
+        "shp-ac0db7eb-b0eb-440a-bf79-4ead96348cc9"
+      ],
+      "tr_id": "shp-4437a653-6f5b-4642-bf48-646073eb4ea7",
+      "vertical_override": 12,
+      "provenance": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "created_at": "2026-10-27T16:41:36.145Z"
+      }
+    },
+    {
+      "id": "hold-71296ab4-0613-4ab2-892c-cc1e3423e4ee",
+      "device_shape_ids": [
+        "shp-5da37891-58e6-499c-8429-8633b6f95463"
+      ],
+      "route_shape_ids": [],
+      "tr_id": "",
+      "hold": {
+        "reason": "Furnished and installed by others"
+      },
+      "provenance": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "created_at": "2026-10-27T16:41:36.147Z"
+      }
+    }
+  ],
+  "sheet_group": [],
+  "last_group": [],
+  "sheet_tabs": []
+}
