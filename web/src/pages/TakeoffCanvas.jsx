@@ -157,7 +157,7 @@ import { rollColorForType } from "../lib/rollgoods.js";
 import { computeRollTakeoff, seamLfByShape } from "../lib/rollTakeoff.js";
 // Division 27 cable runs (docs/design/CABLE_SETUP.md) — the pure library;
 // the canvas only holds the records, resolves them, and hands the result on.
-import { sanitizeCableRuns, computeCableTakeoff, applyCableRunCommand, mintCableRun, isTrCondition } from "../lib/cable.js";
+import { sanitizeCableRuns, computeCableTakeoff, applyCableRunCommand, mintCableRun, mintCableHold, holdRefusal, isTrCondition } from "../lib/cable.js";
 // Phase 2 canvas UI — the click logic is pure (lib/cableLink.js); the panels,
 // the overlay and the readout are their own components
 import { EMPTY_LINK, linkClick, linkUndoPick, linkReadout } from "../lib/cableLink.js";
@@ -1561,10 +1561,12 @@ export default function TakeoffCanvas() {
   // ── cable runs (Division 27): resolved once per change, null when no condition
   // carries a cable setup. uppFor answers the scale gate per sheet (stitches
   // included); lengths come from the shapes' stored plan feet, never estimated.
+  // scaleUnconfirmed flags a route on an agent-set scale no person confirmed
+  // (the scale gate's map: false = awaiting a human); tabLabel names it.
   const cableTakeoff = useMemo(
-    () => computeCableTakeoff(conditions, shapes, cableRuns, { uppFor: (k) => uppFor(k) }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- uppFor reads scales (listed) + renderScalesRef pinned to RENDER_SCALE, the roll memo's rule
-    [conditions, shapes, cableRuns, scales]
+    () => computeCableTakeoff(conditions, shapes, cableRuns, { uppFor: (k) => uppFor(k), scaleUnconfirmed: (k) => scaleUnconfirmed[k] === false, sheetLabel: (k) => tabLabel(k) }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- uppFor reads scales (listed) + renderScalesRef pinned to RENDER_SCALE, the roll memo's rule; tabLabel only words a warning
+    [conditions, shapes, cableRuns, scales, scaleUnconfirmed]
   );
   // Phase 2 wiring: which conditions hold TR markers (the overlay names them),
   // the Link Run readout (lib/cableLink.js → lib/cable.js), and the handlers.
@@ -1599,6 +1601,16 @@ export default function TakeoffCanvas() {
     dispatchCableRun({ type: "link", run });
     setLinkDraft(EMPTY_LINK);
     setCommitMsg(`Run linked: ${rd.device} → ${rd.tr} · per cable ${Math.round(lenVal(rd.per_cable_lf, units) * 100) / 100} ${lenUnit(units)} × ${rd.cables}. Click the next device (⌘Z unlinks).`);
+  }
+  // Hold (Runs panel): devices deliberately left without a run, with the
+  // reason — one record on the run list, one undo step; release = unlink
+  function holdCableDevices(ids, reason) {
+    const refusal = holdRefusal({ device_shape_ids: ids, reason }, conditions, shapes, cableRuns);
+    if (refusal) { setCommitMsg(`Couldn't hold those devices: ${refusal}`); return false; }
+    const by = authorName();
+    dispatchCableRun({ type: "link", run: mintCableHold({ device_shape_ids: ids, reason, provenance: { method: "manual", ...(by ? { author: by } : {}) } }) });
+    setCommitMsg(`${ids.length} device${ids.length === 1 ? "" : "s"} held — out of totals, listed with the reason. ⌘Z undoes.`);
+    return true;
   }
   // "put it on screen" for any cable item (Runs panel, Report) — the Work
   // panel's locate path: open the sheet, frame the shape, select it
@@ -3623,7 +3635,10 @@ export default function TakeoffCanvas() {
     return () => window.removeEventListener("keydown", onKey);
     // approvals is a real dep: ⌘Z's undoShapeCommand closes over it (the
     // family branch), and a stale capture would undo against a pre-seal array.
-  }, [tool, selectedId, selVert, selectedMarkupId, showMarkups, poly, proposal, ocSel, shapes, approvals, sheetKey, groupSig, scales, focusKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    // cableRuns likewise (the "cable" family): without it, ⌘Z after a hold or
+    // an accept applied its inverse to the run list as it stood when the
+    // handler last subscribed — and set that stale list back, dropping work.
+  }, [tool, selectedId, selVert, selectedMarkupId, showMarkups, poly, proposal, ocSel, shapes, approvals, cableRuns, sheetKey, groupSig, scales, focusKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The typed "drawing says" value belongs to ONE completed two-point check.
   // The moment the measurement is no longer complete — third-click restart,
@@ -11137,7 +11152,8 @@ export default function TakeoffCanvas() {
           <RunsPanel takeoff={cableTakeoff} conditions={conditions} shapes={shapes} units={units}
             linkArmed={tool === "cablelink"} onArmLink={() => setTool((t) => (t === "cablelink" ? "select" : "cablelink"))}
             onLocate={locateCableShape}
-            onUnlink={(id) => { dispatchCableRun({ type: "unlink", id }); setCommitMsg("Run unlinked — the shapes stay. ⌘Z re-links it."); }}
+            onUnlink={(id) => { dispatchCableRun({ type: "unlink", id }); setCommitMsg(id.startsWith("hold-") ? "Hold released — its devices are unlinked again. ⌘Z re-holds them." : "Run unlinked — the shapes stay. ⌘Z re-links it."); }}
+            onHold={holdCableDevices}
             onAccept={(ids) => { const r = dispatchCableRun({ type: "review", ids }); if (r.inverse) setCommitMsg(`${r.inverse.restore.length} run${r.inverse.restore.length === 1 ? "" : "s"} accepted — their route segments keep their own review status.`); }}
             onRenameTr={(id, name) => dispatchShape({ type: "label", ids: [id], value: name })}
             onClose={() => setRunsPanelOpen(false)} />

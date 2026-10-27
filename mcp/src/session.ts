@@ -71,7 +71,7 @@ import { hasRollSetup, mintRollSetup, computeRollTakeoff, rollReportRows, seamLf
 // Division 27 cable runs (docs/design/CABLE_SETUP.md) — the ONE pure cable
 // library, shared with the canvas: setup defaults and validation, run
 // resolution, the summary rollups and the refusal texts all live there.
-import { hasCableSetup, mintCableSetup, isDeviceType, mintCableRun, computeCableTakeoff, cableReportBlock, linkRunRefusal, cableSetupProblems as cableSetupProblemsJs } from "../../web/src/lib/cable.js";
+import { hasCableSetup, mintCableSetup, isDeviceType, normalizeDeviceType, DEVICE_TYPES, DEVICE_TYPE_ALIASES, mintCableRun, mintCableHold, holdRefusal, isCableHold, computeCableTakeoff, cableReportBlock, linkRunRefusal, cableSetupProblems as cableSetupProblemsJs } from "../../web/src/lib/cable.js";
 import { gridPxPerFoot, drawGrid, drawShapes, drawMarks, type Ctx2D, type ToCanvas, type ViewMarks } from "./view.ts";
 
 // Conditions and snap behavior minted here are identical to the browser's
@@ -100,11 +100,14 @@ export interface CableTakeoff {
     runs: {
       id: string; status: "linked" | "withheld" | "broken"; condition_id: string | null; finish_tag: string; device_type: string; cable_type: string;
       device_shape_ids: string[]; route_shape_ids: string[]; tr_id: string; tr_name: string; sheet_ids: string[];
+      device_sheet_ids: string[]; tr_sheet_id: string; over_length?: true; scale_unconfirmed?: true;
       route_lf: number; vertical_ft: number | null; loop_device_ft: number | null; loop_tr_ft: number | null;
       per_cable_lf: number | null; cables: number | null; location_lf: number | null;
       review: "pending" | "accepted" | "human"; pending: boolean; reason?: string; reasons?: string[]; notes?: string[]; leg_warning?: true;
     }[];
     unlinked: { devices: Record<string, unknown>[]; routes: Record<string, unknown>[] };
+    held: (Record<string, unknown> & { shape_id: string; hold_id: string; reason: string })[];
+    holds: { id: string; reason: string; device_shape_ids: string[]; held: number; review: "pending" | "accepted" | "human"; pending: boolean }[];
     warnings: string[];
   };
   summary: { rows: (Record<string, unknown> & { condition_id: string })[]; by_tr: Record<string, unknown>[]; by_cable_type: Record<string, unknown>[]; totals: Record<string, number>; warnings: string[] };
@@ -213,6 +216,10 @@ export interface CableRun {
   route_shape_ids: string[];
   tr_id: string;
   cables_override?: number;
+  /** Present on a HOLD (web/src/lib/cable.js mintCableHold): device
+   * locations deliberately left without a run, with the reason. A hold rides
+   * cable_runs beside the runs; it has no route and no TR. */
+  hold?: { reason: string };
   provenance: { method: string; actor?: "agent"; reviewed?: boolean; created_at?: string; author?: string };
 }
 
@@ -3850,7 +3857,7 @@ export class Session {
     const cableT = this.cableTakeoff();
     return {
       conditions: lean, totals: grandTotals(rows),
-      ...(cableT ? { cable: { rows: cableT.summary.rows, by_tr: cableT.summary.by_tr, by_cable_type: cableT.summary.by_cable_type, totals: cableT.summary.totals, unlinked_devices: cableT.resolved.unlinked.devices.length, unlinked_routes: cableT.resolved.unlinked.routes.length, warnings: cableT.summary.warnings } } : {}),
+      ...(cableT ? { cable: { rows: cableT.summary.rows, by_tr: cableT.summary.by_tr, by_cable_type: cableT.summary.by_cable_type, totals: cableT.summary.totals, unlinked_devices: cableT.resolved.unlinked.devices.length, unlinked_routes: cableT.resolved.unlinked.routes.length, held_devices: cableT.resolved.held.length, warnings: cableT.summary.warnings } } : {}),
       shared_floor_sf: scope.shared_floor_sf,
       ...(scope.unmeasured.length ? { shared_floor_unmeasured: scope.unmeasured } : {}),
       ...(unconfirmed.length ? { scale_unconfirmed: unconfirmed } : {}),
@@ -4246,8 +4253,10 @@ export class Session {
       } else {
         const given = Object.fromEntries(Object.entries(opts.cable_setup).filter(([, v]) => v !== undefined));
         const prevType = c.cable_setup?.device_type;
-        const type = (given.device_type as string | undefined) ?? prevType;
-        if (!isDeviceType(type)) throw new UserError(`cable_setup.device_type is required on a fresh opt-in — one of wall_outlet, wap, camera, access_door, ceiling_other, custom.`);
+        const type = normalizeDeviceType((given.device_type as string | undefined) ?? prevType) ?? undefined;
+        if (!isDeviceType(type)) throw new UserError(given.device_type !== undefined
+          ? `cable_setup.device_type ${JSON.stringify(given.device_type)} is not a device type — use one of ${DEVICE_TYPES.join(", ")} (access control → access_door; aliases accepted: ${Object.keys(DEVICE_TYPE_ALIASES).join(", ")}).`
+          : `cable_setup.device_type is required on a fresh opt-in — one of ${DEVICE_TYPES.join(", ")}.`);
         const base = hasCableSetup(c) && type === prevType ? (c.cable_setup as object) : (mintCableSetup(type) as object);
         c.cable_setup = { ...base, ...given, device_type: type } as CableSetup;
       }
@@ -4267,6 +4276,16 @@ export class Session {
     if (!c) {
       const known = this.conditions.map((x) => x.finish_tag);
       throw new UserError(`No condition ${JSON.stringify(tag)}.${known.length ? ` Known tags: ${known.join(", ")}.` : " Nothing has minted a condition yet — commit a measurement or add materials first."}`);
+    }
+    // a device-type ALIAS ("access_control") reads as its canonical type
+    // before anything compares types; the reply says which it was read as
+    let aliasNote: string | undefined;
+    if (opts.cable_setup && typeof opts.cable_setup.device_type === "string") {
+      const canon = normalizeDeviceType(opts.cable_setup.device_type);
+      if (canon && canon !== opts.cable_setup.device_type) {
+        aliasNote = `device_type ${JSON.stringify(opts.cable_setup.device_type)} read as "${canon}" — the document stores the canonical type`;
+        opts = { ...opts, cable_setup: { ...opts.cable_setup, device_type: canon } };
+      }
     }
     const before = {
       waste_pct: c.waste_pct, multiplier: c.multiplier, height_ft: c.height_ft, rise_ft: c.rise_ft, drop_ft: c.drop_ft,
@@ -4310,6 +4329,7 @@ export class Session {
       const rows = t ? t.summary.rows.filter((r) => r.condition_id === c.id) : [];
       cable = {
         problems: cableSetupProblemsOf(c), rows,
+        ...(aliasNote ? { device_type_alias: aliasNote } : {}),
         ...(Object.keys(minted).length ? { minted, note: "starting values, not verified against spec — these came from the device type, not the project spec; confirm vertical_ft, loop_device_ft and loop_tr_ft (edit_condition patches them)" } : {}),
       };
     }
@@ -4341,6 +4361,10 @@ export class Session {
         const s = this.sheets.get(sheetId);
         return s ? this.scaleGate(s) : `sheet ${sheetId} is not loaded in this session (a stitched surface does not round-trip through MCP — link it in the canvas)`;
       },
+      // an agent-set scale lands unconfirmed (set_scale): a run on it counts
+      // and is flagged, with one warning naming the sheets to confirm
+      scaleUnconfirmed: (sheetId: string) => this.sheets.get(sheetId)?.scaleConfirmed === false,
+      sheetLabel: (sheetId: string) => this.sheets.get(sheetId)?.sheetNumber || sheetId,
     };
   }
 
@@ -4368,10 +4392,12 @@ export class Session {
     const r = t.resolved.runs.find((x) => x.id === run.id)!;
     return {
       run_id: run.id, status: r.status, condition: r.finish_tag, device_type: r.device_type, cable_type: r.cable_type,
-      tr: r.tr_name || r.tr_id, sheets: r.sheet_ids,
+      tr: r.tr_name || r.tr_id, sheets: r.sheet_ids, device_sheets: r.device_sheet_ids, tr_sheet: r.tr_sheet_id,
       route_lf: round2(r.route_lf), vertical_ft: r.vertical_ft, loop_device_ft: r.loop_device_ft, loop_tr_ft: r.loop_tr_ft,
       per_cable_lf: round2(r.per_cable_lf as number), cables: r.cables, location_lf: round2(r.location_lf as number),
       reviewed: false,
+      ...(r.over_length ? { over_length: true as const } : {}),
+      ...(r.scale_unconfirmed ? { scale_unconfirmed: true as const } : {}),
       ...(r.notes ? { notes: r.notes } : {}),
       note: "Pending human review (it counts in totals, as every pending agent shape does). Lengths resolve from the linked shapes: a recalibration or an edit re-flows this run; deleting a linked shape breaks it, listed under unlinked.",
     };
@@ -4381,19 +4407,24 @@ export class Session {
    * the unlinked devices and routes, the leg warnings, and the summary. */
   listRuns() {
     const t = this.cableTakeoff();
-    if (!t) return { runs: [], unlinked: { devices: [], routes: [] }, warnings: [], summary: null, count: 0, note: "No condition carries a cable_setup and no run exists — set one with edit_condition { cable_setup } first." };
-    const block = cableBlock(t) as { unlinked: Record<string, unknown>; warnings: string[] };
+    if (!t) return { runs: [], unlinked: { devices: [], routes: [] }, held: [], holds: [], warnings: [], summary: null, count: 0, note: "No condition carries a cable_setup and no run exists — set one with edit_condition { cable_setup } first." };
+    const block = cableBlock(t) as { unlinked: Record<string, unknown>; held: Record<string, unknown>[]; warnings: string[] };
     return {
       runs: t.resolved.runs.map((r) => ({
         run_id: r.id, status: r.status, condition: r.finish_tag, device_type: r.device_type, cable_type: r.cable_type,
         tr: r.tr_name || r.tr_id, tr_id: r.tr_id, device_shape_ids: r.device_shape_ids, route_shape_ids: r.route_shape_ids, sheets: r.sheet_ids,
+        device_sheets: r.device_sheet_ids, tr_sheet: r.tr_sheet_id,
         route_lf: round2(r.route_lf),
+        ...(r.over_length ? { over_length: true as const } : {}),
+        ...(r.scale_unconfirmed ? { scale_unconfirmed: true as const } : {}),
         ...(r.status === "linked" ? { vertical_ft: r.vertical_ft, loop_device_ft: r.loop_device_ft, loop_tr_ft: r.loop_tr_ft, per_cable_lf: round2(r.per_cable_lf as number), cables: r.cables, location_lf: round2(r.location_lf as number) } : {}),
         review: r.review,
         ...(r.reason ? { reason: r.reason } : {}),
         ...(r.notes ? { notes: r.notes } : {}),
       })),
       unlinked: block.unlinked,
+      held: block.held,
+      holds: t.resolved.holds,
       warnings: block.warnings,
       summary: { rows: t.summary.rows, by_tr: t.summary.by_tr, by_cable_type: t.summary.by_cable_type, totals: t.summary.totals },
       count: t.resolved.runs.length,
@@ -4409,7 +4440,40 @@ export class Session {
     }
     const [run] = this.cableRuns.splice(i, 1);
     this.record({ op: "run_unlink", tool: "unlink_run", run, index: i });
-    return { unlinked: id, run_count: this.cableRuns.length, note: "The device, route and TR shapes stay committed; only the link is gone. undo_last re-seats it." };
+    const hold = isCableHold(run);
+    return {
+      unlinked: id, ...(hold ? { released_hold: true as const } : {}),
+      run_count: this.cableRuns.filter((r) => !isCableHold(r)).length,
+      note: hold
+        ? `Hold released — its ${run.device_shape_ids.length} device(s) return to the unlinked list until a run links them or a new hold names them. undo_last re-seats the hold.`
+        : "The device, route and TR shapes stay committed; only the link is gone. undo_last re-seats it.",
+    };
+  }
+
+  /** hold_devices: name device locations that DELIBERATELY get no run, with
+   * the reason (routing not drawn, by others, future). They stay excluded
+   * from totals exactly as unlinked devices are — a hold never adds a length
+   * — but list_runs, the report and the marked set show them as HELD with
+   * the reason, so the gap reads as a decision, not a miss. Lands pending
+   * human review like a run; unlink_run releases it; one undo_last step. */
+  holdDevices(opts: { device_shape_ids: string[]; reason: string }) {
+    if (!this.docs.size) throw new UserError("No plan loaded — call load_plan first.");
+    const refusal = (holdRefusal as unknown as (o: typeof opts, c: Condition[], s: Shape[], r: CableRun[]) => string | null)(opts, this.conditions, this.shapes, this.cableRuns);
+    if (refusal) throw new UserError(`Can't hold those devices: ${refusal}`);
+    const rec = mintCableHold({ ...opts, provenance: { method: "manual", actor: "agent" } }) as CableRun;
+    this.cableRuns.push(rec);
+    this.record({ op: "run_link", tool: "hold_devices", id: rec.id });
+    const t = this.cableTakeoff()!;
+    const held = t.resolved.held.filter((d) => d.hold_id === rec.id);
+    const byTag = new Map<string, number>();
+    for (const d of held) byTag.set(String(d.finish_tag), (byTag.get(String(d.finish_tag)) || 0) + 1);
+    return {
+      hold_id: rec.id, reason: rec.hold!.reason, held: held.length,
+      by_condition: [...byTag].map(([condition, n]) => ({ condition, devices: n })),
+      unlinked_devices: t.resolved.unlinked.devices.length,
+      reviewed: false as const,
+      note: "Pending human review. Held devices stay out of every total (a hold adds no length) and are listed as held with this reason in list_runs, export_report and the marked set. unlink_run with this hold_id releases them.",
+    };
   }
 
   /**

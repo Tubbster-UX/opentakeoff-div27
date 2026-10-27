@@ -401,7 +401,9 @@ estimated: horizontal length comes only from route segments you trace.
 **+ cable…** in its properties:
 
 - **A device type** (Wall outlet, WAP, Camera, Access control door, Other ceiling device,
-  Custom) makes it a device condition. The type fills in its starting vertical and service
+  Custom) makes it a device condition. One vertical applies to every device on a condition,
+  so devices with different verticals (door contacts and a keypad, say) go on separate
+  conditions. The type fills in its starting vertical and service
   loops, and the condition's waste becomes 12% if it had none. The project spec governs: edit
   **Cables/loc**, **Type** (free text such as `CAT6A`, which groups the summary), **Vertical**,
   **Loop dev** and **Loop TR** to match it. An Access control door has no starting vertical;
@@ -429,16 +431,42 @@ appears as a label bucket in the Report's group-by-label view and the workbook's
 tab). **⌖** puts any item on screen. Unlinked devices carry an amber dashed ring on the sheet,
 unlinked routes an amber halo, and each TR prints its name.
 
+**Hold devices that get no run.** When you decide some devices get no run, such as an area whose
+routing the drawings don't show or devices furnished by others, tick them in the panel's
+Unlinked list, type the reason, and press **Hold**. Held devices stay out of every total, as
+unlinked ones do, but they move to a **Held** list with your reason, wear a grey dotted ring on
+the sheet instead of the amber one, and print as held in the Report, the exports and the marked
+set. **release** returns them to the unlinked list; holding and releasing are undoable.
+
+**Flags you should not price past.** A run longer than **295 ft per cable** (the TIA-568 limit
+for a 4-pair copper permanent link, 90 m) still counts, because the measured length is the
+truth, but it is flagged in the Runs panel and named in a warning. Check the route; if it
+stands, the run needs a closer TR or a length test and an owner notice. A route on a sheet
+whose scale an agent set and no person has confirmed is flagged the same way. Confirm the
+scale before pricing, because every cable length on that sheet rests on it.
+
 Per cable LF = measured route + vertical + both loops. Pulls are per location and cables per
 pull; the condition's waste % applies only to the order figure and ×N to the whole row.
 Linking, unlinking and accepting are on the undo stack (`⌘Z`); cable setup field edits, like
 other condition properties, are not.
 
 The Report shows a **Cable summary** (per condition and TR, subtotaled by TR and by cable type,
-device EA beside pulls so an unlinked device shows as a gap) and the **Unlinked** list, where
-**Show** closes the Report and puts the item on screen. CSV, Excel and JSON carry the same
-tables plus a per-run sheet, and the marked set's cover tallies pulls, pending runs and
-unlinked devices. Agents do the same work over MCP (`link_run`, `list_runs`, `unlink_run` in
+device EA beside pulls, so the gap is exactly the unlinked plus held devices), the **Held**
+list and the **Unlinked** list, where **Show** closes the Report and puts the item on screen.
+CSV, Excel and JSON carry the same tables plus a per-run sheet naming each run's device sheet,
+route sheet(s) and TR sheet.
+
+**The marked set** draws each run's route with a chip reading its run ID, device condition and
+per-cable length (`run-c711ef · DATA-1 · 54.6 LF`). The chip is amber with `>295` for an
+over-length run and red with the status for a withheld or broken one. The same run ID is
+printed beside the device marker, so a device on the comms plan connects to its route on
+the ceiling plan. The chips are placed clear of each other along the route. Unlinked devices
+get an amber ring and held ones a grey ring, and each TR prints its name. The cover adds pulls,
+cables, net and order cable LF under each device condition, says what a route condition is
+(pathway, not a cable quantity), keys the marks, and prints the cable warnings in full. The
+run ID on a chip is the start of the full ID in the Cable runs sheet.
+
+Agents do the same work over MCP (`link_run`, `list_runs`, `unlink_run`, `hold_devices` in
 [`docs/MCP.md`](MCP.md)); their runs arrive pending and count, as their shapes do. Design:
 [`docs/design/CABLE_SETUP.md`](design/CABLE_SETUP.md).
 
@@ -1080,7 +1108,7 @@ What's sent, and only while an agent run you started is going: your goal, the pr
 
 The same engine speaks [MCP](https://modelcontextprotocol.io), one command away:
 `npx -y opentakeoff-mcp` (or the one-click `opentakeoff-mcp.mcpb` bundle for Claude Desktop). **Help → Connect your AI** in the app (also on the opening screen and in the **⋯** menu) has the setup for Claude Desktop, Claude Code, Codex and Cursor with copy buttons, and a first question to ask about the sample plan; [CONNECT.md](CONNECT.md) is the same walk-through. An
-MCP client gets **<!--tool-count-->56<!--/tool-count--> tools** plus browsable sheet resources, over the very same measuring engine,
+MCP client gets **<!--tool-count-->57<!--/tool-count--> tools** plus browsable sheet resources, over the very same measuring engine,
 with the same scale gate and the same provenance receipts:
 
 | Group | Tools |

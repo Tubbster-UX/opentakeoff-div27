@@ -125,7 +125,7 @@
     },
     "cable_runs": {
       "type": "array",
-      "description": "Division 27 cable runs (docs/design/CABLE_SETUP.md): one device location \u2192 its route segments in order \u2192 a TR marker, all by shape id. Stores no length; lengths resolve from the referenced shapes. Omitted when empty.",
+      "description": "Division 27 cable runs (docs/design/CABLE_SETUP.md): one device location \u2192 its route segments in order \u2192 a TR marker, all by shape id. Stores no length; lengths resolve from the referenced shapes. A record carrying `hold` is a HOLD instead: device locations deliberately left without a run, with the reason (empty route_shape_ids and tr_id). Omitted when empty.",
       "items": {
         "type": "object",
         "properties": {
@@ -151,6 +151,19 @@
           "cables_override": {
             "type": "integer",
             "minimum": 1
+          },
+          "hold": {
+            "type": "object",
+            "description": "Present on a hold record: the devices get no run by decision. Excluded from totals like an unlinked device, listed with the reason.",
+            "properties": {
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "reason"
+            ],
+            "additionalProperties": true
           },
           "provenance": {
             "type": "object",

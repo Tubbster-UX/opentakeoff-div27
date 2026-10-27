@@ -51,6 +51,33 @@ export const DEVICE_TYPE_LABELS = Object.freeze({
 
 export function isDeviceType(t) { return DEVICE_TYPES.includes(t); }
 
+/** Names an agent or a person reaches for that mean one of the device types.
+ *  They are READ as the canonical type and never stored: the document only
+ *  ever holds a DEVICE_TYPES value. (A real bid asked for "access_control".) */
+export const DEVICE_TYPE_ALIASES = Object.freeze({
+  access_control: "access_door", access_control_door: "access_door", card_reader: "access_door",
+  wireless_access_point: "wap", access_point: "wap", wifi_ap: "wap",
+  data_outlet: "wall_outlet", outlet: "wall_outlet", data_drop: "wall_outlet",
+  cctv: "camera", cctv_camera: "camera", security_camera: "camera",
+  ceiling_device: "ceiling_other", ceiling_speaker: "ceiling_other", speaker: "ceiling_other",
+});
+
+/** The canonical device type for a name, or null. Case, spaces and hyphens
+ *  are forgiven ("Access Control" → access_door). */
+export function normalizeDeviceType(t) {
+  if (typeof t !== "string") return null;
+  const k = t.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return isDeviceType(k) ? k : DEVICE_TYPE_ALIASES[k] || null;
+}
+
+/** The TIA-568 length limit for a 4-pair balanced copper permanent link:
+ *  90 m, which the trade carries as 295 ft. A linked run whose per-cable LF
+ *  exceeds it is still counted — the measured length is the truth — but it
+ *  is flagged on the run and in the warnings, so it is caught before bid
+ *  day instead of by hand. Fiber and coax are not bound by it; the warning
+ *  says so rather than guessing the medium from free-text cable_type. */
+export const TIA_MAX_LINK_FT = 295;
+
 /** A fresh cable setup for a device type: the type's starting values plus
  *  `patch` on top. Unknown types fall back to custom (blank), never throw. */
 export function mintCableSetup(deviceType, patch = {}) {
@@ -123,6 +150,49 @@ export function mintCableRun({ device_shape_ids, route_shape_ids, tr_id, cables_
   };
 }
 
+/** A HOLD: device locations deliberately left without a run, with the
+ *  reason (a crawl-space area whose routing is not drawn, a device by
+ *  others). It rides the same `cable_runs` list as runs — one record family,
+ *  one undo family, one import rule — and is told apart by its `hold`
+ *  object. A held device is excluded from totals exactly as an unlinked one
+ *  is, but it is listed as HELD with its reason instead of "no run links
+ *  this device", so the gap reads as a decision, not a miss. */
+export function isCableHold(r) { return !!r && typeof r.hold === "object" && r.hold !== null && !Array.isArray(r.hold); }
+
+/** Mint a hold record. Same provenance rule as a run: an agent's hold lands
+ *  pending review. */
+export function mintCableHold({ device_shape_ids, reason, provenance } = {}) {
+  const prov = { method: "manual", ...(provenance && typeof provenance === "object" ? provenance : {}) };
+  if (prov.actor === "agent" && prov.reviewed == null) prov.reviewed = false;
+  if (!prov.created_at) prov.created_at = nowIso();
+  return {
+    id: `hold-${mintUuid()}`,
+    device_shape_ids: [...new Set(strArr(device_shape_ids))],
+    route_shape_ids: [],
+    tr_id: "",
+    hold: { reason: typeof reason === "string" ? reason.trim() : "" },
+    provenance: prov,
+  };
+}
+
+/** Why a hold cannot be made, or null. Every id must be a device marker on
+ *  a cable condition that no run or hold already names. */
+export function holdRefusal({ device_shape_ids, reason }, conditions, shapes, runs = []) {
+  if (typeof reason !== "string" || !reason.trim()) return "a hold needs a reason — say why these devices get no run (it prints on the Unlinked list and the report)";
+  const ids = strArr(device_shape_ids);
+  if (!ids.length) return "name at least one device marker to hold";
+  const condById = new Map((conditions || []).map((c) => [c.id, c]));
+  const shapeById = new Map((shapes || []).map((s) => [s.id, s]));
+  for (const id of ids) {
+    const s = shapeById.get(id);
+    if (!s) return `device shape ${id} does not exist — list_shapes shows every committed id`;
+    if (s.measure_role !== "count" || !hasCableSetup(condById.get(s.condition_id))) return `shape ${id} is not a device marker (a count marker on a condition with a cable_setup)`;
+    const other = (runs || []).find((r) => Array.isArray(r.device_shape_ids) && r.device_shape_ids.includes(id));
+    if (other) return isCableHold(other) ? `device ${id} is already held by ${other.id} — unlink_run that hold first to change its reason` : `device ${id} is linked by run ${other.id} — a linked device is not held; unlink_run the run first`;
+  }
+  return null;
+}
+
 /** Legacy/foreign records: an agent run with no review flag is pending (the
  *  shapes' normalizeAgentReview rule) — absence is never an approval. */
 export function normalizeRunReview(run) {
@@ -151,6 +221,7 @@ export function sanitizeCableRuns(v) {
       route_shape_ids: strArr(r.route_shape_ids),
       tr_id: typeof r.tr_id === "string" ? r.tr_id : "",
       ...(Number.isInteger(n) && n >= 1 ? { cables_override: n } : {}),
+      ...(isCableHold(r) ? { hold: { ...r.hold, reason: typeof r.hold.reason === "string" ? r.hold.reason : "" } } : {}),
       provenance: prov,
     }));
   }
@@ -188,18 +259,28 @@ export function runReviewStatus(run) {
  * @param {any[]} conditions
  * @param {any[]} shapes
  * @param {any[]} runs cable_runs records
- * @param {{ uppFor?: (sheetId: string) => number | null | undefined, scaleReason?: (sheetId: string) => string }} [opts]
+ * @param {{ uppFor?: (sheetId: string) => number | null | undefined, scaleReason?: (sheetId: string) => string,
+ *   scaleUnconfirmed?: (sheetId: string) => boolean, sheetLabel?: (sheetId: string) => string }} [opts]
  *   uppFor answers "does this sheet have a scale" for the surface asking (the
  *   canvas knows stitches; an MCP session knows its loaded sheets). Omitted =
  *   every sheet is taken as scaled (the shape's stored feet are trusted).
- *   scaleReason words the refusal for an unscaled sheet.
- * @returns {{ runs: ResolvedRun[], unlinked: { devices: any[], routes: any[] }, warnings: string[] }}
+ *   scaleReason words the refusal for an unscaled sheet. scaleUnconfirmed
+ *   answers "was this sheet's scale set by an agent and not yet confirmed by
+ *   a person" — a linked run on such a sheet still counts, and is flagged.
+ *   sheetLabel names a sheet in a warning (its sheet number, not its key).
+ * @returns {{ runs: any[], unlinked: { devices: any[], routes: any[] }, held: any[], holds: any[], warnings: string[] }}
  */
 export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
   const condById = new Map((conditions || []).map((c) => [c.id, c]));
   const shapeById = new Map((shapes || []).map((s) => [s.id, s]));
   const uppFor = typeof opts.uppFor === "function" ? opts.uppFor : null;
   const scaleReason = typeof opts.scaleReason === "function" ? opts.scaleReason : (k) => `sheet ${k} has no scale — a route is a real length, so set the scale first`;
+  const scaleUnconfirmed = typeof opts.scaleUnconfirmed === "function" ? opts.scaleUnconfirmed : () => false;
+  const sheetLabel = typeof opts.sheetLabel === "function" ? opts.sheetLabel : (k) => k;
+  const unconfirmedSheets = new Set();   // route sheets of LINKED runs whose scale no person confirmed
+  let unconfirmedRuns = 0;
+  const overLength = [];                 // linked runs past TIA_MAX_LINK_FT per cable
+  const holds = [];
   const resolved = [];
   const warnings = [];
   const warned = new Set();
@@ -209,6 +290,7 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
   const linkedRoutes = new Set();    // route ids in LINKED runs
 
   for (const raw of runs || []) {
+    if (isCableHold(raw)) { holds.push(normalizeRunReview(raw)); continue; }
     const run = normalizeRunReview(raw);
     const reasons = [];
     let withheld = [];
@@ -244,6 +326,7 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
     let routeLf = 0;
     const sheetIds = [];
     const segments = [];
+    const runUnconfirmed = new Set();
     for (const id of routeIds) {
       if (!routeRun.has(id)) routeRun.set(id, run.id);
       const s = shapeById.get(id);
@@ -254,6 +337,7 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
       const len = routeLengthFt(s);
       if (len == null) { reasons.push(`route shape ${id} carries no measured length`); continue; }
       if (!sheetIds.includes(s.sheet_id)) sheetIds.push(s.sheet_id);
+      if (scaleUnconfirmed(s.sheet_id)) runUnconfirmed.add(s.sheet_id);
       const sc = condById.get(s.condition_id);
       if (segmentHasLegs(s, sc)) {
         legWarning = true;
@@ -282,6 +366,8 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
       tr_id: run.tr_id || "",
       tr_name: trName,
       sheet_ids: sheetIds,
+      device_sheet_ids: [...new Set(devShapes.map((s) => s.sheet_id))],
+      tr_sheet_id: trShape?.sheet_id ?? "",
       segments,
       route_lf: routeLf,
       status,
@@ -293,8 +379,23 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
     };
     if (status === "linked") {
       const perCable = routeLf + setup.vertical_ft + setup.loop_device_ft + setup.loop_tr_ft;
+      const over = perCable > TIA_MAX_LINK_FT;
+      const flagNotes = [];
+      if (over) {
+        overLength.push({ id: run.id, finish_tag: base.finish_tag, per_cable_lf: perCable });
+        flagNotes.push(`per cable ${round2(perCable)} ft exceeds ${TIA_MAX_LINK_FT} ft (TIA-568 copper permanent link, 90 m)`);
+      }
+      if (runUnconfirmed.size) {
+        unconfirmedRuns += 1;
+        for (const k of runUnconfirmed) unconfirmedSheets.add(k);
+        flagNotes.push(`route scale on ${[...runUnconfirmed].map(sheetLabel).join(", ")} not confirmed by a person`);
+      }
+      const allNotes = [...notes, ...flagNotes];
       resolved.push({
         ...base,
+        ...(allNotes.length ? { notes: allNotes } : {}),
+        ...(over ? { over_length: true } : {}),
+        ...(runUnconfirmed.size ? { scale_unconfirmed: true } : {}),
         vertical_ft: setup.vertical_ft, loop_device_ft: setup.loop_device_ft, loop_tr_ft: setup.loop_tr_ft,
         per_cable_lf: perCable, cables, location_lf: perCable * cables,
         ...(Number.isInteger(run.cables_override) ? { cables_override: run.cables_override } : {}),
@@ -310,13 +411,43 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
     }
   }
 
-  // ── unlinked devices: every marker on a cable condition with no LINKED run ─
+  // ── run-level warnings: over-length and unconfirmed-scale ───────────────
+  if (overLength.length) {
+    const shown = overLength.slice(0, 10).map((o) => `${o.finish_tag} ${o.id} ${round2(o.per_cable_lf)} ft`);
+    warnings.push(`${overLength.length} linked run${overLength.length === 1 ? "" : "s"} exceed${overLength.length === 1 ? "s" : ""} ${TIA_MAX_LINK_FT} ft per cable, the TIA-568 limit for a 4-pair copper permanent link (90 m): ${shown.join("; ")}${overLength.length > 10 ? `; +${overLength.length - 10} more` : ""}. Check the route; if it stands, the run needs a closer TR, or a length test and an owner notice. Fiber and coax are not bound by this limit.`);
+  }
+  if (unconfirmedRuns) {
+    warnings.push(`${unconfirmedRuns} linked run${unconfirmedRuns === 1 ? "" : "s"} take${unconfirmedRuns === 1 ? "s" : ""} route length from a sheet whose scale no person has confirmed (${[...unconfirmedSheets].map(sheetLabel).join(", ")}). Every cable length there rests on that scale: confirm it in the canvas before pricing.`);
+  }
+
+  // ── holds: devices deliberately left without a run, with the reason ────
+  const heldBy = new Map();
+  for (const h of holds) {
+    for (const id of strArr(h.device_shape_ids)) {
+      if (!shapeById.has(id)) { warnings.push(`Hold ${h.id} names device ${id}, which no longer exists — the hold covers nothing there.`); continue; }
+      if (linkedDevices.has(id)) { warnings.push(`Device ${id} is held by ${h.id} and also linked by a run — the run counts; release the hold.`); continue; }
+      if (!heldBy.has(id)) heldBy.set(id, h);
+    }
+  }
+
+  // ── unlinked devices: every marker on a cable condition with no LINKED run
+  // (a HELD one is listed under held, with its reason, instead) ───────────
   const devices = [];
+  const held = [];
   for (const s of shapes || []) {
     if (s.measure_role !== "count") continue;
     const c = condById.get(s.condition_id);
     if (!c || !hasCableSetup(c)) continue;
     if (linkedDevices.has(s.id)) continue;
+    const h = heldBy.get(s.id);
+    if (h) {
+      held.push({
+        shape_id: s.id, condition_id: c.id, finish_tag: c.finish_tag, sheet_id: s.sheet_id,
+        ...(typeof s.label === "string" && s.label ? { label: s.label } : {}),
+        hold_id: h.id, reason: h.hold.reason || "(no reason given)", review: runReviewStatus(h),
+      });
+      continue;
+    }
     const via = deviceRun.get(s.id);
     const r = via ? resolved.find((x) => x.id === via) : null;
     devices.push({
@@ -339,12 +470,16 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
       reason: r ? `its run ${r.id} is ${r.status}: ${r.reason}` : "no run links this segment",
     });
   }
-  return { runs: resolved, unlinked: { devices, routes }, warnings };
+  const holdList = holds.map((h) => ({
+    id: h.id, reason: h.hold.reason || "(no reason given)", device_shape_ids: strArr(h.device_shape_ids),
+    held: held.filter((d) => d.hold_id === h.id).length, review: runReviewStatus(h), pending: h.provenance?.reviewed === false,
+  }));
+  return { runs: resolved, unlinked: { devices, routes }, held, holds: holdList, warnings };
 }
 
 // ── rollups ─────────────────────────────────────────────────────────────────
 
-const zeroQty = () => ({ ea: 0, pulls: 0, cables: 0, route_lf: 0, cable_lf: 0, cable_lf_order: 0, unlinked_devices: 0, pending_runs: 0 });
+const zeroQty = () => ({ ea: 0, pulls: 0, cables: 0, route_lf: 0, cable_lf: 0, cable_lf_order: 0, unlinked_devices: 0, held_devices: 0, pending_runs: 0, over_length_runs: 0 });
 const QTY_KEYS = Object.keys(zeroQty());
 const addQty = (a, b) => { for (const k of QTY_KEYS) a[k] += b[k] || 0; return a; };
 const roundQty = (q) => ({ ...q, route_lf: round2(q.route_lf), cable_lf: round2(q.cable_lf), cable_lf_order: round2(q.cable_lf_order) });
@@ -352,10 +487,12 @@ const roundQty = (q) => ({ ...q, route_lf: round2(q.route_lf), cable_lf: round2(
 /**
  * The Cable summary: one row per (device condition × TR) with linked runs,
  * plus one row per cable condition that has no linked run at all (so its EA
- * shows against zero pulls — the gap IS the unlinked count). ×N applies to
- * every quantity row-wide (ea, pulls, cables, LF, unlinked devices), the house
- * convention for reported quantities; pending_runs is a count of records, not
- * a quantity, and stays raw. Waste (the condition's waste_pct) applies to
+ * shows against zero pulls — the gap IS the unlinked + held count). ×N
+ * applies to every quantity row-wide (ea, pulls, cables, LF, unlinked and
+ * held devices), the house convention for reported quantities; pending_runs
+ * and over_length_runs are counts of records, not quantities, and stay raw.
+ * Every row lands in exactly one by_tr group — a condition with no linked
+ * run sits in the "" (no TR) group — so the by-TR subtotals sum to the totals. Waste (the condition's waste_pct) applies to
  * cable_lf_order only.
  *
  * @returns {{ rows: any[], by_tr: any[], by_cable_type: any[], totals: any, warnings: string[] }}
@@ -371,6 +508,8 @@ export function cableSummary(resolved, conditions, shapes) {
   }
   const unlinkedByCond = new Map();
   for (const d of resolved.unlinked.devices) unlinkedByCond.set(d.condition_id, (unlinkedByCond.get(d.condition_id) || 0) + 1);
+  const heldByCond = new Map();
+  for (const d of resolved.held || []) heldByCond.set(d.condition_id, (heldByCond.get(d.condition_id) || 0) + 1);
   const rowKey = (r) => `${r.condition_id}\u0000${r.tr_id}`;
   const rowsByKey = new Map();
   for (const r of resolved.runs) {
@@ -393,6 +532,7 @@ export function cableSummary(resolved, conditions, shapes) {
     row.cable_lf += r.location_lf * mult;
     row.cable_lf_order += r.location_lf * mult * (1 + waste / 100);
     if (r.pending) row.pending_runs += 1;
+    if (r.over_length) row.over_length_runs += 1;
     if (r.leg_warning) row.leg_warning = true;
   }
   // EA and the unlinked gap ride on the condition's FIRST row (a condition
@@ -404,19 +544,20 @@ export function cableSummary(resolved, conditions, shapes) {
     const own = [...rowsByKey.values()].filter((row) => row.condition_id === c.id);
     const ea = (eaByCond.get(c.id) || 0) * mult;
     const unlinked = (unlinkedByCond.get(c.id) || 0) * mult;
+    const heldN = (heldByCond.get(c.id) || 0) * mult;
     const withheld = resolved.runs.filter((r) => r.condition_id === c.id && r.status === "withheld");
     if (!own.length) {
       rows.push({
         condition_id: c.id, finish_tag: c.finish_tag, device_type: c.cable_setup.device_type,
         cable_type: typeof c.cable_setup.cable_type === "string" ? c.cable_setup.cable_type : "",
         tr_id: "", tr_name: "", multiplier: mult, waste_pct: Math.max(0, Number(c.waste_pct) || 0),
-        ...zeroQty(), ea, unlinked_devices: unlinked, leg_warning: false,
+        ...zeroQty(), ea, unlinked_devices: unlinked, held_devices: heldN, leg_warning: false,
         ...(withheld.length ? { withheld: withheld[0].reason, withheld_runs: withheld.length } : {}),
       });
       continue;
     }
     own.forEach((row, i) => {
-      rows.push({ ...roundQty(row), ea: i === 0 ? ea : 0, unlinked_devices: i === 0 ? unlinked : 0, ...(i === 0 && withheld.length ? { withheld: withheld[0].reason, withheld_runs: withheld.length } : {}) });
+      rows.push({ ...roundQty(row), ea: i === 0 ? ea : 0, unlinked_devices: i === 0 ? unlinked : 0, held_devices: i === 0 ? heldN : 0, ...(i === 0 && withheld.length ? { withheld: withheld[0].reason, withheld_runs: withheld.length } : {}) });
     });
   }
   const group = (key, name) => {
@@ -429,7 +570,10 @@ export function cableSummary(resolved, conditions, shapes) {
     }
     return [...m.values()].map(roundQty);
   };
-  const by_tr = group((r) => r.tr_id, (r) => ({ tr_id: r.tr_id, tr_name: r.tr_name })).filter((g) => g.tr_id || g.pulls);
+  // the "" group is every condition with no linked run: its EA, unlinked and
+  // held devices belong in the by-TR subtotals too, or they stop summing to
+  // the totals (a real bid read 103 devices by TR against 111 in total)
+  const by_tr = group((r) => r.tr_id, (r) => ({ tr_id: r.tr_id, tr_name: r.tr_id ? r.tr_name : "" })).filter((g) => g.tr_id || QTY_KEYS.some((k) => g[k]));
   const by_cable_type = group((r) => r.cable_type, (r) => ({ cable_type: r.cable_type }));
   const totals = roundQty(rows.reduce((t, r) => addQty(t, r), zeroQty()));
   return { rows, by_tr, by_cable_type, totals, warnings: [...resolved.warnings] };
@@ -457,6 +601,24 @@ export function computeCableTakeoff(conditions, shapes, runs, opts = {}) {
   return { resolved, summary, byCond: cableByCondition(summary) };
 }
 
+/** Short, still-unique display ids for runs and holds — what a marked-set
+ *  chip prints ("run-c711ef"). Each is the record id's first 6 hex digits,
+ *  lengthened only until no other id shares the prefix, so a reader finds the
+ *  run in the Cable runs sheet by its start. Map(id → short). */
+export function runShortIds(records, min = 6) {
+  const ids = [...new Set((records || []).map((r) => (typeof r === "string" ? r : r?.id)).filter((x) => typeof x === "string" && x))];
+  const body = (id) => id.replace(/^(run|hold)-/, "").replace(/-/g, "");
+  const bodies = ids.map(body);
+  const out = new Map();
+  ids.forEach((id, i) => {
+    const b = bodies[i];
+    let n = Math.min(min, b.length);
+    while (n < b.length && bodies.some((o, j) => j !== i && o.startsWith(b.slice(0, n)))) n += 1;
+    out.set(id, `${id.startsWith("hold-") ? "hold" : "run"}-${b.slice(0, n)}`);
+  });
+  return out;
+}
+
 // ── export rows ─────────────────────────────────────────────────────────────
 
 /** One Cable-runs row per run record, unmultiplied, every status included. */
@@ -469,11 +631,15 @@ export function cableRunRows(takeoff, sheetLabel = null) {
   return (takeoff?.resolved?.runs || []).map((r) => ({
     run_id: r.id, condition: r.finish_tag, device_type: r.device_type, cable_type: r.cable_type,
     tr: r.tr_name || r.tr_id, sheets: r.sheet_ids.map(label).join(" | "), sheet_ids: r.sheet_ids,
+    device_sheets: (r.device_sheet_ids || []).map(label).join(" | "), device_sheet_ids: r.device_sheet_ids || [],
+    tr_sheet: r.tr_sheet_id ? label(r.tr_sheet_id) : "", tr_sheet_id: r.tr_sheet_id || "",
     route_lf: round2(r.route_lf), vertical_ft: r.vertical_ft, loop_device_ft: r.loop_device_ft, loop_tr_ft: r.loop_tr_ft,
     per_cable_lf: r.per_cable_lf == null ? null : round2(r.per_cable_lf), cables: r.cables,
     location_lf: r.location_lf == null ? null : round2(r.location_lf),
     multiplier: condMult.get(r.condition_id) || 1,
     status: r.status, review_status: r.review, reason: r.reason || "",
+    ...(r.over_length ? { over_length: true } : {}),
+    ...(r.scale_unconfirmed ? { scale_unconfirmed: true } : {}),
     ...(r.notes ? { notes: r.notes.join("; ") } : {}),
   }));
 }
@@ -495,40 +661,45 @@ export function cableReportBlock(takeoff, sheetLabel = null) {
       devices: takeoff.resolved.unlinked.devices.map((d) => ({ ...d, sheet: label(d.sheet_id) })),
       routes: takeoff.resolved.unlinked.routes.map((r) => ({ ...r, sheet: label(r.sheet_id) })),
     },
+    held: (takeoff.resolved.held || []).map((d) => ({ ...d, sheet: label(d.sheet_id) })),
+    holds: takeoff.resolved.holds || [],
     warnings: takeoff.summary.warnings,
   };
 }
 
-export const CABLE_SUMMARY_HEADER = Object.freeze(["Condition", "Device type", "Cable type", "TR", "Multiplier", "Waste %", "Device EA", "Pulls", "Cables", "Measured route LF", "Cable LF (net)", "Cable LF (order, with waste)", "Unlinked devices", "Pending runs", "Note"]);
-export const CABLE_RUNS_HEADER = Object.freeze(["Run ID", "Condition", "Device type", "Cable type", "TR", "Sheet(s)", "Route LF", "Vertical ft", "Loop at device ft", "Loop at TR ft", "Per-cable LF", "Cables", "Location LF", "Multiplier", "Status", "Review status", "Reason / notes"]);
+export const CABLE_SUMMARY_HEADER = Object.freeze(["Condition", "Device type", "Cable type", "TR", "Multiplier", "Waste %", "Device EA", "Pulls", "Cables", "Measured route LF", "Cable LF (net)", "Cable LF (order, with waste)", "Unlinked devices", "Held devices", "Pending runs", `Runs over ${TIA_MAX_LINK_FT} ft`, "Note"]);
+export const CABLE_RUNS_HEADER = Object.freeze(["Run ID", "Condition", "Device type", "Cable type", "TR", "Device sheet", "Route sheet(s)", "TR sheet", "Route LF", "Vertical ft", "Loop at device ft", "Loop at TR ft", "Per-cable LF", "Cables", "Location LF", "Multiplier", "Status", "Review status", "Reason / notes"]);
 export const CABLE_UNLINKED_HEADER = Object.freeze(["Kind", "Shape", "Condition", "Sheet", "Length LF", "Reason"]);
 
-const rowNote = (r) => [r.withheld ? `withheld: ${r.withheld}` : "", r.leg_warning ? "route segment(s) carry rise/drop legs (ignored)" : ""].filter(Boolean).join("; ");
+const rowNote = (r) => [r.withheld ? `withheld: ${r.withheld}` : "", r.leg_warning ? "route segment(s) carry rise/drop legs (ignored)" : "", r.over_length_runs ? `${r.over_length_runs} run${r.over_length_runs === 1 ? "" : "s"} over ${TIA_MAX_LINK_FT} ft per cable` : ""].filter(Boolean).join("; ");
+const NO_TR = "(no TR — no linked run)";
 
 /** The three cable tables as plain cell matrices — the CSV sections and the
  *  workbook tabs both render from these so they can never disagree. `L`
  *  converts a length for the display units (identity for imperial). */
+/** @param {any} takeoff computeCableTakeoff() result
+ *  @param {{ sheetLabel?: ((sheetId: string) => string) | null, L?: (v: number) => any, lengthUnit?: string }} [opts] */
 export function cableTables(takeoff, { sheetLabel = null, L = (v) => v, lengthUnit = "LF" } = {}) {
   if (!takeoff) return null;
   const lenHdr = (h) => h.replace(/\bLF\b/g, lengthUnit).replace(/\bft\b/g, lengthUnit === "LF" ? "ft" : "m");
   const conv = (v) => (v == null ? "" : L(v));
   const summary = [CABLE_SUMMARY_HEADER.map(lenHdr)];
   for (const r of takeoff.summary.rows) {
-    summary.push([r.finish_tag, r.device_type, r.cable_type, r.tr_name || r.tr_id, r.multiplier, r.waste_pct, r.ea, r.pulls, r.cables, conv(r.route_lf), conv(r.cable_lf), conv(r.cable_lf_order), r.unlinked_devices, r.pending_runs, rowNote(r)]);
+    summary.push([r.finish_tag, r.device_type, r.cable_type, r.tr_name || r.tr_id || NO_TR, r.multiplier, r.waste_pct, r.ea, r.pulls, r.cables, conv(r.route_lf), conv(r.cable_lf), conv(r.cable_lf_order), r.unlinked_devices, r.held_devices, r.pending_runs, r.over_length_runs, rowNote(r)]);
   }
-  const sub = (title, g, cell) => summary.push([title, "", "", cell(g), "", "", g.ea, g.pulls, g.cables, conv(g.route_lf), conv(g.cable_lf), conv(g.cable_lf_order), g.unlinked_devices, g.pending_runs, ""]);
-  for (const g of takeoff.summary.by_tr) sub("Subtotal by TR", g, (x) => x.tr_name || x.tr_id);
-  for (const g of takeoff.summary.by_cable_type) summary.push(["Subtotal by cable type", "", g.cable_type, "", "", "", g.ea, g.pulls, g.cables, conv(g.route_lf), conv(g.cable_lf), conv(g.cable_lf_order), g.unlinked_devices, g.pending_runs, ""]);
-  const t = takeoff.summary.totals;
-  summary.push(["TOTAL", "", "", "", "", "", t.ea, t.pulls, t.cables, conv(t.route_lf), conv(t.cable_lf), conv(t.cable_lf_order), t.unlinked_devices, t.pending_runs, ""]);
+  const qtyCells = (g) => [g.ea, g.pulls, g.cables, conv(g.route_lf), conv(g.cable_lf), conv(g.cable_lf_order), g.unlinked_devices, g.held_devices, g.pending_runs, g.over_length_runs, ""];
+  for (const g of takeoff.summary.by_tr) summary.push(["Subtotal by TR", "", "", g.tr_name || g.tr_id || NO_TR, "", "", ...qtyCells(g)]);
+  for (const g of takeoff.summary.by_cable_type) summary.push(["Subtotal by cable type", "", g.cable_type, "", "", "", ...qtyCells(g)]);
+  summary.push(["TOTAL", "", "", "", "", "", ...qtyCells(takeoff.summary.totals)]);
   const runs = [CABLE_RUNS_HEADER.map(lenHdr)];
   for (const r of cableRunRows(takeoff, sheetLabel)) {
-    runs.push([r.run_id, r.condition, r.device_type, r.cable_type, r.tr, r.sheets, conv(r.route_lf), conv(r.vertical_ft), conv(r.loop_device_ft), conv(r.loop_tr_ft), conv(r.per_cable_lf), r.cables ?? "", conv(r.location_lf), r.multiplier, r.status, r.review_status, [r.reason, r.notes].filter(Boolean).join("; ")]);
+    runs.push([r.run_id, r.condition, r.device_type, r.cable_type, r.tr, r.device_sheets, r.sheets, r.tr_sheet, conv(r.route_lf), conv(r.vertical_ft), conv(r.loop_device_ft), conv(r.loop_tr_ft), conv(r.per_cable_lf), r.cables ?? "", conv(r.location_lf), r.multiplier, r.status, r.review_status, [r.reason, r.notes].filter(Boolean).join("; ")]);
   }
   const label = (id) => (sheetLabel ? sheetLabel(id) : id);
   const unlinked = [CABLE_UNLINKED_HEADER.map(lenHdr)];
   for (const d of takeoff.resolved.unlinked.devices) unlinked.push(["device", d.shape_id, d.finish_tag, label(d.sheet_id), "", d.reason]);
-  for (const r of takeoff.resolved.unlinked.routes) unlinked.push(["route", r.shape_id, r.condition_id, label(r.sheet_id), conv(r.length_lf), r.reason]);
+  for (const r of takeoff.resolved.unlinked.routes) unlinked.push(["route", r.shape_id, r.finish_tag, label(r.sheet_id), conv(r.length_lf), r.reason]);
+  for (const d of takeoff.resolved.held || []) unlinked.push(["held device", d.shape_id, d.finish_tag, label(d.sheet_id), "", `held (${d.hold_id}): ${d.reason}`]);
   return { summary, runs, unlinked, warnings: takeoff.summary.warnings };
 }
 
@@ -547,6 +718,7 @@ export function linkRunRefusal({ device_shape_ids, route_shape_ids, tr_id, cable
   const ids = strArr(device_shape_ids);
   for (const id of ids) {
     const other = (runs || []).find((r) => Array.isArray(r.device_shape_ids) && r.device_shape_ids.includes(id));
+    if (other && isCableHold(other)) return `device ${id} is held by ${other.id} (${other.hold?.reason || "no reason given"}) — unlink_run the hold first to link it`;
     if (other) return `device ${id} is already linked by run ${other.id} — unlink_run it first (one pull per location)`;
   }
   const { runs: [r] } = resolveCableRuns(conditions, shapes, [probe], opts);

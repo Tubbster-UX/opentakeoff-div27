@@ -19,6 +19,7 @@ export default function CableReportSection({ takeoff, units = "imperial", sheetL
   const [head, ...body] = t.summary;
   const numeric = (v) => typeof v === "number";
   const { devices, routes } = takeoff.resolved.unlinked;
+  const held = takeoff.resolved.held || [];
   const label = (k) => (sheetLabel ? sheetLabel(k) : k);
   return (
     <div style={{ maxWidth: 980, margin: "26px auto 0", color: "var(--ink)" }} data-cable-report>
@@ -42,8 +43,23 @@ export default function CableReportSection({ takeoff, units = "imperial", sheetL
         </table>
       </div>
       <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--ink-muted)", lineHeight: 1.5 }}>
-        Pulls, cables and cable LF come only from linked runs: measured route + the condition's vertical and service loops, × cables. Device EA beside Pulls shows any unlinked gap. Pending runs are counted, like pending shapes. Waste applies only to the order column; ×N applies across the row.
+        Pulls, cables and cable LF come only from linked runs: measured route + the condition's vertical and service loops, × cables. Device EA beside Pulls shows the gap, which is exactly the unlinked plus held devices. Pending runs are counted, like pending shapes. Waste applies only to the order column; ×N applies across the row.
       </p>
+      {held.length > 0 && (
+        <div style={{ marginTop: 14 }} data-cable-report-held>
+          <h3 style={{ ...H3, fontSize: 11 }}>Held — no run by decision, excluded from totals</h3>
+          {held.map((d) => (
+            <div key={d.shape_id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0", borderBottom: "1px solid var(--paper-cream)", fontSize: 11.5 }}>
+              <span style={{ width: 52, color: "var(--ink-muted)" }}>Device</span>
+              <span style={{ fontFamily: "var(--f-mono)" }}>{d.finish_tag}{d.label ? ` · ${d.label}` : ""}</span>
+              <span style={{ color: "var(--ink-muted)" }}>{label(d.sheet_id)}</span>
+              <span style={{ flex: 1, color: "var(--ink-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.reason}>{d.reason}</span>
+              {onLocate && <button onClick={() => onLocate(d.shape_id)} title="Close the Report and put this on screen"
+                style={{ padding: "1px 8px", borderRadius: 0, border: "1px solid var(--ink-faint)", background: "transparent", color: "var(--cobalt)", cursor: "pointer", fontSize: 11 }}>Show</button>}
+            </div>
+          ))}
+        </div>
+      )}
       {(devices.length > 0 || routes.length > 0) && (
         <div style={{ marginTop: 14 }} data-cable-report-unlinked>
           <h3 style={{ ...H3, fontSize: 11 }}>Unlinked — excluded from totals</h3>

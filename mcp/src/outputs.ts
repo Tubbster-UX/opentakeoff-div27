@@ -418,8 +418,10 @@ const cableQty = {
   route_lf: z.number().describe("Σ measured route LF across linked runs (×N) — plan length only, no routing factor"),
   cable_lf: z.number().describe("Σ location LF = (route + vertical + loops) × cables, ×N, NO waste"),
   cable_lf_order: z.number().describe("cable_lf × (1 + waste_pct/100) — the order quantity"),
-  unlinked_devices: z.number().describe("Device markers with no linked run (×N) — EA − pulls is this gap"),
+  unlinked_devices: z.number().describe("Device markers with no linked run and no hold (×N)"),
+  held_devices: z.number().describe("Device markers held by hold_devices — no run by decision, with a reason (×N). EA − pulls = unlinked_devices + held_devices"),
   pending_runs: z.number().int().describe("Linked runs still pending human review — they COUNT in every figure above, as pending shapes do"),
+  over_length_runs: z.number().int().describe("Linked runs over 295 ft per cable (TIA-568 copper permanent link) — counted, flagged"),
 };
 export const cableSummaryRow = z.object({
   condition_id: z.string(), finish_tag: z.string(), device_type: z.string(), cable_type: z.string(),
@@ -435,7 +437,10 @@ const cableRunRow = z.object({
   status: z.enum(["linked", "withheld", "broken"]).describe("linked = figured and counted; withheld = the condition's setup lacks a required value; broken = a referenced shape is gone, is the wrong kind, or sits on a sheet with no scale answer. Only linked runs count"),
   condition: z.string(), device_type: z.string(), cable_type: z.string(),
   tr: z.string().describe("The TR marker's label, or its id when unlabeled"), tr_id: z.string(),
-  device_shape_ids: z.array(z.string()), route_shape_ids: z.array(z.string()).describe("In order"), sheets: z.array(z.string()),
+  device_shape_ids: z.array(z.string()), route_shape_ids: z.array(z.string()).describe("In order"), sheets: z.array(z.string()).describe("The route segments' sheets"),
+  device_sheets: z.array(z.string()).describe("The device marker's sheet"), tr_sheet: z.string().describe("The TR marker's sheet (empty when the TR is gone)"),
+  over_length: z.literal(true).optional().describe("Per-cable LF exceeds 295 ft (TIA-568 copper permanent link, 90 m) — counted; check the route"),
+  scale_unconfirmed: z.literal(true).optional().describe("A route segment sits on a sheet whose agent-set scale no person has confirmed"),
   route_lf: z.number().describe("Σ segment plan lengths, each at its own sheet's scale — reported on a broken run too, never zeroed"),
   vertical_ft: z.number().optional(), loop_device_ft: z.number().optional(), loop_tr_ft: z.number().optional(),
   per_cable_lf: z.number().optional().describe("route + vertical + both loops"),
@@ -448,6 +453,8 @@ const cableUnlinked = z.object({
   devices: z.array(z.object({ shape_id: z.string(), condition_id: z.string(), finish_tag: z.string(), sheet_id: z.string(), reason: z.string() }).passthrough()),
   routes: z.array(z.object({ shape_id: z.string(), condition_id: z.string(), finish_tag: z.string(), sheet_id: z.string(), length_lf: z.number().nullable(), reason: z.string() }).passthrough()).describe("Every linear shape on a role \"route\" condition that no linked run uses"),
 });
+const cableHeld = z.array(z.object({ shape_id: z.string(), condition_id: z.string(), finish_tag: z.string(), sheet_id: z.string(), hold_id: z.string(), reason: z.string() }).passthrough());
+const cableHolds = z.array(z.object({ id: z.string(), reason: z.string(), device_shape_ids: z.array(z.string()), held: z.number().int(), review: z.enum(["pending", "accepted", "human"]), pending: z.boolean() }));
 const cableSummaryBlock = z.object({
   rows: z.array(cableSummaryRow), by_tr: z.array(cableGroupRow), by_cable_type: z.array(cableGroupRow), totals: cableGroupRow,
 });
@@ -456,28 +463,41 @@ export const linkRunOutput = {
   run_id: z.string().describe("The run's id — unlink_run takes it; it rides export_takeoff's cable_runs"),
   status: z.literal("linked"),
   condition: z.string(), device_type: z.string(), cable_type: z.string(), tr: z.string(), sheets: z.array(z.string()),
+  device_sheets: z.array(z.string()), tr_sheet: z.string(),
   route_lf: z.number(), vertical_ft: z.number(), loop_device_ft: z.number(), loop_tr_ft: z.number(),
   per_cable_lf: z.number().describe("route + vertical + loop at device + loop at TR"),
   cables: z.number(), location_lf: z.number().describe("per_cable_lf × cables (no waste, no ×N — export_report's cable block applies both)"),
   reviewed: z.literal(false),
+  over_length: z.literal(true).optional().describe("Per-cable LF exceeds 295 ft (TIA-568 copper permanent link) — the run counts; check the route"),
+  scale_unconfirmed: z.literal(true).optional().describe("A route segment's sheet scale was set by an agent and no person has confirmed it"),
   notes: z.array(z.string()).optional(),
   note: z.string(),
 };
 export const listRunsOutput = {
   runs: z.array(cableRunRow),
-  unlinked: cableUnlinked.describe("Devices on a cable condition with no linked run, and route segments no linked run uses — excluded from totals, never assigned a length"),
+  unlinked: cableUnlinked.describe("Devices on a cable condition with no linked run and no hold, and route segments no linked run uses — excluded from totals, never assigned a length"),
+  held: cableHeld.describe("Devices held by hold_devices: no run by decision, with the reason — excluded from totals like unlinked devices"),
+  holds: cableHolds.describe("The hold records — unlink_run takes a hold id to release it"),
   warnings: z.array(z.string()).describe("One per condition whose route segments carry rise/drop legs: that condition's LF in the regular report is not a cable length"),
   summary: cableSummaryBlock.nullable(),
   count: z.number().int(),
   note: z.string().optional(),
 };
 export const unlinkRunOutput = {
-  unlinked: z.string(), run_count: z.number().int(), note: z.string(),
+  unlinked: z.string(), released_hold: z.literal(true).optional().describe("The id was a hold: its devices return to the unlinked list"),
+  run_count: z.number().int().describe("Runs remaining (holds not counted)"), note: z.string(),
+};
+export const holdDevicesOutput = {
+  hold_id: z.string().describe("unlink_run takes it to release the hold; it rides export_takeoff's cable_runs"),
+  reason: z.string(), held: z.number().int().describe("Devices this hold covers"),
+  by_condition: z.array(z.object({ condition: z.string(), devices: z.number().int() })),
+  unlinked_devices: z.number().int().describe("Devices still with no run and no hold"),
+  reviewed: z.literal(false), note: z.string(),
 };
 
 export const takeoffSummaryOutput = {
   conditions: z.array(summaryRow),
-  cable: cableSummaryBlock.extend({ unlinked_devices: z.number().int(), unlinked_routes: z.number().int(), warnings: z.array(z.string()) }).optional().describe("Division 27 cable rollups — present only when a condition carries a cable_setup or a run exists (list_runs has the per-run detail)"),
+  cable: cableSummaryBlock.extend({ unlinked_devices: z.number().int(), unlinked_routes: z.number().int(), held_devices: z.number().int(), warnings: z.array(z.string()) }).optional().describe("Division 27 cable rollups — present only when a condition carries a cable_setup or a run exists (list_runs has the per-run detail)"),
   totals: z.object({
     total_sf: z.number(),
     total_sf_net: z.number(),

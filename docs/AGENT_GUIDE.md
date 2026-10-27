@@ -177,7 +177,7 @@ rooms share 34 LF of wall would be a wrong number with a machine's confidence be
 
 ## 6. Staged tool exposure
 
-By default every client gets all <!--tool-count-->56<!--/tool-count--> tool schemas on `tools/list`—the flat contract every
+By default every client gets all <!--tool-count-->57<!--/tool-count--> tool schemas on `tools/list`—the flat contract every
 published client already expects.
 
 Fifty-two descriptions is real token weight for a session that may never touch half of them, so the
@@ -274,6 +274,11 @@ next."*
 | `link_run`: *… vertical_ft is required* | the device condition's cable setup lacks a required value (an access-control door has no starting vertical) | `edit_condition { cable_setup: { vertical_ft } }`, then link again |
 | `link_run`: *… is not a TR marker* | a run homes to a count marker on a condition flagged `role: "tr"` | `edit_condition { role: "tr" }` on the TR condition, `place_count` the room, `edit_shape { label: "MDF" }` |
 | `link_run`: *device … is already linked* | one pull per location | `unlink_run` the earlier run, or leave it |
+| `link_run`: *device … is held by hold-…* | the device was held with `hold_devices` (no run, by decision) | `unlink_run` the hold id, then link |
+| you decide a device gets no run (routing not drawn, by others) | an unlinked device reads as a miss | `hold_devices { device_shape_ids, reason }` — not a cloud or a note; the reason prints on the report and the marked set |
+| `edit_condition` refuses *… is not a device type* | the six types are wall_outlet, wap, camera, access_door, ceiling_other, custom | access control → `access_door`; paging speakers → `ceiling_other`; anything else → `custom` with every value stated |
+| a `link_run` / `list_runs` run reads `over_length` | per-cable LF exceeds 295 ft, the TIA-568 copper permanent-link limit; the run still counts | check the route; if it stands, tell the estimator it needs a closer TR or a length test and owner notice |
+| `list_runs` warns a scale *no person has confirmed* | every MCP `set_scale` lands unconfirmed; the cable lengths rest on it | tell the estimator to confirm those sheets' scales in the canvas before pricing |
 | `edit_condition` replies with `cable.minted` | a fresh cable opt-in took the device type's starting values for what the call did not state—*starting values, not verified against spec* | confirm each against the project spec and patch with `edit_condition { cable_setup: { … } }` |
 | `list_runs` lists a route under *unlinked* | a linear shape on a `role: "route"` condition that no linked run uses | `link_run` it, or trace it under another condition if it is not a route |
 | a `list_runs` run reads *broken* | a linked shape was deleted, or sits on a sheet this session cannot scale (a stitched composite) — its stored length is kept, it is excluded from totals and listed under unlinked | re-trace and `link_run` again, or hand it to the canvas |
@@ -311,7 +316,7 @@ Follow [Geometry from source to review](GEOMETRY_WORKFLOW.md) when tracing a rea
 ## Geometry review cleanup
 
 Use the [generated tool index](MCP_TOOL_INDEX.md) for the
-<!--tool-count-->56<!--/tool-count--> default tools, their stages and required arguments.
+<!--tool-count-->57<!--/tool-count--> default tools, their stages and required arguments.
 The [geometry workflow](GEOMETRY_WORKFLOW.md) is the source-to-handoff route.
 
 - Shorten a note with `list_annotations` then `edit_annotation`; empty text clears

@@ -22,7 +22,7 @@ export const TOOL_STAGES: Record<string, readonly string[]> = {
     "propose_takeoff",
     "one_click", "detect_rooms", "measure_polygon", "cut_out", "measure_line",
     "measure_surface", "place_count", "count_marks", "symbol_sweep", "sweep_schedule_row",
-    "derive_base", "derive_transitions", "link_run",
+    "derive_base", "derive_transitions", "link_run", "hold_devices",
   ],
   revise: [
     "list_shapes", "delete_shape", "edit_shape", "edit_materials", "edit_condition",

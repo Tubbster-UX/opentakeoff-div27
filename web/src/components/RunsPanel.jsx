@@ -2,13 +2,15 @@
 // docked right-rail surface for cable runs, the Roll panel's sibling: every
 // run grouped by its device condition with per-cable LF, its status
 // (linked / withheld / broken with the reason) and review state, the
-// Unlinked list, and the telecom rooms with their names. Clicking an item
+// Unlinked list (check devices and Hold them with a reason when they
+// deliberately get no run), the Held list, and the telecom rooms with their
+// names. A run over 295 ft per cable carries a flag. Clicking an item
 // puts it on screen. A pure view over the canvas's computeCableTakeoff
 // result — the records change only through the callbacks, which the canvas
 // puts on its undo stack.
 import { useState } from "react";
 import { Icon } from "../brand/icons.jsx";
-import { DEVICE_TYPE_LABELS, isTrCondition } from "../lib/cable.js";
+import { DEVICE_TYPE_LABELS, isTrCondition, TIA_MAX_LINK_FT } from "../lib/cable.js";
 import { lenVal, lenUnit } from "../lib/units";
 import { HatchSwatch } from "./hatches.jsx";
 
@@ -39,9 +41,12 @@ function TrName({ shape, onRename }) {
 /**
  * @param {{ takeoff: any, conditions: any[], shapes: any[], units?: string, linkArmed?: boolean,
  *   onArmLink: () => void, onLocate: (shapeId: string) => void, onUnlink: (runId: string) => void,
- *   onAccept: (runIds: string[]) => void, onRenameTr: (shapeId: string, name: string) => void, onClose: () => void }} props
+ *   onAccept: (runIds: string[]) => void, onRenameTr: (shapeId: string, name: string) => void,
+ *   onHold?: (shapeIds: string[], reason: string) => boolean, onClose: () => void }} props
  */
-export default function RunsPanel({ takeoff, conditions, shapes, units = "imperial", linkArmed = false, onArmLink, onLocate, onUnlink, onAccept, onRenameTr, onClose }) {
+export default function RunsPanel({ takeoff, conditions, shapes, units = "imperial", linkArmed = false, onArmLink, onLocate, onUnlink, onAccept, onRenameTr, onHold = null, onClose }) {
+  const [checked, setChecked] = useState(() => new Set());
+  const [holdReason, setHoldReason] = useState("");
   const LU = lenUnit(units);
   const L = (ft) => (ft == null ? "—" : `${r2(lenVal(ft, units))} ${LU}`);
   const condById = new Map((conditions || []).map((c) => [c.id, c]));
@@ -49,7 +54,17 @@ export default function RunsPanel({ takeoff, conditions, shapes, units = "imperi
   const unlinked = takeoff?.resolved?.unlinked || { devices: [], routes: [] };
   const totals = takeoff?.summary?.totals;
   const warnings = takeoff?.summary?.warnings || [];
-  const pendingIds = runs.filter((r) => r.pending).map((r) => r.id);
+  const held = takeoff?.resolved?.held || [];
+  const holds = takeoff?.resolved?.holds || [];
+  const pendingIds = [...runs.filter((r) => r.pending).map((r) => r.id), ...holds.filter((h) => h.pending).map((h) => h.id)];
+  // a checked device that got linked or deleted since drops out of the pick
+  const unlinkedIds = new Set(unlinked.devices.map((d) => d.shape_id));
+  const picked = [...checked].filter((id) => unlinkedIds.has(id));
+  const toggle = (id) => setChecked((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const doHold = () => {
+    if (!onHold || !picked.length || !holdReason.trim()) return;
+    if (onHold(picked, holdReason.trim())) { setChecked(new Set()); setHoldReason(""); }
+  };
   const trConds = new Set((conditions || []).filter(isTrCondition).map((c) => c.id));
   const trShapes = (shapes || []).filter((s) => s.measure_role === "count" && trConds.has(s.condition_id));
   // runs grouped by device condition, in condition order; runs with no
@@ -73,6 +88,8 @@ export default function RunsPanel({ takeoff, conditions, shapes, units = "imperi
         title={`${r.id}\nroute ${L(r.route_lf)} over ${r.route_shape_ids.length} segment(s)${r.reason ? `\n${r.status}: ${r.reason}` : ""}${r.notes ? `\n${r.notes.join("\n")}` : ""}`}>
         → {r.tr_name || r.tr_id || "?"} · {r.status === "linked" ? `${L(r.per_cable_lf)} × ${r.cables}` : r.status}
       </span>
+      {r.over_length && <span data-cable-flag="over-length" title={`Per cable ${L(r.per_cable_lf)} exceeds ${TIA_MAX_LINK_FT} ft — the TIA-568 copper permanent-link limit (90 m). It still counts: check the route; if it stands, it needs a closer TR or a length test and owner notice.`}
+        style={{ ...mono, fontSize: 9.5, padding: "0 4px", border: "1px solid #b66b00", color: "#b66b00", flexShrink: 0 }}>&gt;{TIA_MAX_LINK_FT}</span>}
       {r.pending && <button onClick={() => onAccept([r.id])} title="Accept this agent-linked run (its route segments keep their own review status)" style={smallBtn("pos")}>Accept</button>}
       {locBtn(r.device_shape_ids[0], "Put the device on screen")}
       <button onClick={() => onUnlink(r.id)} title="Unlink — the shapes stay; ⌘Z re-links" style={smallBtn("danger")}>✕</button>
@@ -106,11 +123,12 @@ export default function RunsPanel({ takeoff, conditions, shapes, units = "imperi
             <div style={{ ...mono, fontSize: 11, color: "var(--ink-secondary)" }}>
               {L(totals.cable_lf)} net · {L(totals.cable_lf_order)} with waste
             </div>
-            {(totals.pending_runs > 0 || totals.unlinked_devices > 0) && (
+            {(totals.pending_runs > 0 || totals.unlinked_devices > 0 || totals.held_devices > 0 || pendingIds.length > 0) && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: 11 }}>
                 {totals.unlinked_devices > 0 && <span style={{ color: "var(--c-danger)" }}>{totals.unlinked_devices} unlinked</span>}
+                {totals.held_devices > 0 && <span style={{ color: "var(--ink-muted)" }}>{totals.held_devices} held</span>}
                 {totals.pending_runs > 0 && <span style={{ color: "var(--ink-muted)" }}>{totals.pending_runs} pending review (counted)</span>}
-                {pendingIds.length > 0 && <button onClick={() => onAccept(pendingIds)} style={{ ...smallBtn("pos"), marginLeft: "auto" }} title="Accept every pending run — one undo step">Accept all</button>}
+                {pendingIds.length > 0 && <button onClick={() => onAccept(pendingIds)} style={{ ...smallBtn("pos"), marginLeft: "auto" }} title="Accept every pending run and hold — one undo step">Accept all</button>}
               </div>
             )}
             {warnings.map((w) => <div key={w} style={{ marginTop: 4, color: "#b66b00", fontSize: 10.5, lineHeight: 1.4 }}>{w}</div>)}
@@ -137,8 +155,21 @@ export default function RunsPanel({ takeoff, conditions, shapes, units = "imperi
         {(unlinked.devices.length > 0 || unlinked.routes.length > 0) && (
           <div style={section} data-cable-unlinked>
             <div style={head}>Unlinked — excluded from totals</div>
+            {onHold && unlinked.devices.length > 0 && (
+              <div data-cable-hold-form style={{ display: "flex", alignItems: "center", gap: 6, margin: "2px 0 6px" }}>
+                <input type="checkbox" aria-label="Check every unlinked device" checked={picked.length === unlinked.devices.length}
+                  onChange={(e) => setChecked(e.target.checked ? new Set(unlinked.devices.map((d) => d.shape_id)) : new Set())} />
+                <input name="hold-reason" value={holdReason} onChange={(e) => setHoldReason(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") doHold(); }}
+                  placeholder="reason (routing not drawn, by others…)" title="Why the checked devices get no run — prints on the report and the marked set"
+                  style={{ flex: 1, minWidth: 0, padding: "2px 5px", borderRadius: 0, border: "1px solid var(--ink-faint)", fontSize: 11 }} />
+                <button onClick={doHold} disabled={!picked.length || !holdReason.trim()}
+                  title="Hold the checked devices: no run by decision. They stay out of totals and list as held with the reason. ⌘Z undoes."
+                  style={{ ...smallBtn(), opacity: picked.length && holdReason.trim() ? 1 : 0.5 }}>Hold {picked.length || ""}</button>
+              </div>
+            )}
             {unlinked.devices.map((d) => (
               <div key={"d" + d.shape_id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, padding: "2px 0" }}>
+                {onHold && <input type="checkbox" aria-label={`Check ${d.finish_tag} device`} checked={checked.has(d.shape_id)} onChange={() => toggle(d.shape_id)} />}
                 <span style={{ ...mono, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.reason}>device · {d.finish_tag}{d.label ? ` · ${d.label}` : ""}</span>
                 {locBtn(d.shape_id, "Put this device on screen")}
               </div>
@@ -147,6 +178,27 @@ export default function RunsPanel({ takeoff, conditions, shapes, units = "imperi
               <div key={"r" + r.shape_id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, padding: "2px 0" }}>
                 <span style={{ ...mono, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.reason}>route · {r.finish_tag} · {L(r.length_lf)}</span>
                 {locBtn(r.shape_id, "Put this route segment on screen")}
+              </div>
+            ))}
+          </div>
+        )}
+        {holds.length > 0 && (
+          <div style={section} data-cable-held>
+            <div style={head}>Held — no run by decision, excluded from totals</div>
+            {holds.map((h) => (
+              <div key={h.id} data-cable-hold={h.id} style={{ padding: "3px 0", borderTop: "1px solid var(--paper-cream)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
+                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`${h.reason}\n${h.id}`}>{h.reason}</span>
+                  <span style={{ ...mono, fontSize: 10.5, color: "var(--ink-muted)" }}>{h.held} device{h.held === 1 ? "" : "s"}</span>
+                  {h.pending && <button onClick={() => onAccept([h.id])} title="Accept this agent's hold" style={smallBtn("pos")}>Accept</button>}
+                  <button onClick={() => onUnlink(h.id)} title="Release the hold — its devices return to the unlinked list; ⌘Z re-holds" style={smallBtn("danger")}>release</button>
+                </div>
+                {held.filter((d) => d.hold_id === h.id).map((d) => (
+                  <div key={d.shape_id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, padding: "1px 0 1px 10px", color: "var(--ink-secondary)" }}>
+                    <span style={{ ...mono, flex: 1 }}>{d.finish_tag}{d.label ? ` · ${d.label}` : ""}</span>
+                    {locBtn(d.shape_id, "Put this device on screen")}
+                  </div>
+                ))}
               </div>
             ))}
           </div>

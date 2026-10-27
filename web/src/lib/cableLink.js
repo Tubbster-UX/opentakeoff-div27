@@ -6,7 +6,7 @@
 // module only decides what a click means.
 //
 // Draft: { device: shapeId|null, routes: shapeId[], tr: shapeId|null }.
-import { hasCableSetup, isTrCondition, resolveCableRuns, linkRunRefusal } from "./cable.js";
+import { hasCableSetup, isTrCondition, resolveCableRuns, linkRunRefusal, isCableHold } from "./cable.js";
 
 /** @type {{ device: string|null, routes: string[], tr: string|null }} */
 export const EMPTY_LINK = Object.freeze({ device: null, routes: /** @type {string[]} */ (Object.freeze([])), tr: null });
@@ -37,6 +37,9 @@ export function linkClick(draft, hits, { conditions, runs }) {
   const tagged = (hits || []).map((s) => ({ s, role: linkRole(s, condById) })).filter((h) => h.role);
   const first = (role) => tagged.find((h) => h.role === role)?.s || null;
   const linkedBy = (id) => (runs || []).find((r) => Array.isArray(r.device_shape_ids) && r.device_shape_ids.includes(id));
+  const takenMsg = (prior) => (isCableHold(prior)
+    ? `That device is held (${prior.hold.reason || "no reason given"}) — release the hold in the Runs panel first.`
+    : `That device is already linked by run ${prior.id} — unlink it in the Runs panel first (one pull per location).`);
 
   // 1. no device yet: the click must start at a device marker
   if (!d.device) {
@@ -46,7 +49,7 @@ export function linkClick(draft, hits, { conditions, runs }) {
       return { draft: d, msg: "Link Run starts at a device marker — a count marker on a condition with a cable setup." };
     }
     const prior = linkedBy(dev.id);
-    if (prior) return { draft: d, msg: `That device is already linked by run ${prior.id} — unlink it in the Runs panel first (one pull per location).` };
+    if (prior) return { draft: d, msg: takenMsg(prior) };
     return { draft: { device: dev.id, routes: [], tr: null }, msg: `Device ${tagOf(dev, condById)} picked — now click its route segments in order, from the device toward the TR.` };
   }
 
@@ -54,7 +57,7 @@ export function linkClick(draft, hits, { conditions, runs }) {
   const dev = first("device");
   if (dev && dev.id !== d.device && !first("route") && !first("tr")) {
     const prior = linkedBy(dev.id);
-    if (prior) return { draft: d, msg: `That device is already linked by run ${prior.id} — unlink it in the Runs panel first.` };
+    if (prior) return { draft: d, msg: takenMsg(prior) };
     return { draft: { device: dev.id, routes: [], tr: null }, msg: `Restarted at device ${tagOf(dev, condById)} — click its route segments in order.` };
   }
 

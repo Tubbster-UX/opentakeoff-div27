@@ -198,7 +198,10 @@ Fifty-two tools, in the order an agent tends to reach for them:
   run (linked / withheld / broken, with reasons), lists unlinked devices and routes—every line on
   a `role: "route"` condition no linked run uses (excluded from totals, never assigned a
   length)—and rolls the summary up per condition × TR, by TR and
-  by cable type; `unlink_run` removes a link, shapes untouched. `takeoff_summary` and
+  by cable type; `unlink_run` removes a link, shapes untouched. `hold_devices` records devices
+  that deliberately get no run, with the reason—still out of totals, listed as held instead of
+  unlinked. A run over 295 ft per cable (TIA-568 copper) is flagged and warned, and a route on an
+  agent-set scale no person confirmed is flagged. `takeoff_summary` and
   `export_report` carry a `cable` block whenever a cable condition exists; agent-linked runs
   land pending and count exactly as pending agent shapes do
 - **Scope collision** (#366)—`takeoff_summary.shared_floor_sf` is the floor
@@ -411,7 +414,7 @@ New agent measurements, including `measure_polygon` and `measure_line`, explicit
 
 The [generated tool index](MCP_TOOL_INDEX.md) gives each tool's stage and required
 arguments directly from the running server's schemas. The default surface has
-<!--tool-count-->56<!--/tool-count--> tools; gated tools and the staged opener are listed separately.
+<!--tool-count-->57<!--/tool-count--> tools; gated tools and the staged opener are listed separately.
 
 Use `list_annotations` → `edit_annotation {annotation_id, text}` to shorten or clear
 a note. One `undo_last` restores the text. Geometry, dimension length, links and

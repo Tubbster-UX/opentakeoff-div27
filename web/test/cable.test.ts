@@ -399,14 +399,17 @@ test("report.v1, CSV and the workbook gain the cable block/sections/tabs only wh
   assert.deepEqual({ pulls: json.cable.totals.pulls, cables: json.cable.totals.cables, order: json.cable.totals.cable_lf_order }, { pulls: 2, cables: 3, order: 491.68 });
   assert.equal(json.cable.runs.length, 2);
   assert.equal(json.cable.runs[0].sheets, "Sheet a.pdf");
+  assert.equal(json.cable.runs[0].device_sheets, "Sheet a.pdf");
+  assert.equal(json.cable.runs[0].tr_sheet, "Sheet a.pdf");
   assert.deepEqual(json.cable.unlinked, { devices: [], routes: [] });
+  assert.deepEqual(json.cable.held, []);
   assert.deepEqual(json.cable.warnings, []);
 
   const csv = totalsToCsv(rows, "", null, null, null, null, null, "OpenTakeoff", "imperial", t);
   assert.ok(csv.includes("\nCable summary\n"));
-  assert.ok(csv.includes("DATA-1,wall_outlet,CAT6A,MDF,1,12,1,1,2,87.5,261,292.32,0,0,"), csv);
-  assert.ok(csv.includes("TOTAL,,,,,,2,2,3,227.5,439,491.68,0,0,"), csv);
-  assert.ok(csv.includes("\nCable runs\n") && csv.includes("run-w,DATA-1,wall_outlet,CAT6A,MDF,a.pdf,87.5,23,10,10,130.5,2,261,1,linked,human,"), csv);
+  assert.ok(csv.includes("DATA-1,wall_outlet,CAT6A,MDF,1,12,1,1,2,87.5,261,292.32,0,0,0,0,"), csv);
+  assert.ok(csv.includes("TOTAL,,,,,,2,2,3,227.5,439,491.68,0,0,0,0,"), csv);
+  assert.ok(csv.includes("\nCable runs\n") && csv.includes("run-w,DATA-1,wall_outlet,CAT6A,MDF,a.pdf,a.pdf,a.pdf,87.5,23,10,10,130.5,2,261,1,linked,human,"), csv);
 
   const tabs = reportWorkbook({ rows, bySheet: [], shapeRows: [], cable: t });
   assert.deepEqual(tabs.map((s: any) => s.name), ["Conditions", "By sheet", "Materials", "Shapes", "By floor × room", "Cable summary", "Cable runs"]);
@@ -414,8 +417,9 @@ test("report.v1, CSV and the workbook gain the cable block/sections/tabs only wh
   assert.deepEqual(summaryTab[0].slice(0, 4), ["Condition", "Device type", "Cable type", "TR"]);
   assert.deepEqual(summaryTab[1].slice(6, 12), [1, 1, 2, 87.5, 261, 292.32], "full-precision cells, no strings");
   const runsTab = tabs[6].rows;
-  assert.equal(runsTab[0][13], "Multiplier");
-  assert.deepEqual(runsTab[1].slice(6, 14), [87.5, 23, 10, 10, 130.5, 2, 261, 1]);
+  assert.equal(runsTab[0][15], "Multiplier");
+  assert.deepEqual(runsTab[0].slice(5, 8), ["Device sheet", "Route sheet(s)", "TR sheet"]);
+  assert.deepEqual(runsTab[1].slice(8, 16), [87.5, 23, 10, 10, 130.5, 2, 261, 1]);
   // the Conditions tab/CSV gain Pulls / Cables / Cable LF columns through the profile seam
   const colKeys = CSV_PROFILE.map((c: any) => c.key);
   assert.ok(!colKeys.some((k: string) => k.startsWith("cable:")), "the frozen 13 never carry them");
@@ -428,7 +432,7 @@ test("metric display converts the cable tables' lengths and relabels their heade
   const met = cableTables(t, { L: (v: number) => Math.round(v * 0.3048 * 100) / 100, lengthUnit: "m" }) as any;
   assert.equal(met.summary[0][9], "Measured route m");
   assert.equal(met.summary[1][9], 26.67);
-  assert.equal(met.runs[0][7], "Vertical m");
-  assert.equal(met.runs[1][7], 7.01);
+  assert.equal(met.runs[0][9], "Vertical m");
+  assert.equal(met.runs[1][9], 7.01);
   assert.deepEqual(imp.unlinked[0], [...imp.unlinked[0]]);
 });

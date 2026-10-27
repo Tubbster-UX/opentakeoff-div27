@@ -138,15 +138,17 @@ The Excel export gains two sheets built for a bid workbook to reference directly
 | Cable LF (net) | LF |
 | Cable LF (order, with waste) | LF |
 | Unlinked devices | EA |
+| Held devices | EA |
 | Pending runs | EA |
+| Runs over 295 ft | EA |
 
-Device EA sits beside Pulls so an unlinked device shows as a gap, in addition to the Unlinked list. The cable tabs, columns and report blocks appear **only when a cable condition exists**, so a document that never used the feature exports byte-for-byte as before.
+Device EA sits beside Pulls so an unlinked device shows as a gap, in addition to the Unlinked list; the gap is exactly unlinked + held devices. The by-TR subtotals sum to the totals: a condition with no linked run sits in a "(no TR — no linked run)" group. The cable tabs, columns and report blocks appear **only when a cable condition exists**, so a document that never used the feature exports byte-for-byte as before.
 
-**Cable runs** (one row per run): run ID, condition, device type, cable type, TR, sheet(s), route LF, vertical, loop at device, loop at TR, per-cable LF, cables, location LF, multiplier, status (linked / withheld / broken with its reason), review status.
+**Cable runs** (one row per run): run ID, condition, device type, cable type, TR, device sheet, route sheet(s), TR sheet, route LF, vertical, loop at device, loop at TR, per-cable LF, cables, location LF, multiplier, status (linked / withheld / broken with its reason), review status.
 
 **In-app Report** shows the Cable summary table and an Unlinked list with a link that puts each item on screen.
 
-**Marked set PDF** draws each route in its condition color with a chip showing run ID and per-cable LF, and adds pulls, cables and order LF per condition to the legend cover.
+**Marked set PDF** draws each route in its condition color with a chip showing run ID and per-cable LF, and adds pulls, cables and order LF per condition to the legend cover. **As built (Phase 3):** the chip reads `run ID · device condition · per-cable LF` with its border in the device condition's color, amber with `>295` over length and red with the status when withheld or broken; the run ID is the record id's first six hex digits, lengthened until unique. The same ID is printed beside the device marker, TRs print their names, unlinked devices get an amber ring and held devices a grey one, all placed clear of each other; a linked route's generic LF chip gives way to its run chips. The cover adds a line under each device condition (pulls, cables, net and order LF, unlinked and held), labels route and TR conditions, keys the marks and prints the cable warnings. A marked set with no cable work is byte-identical.
 
 ## MCP verbs
 
@@ -159,7 +161,8 @@ Reuse existing verbs wherever possible and add the minimum new ones; the repo's 
 | `measure_line` | Unchanged | Traces route segments |
 | `link_run` | New | Takes device shape ID(s), ordered route shape IDs, TR ID, optional cable override; returns per-cable and location LF |
 | `list_runs` | New | Runs with lengths, status, and the unlinked list |
-| `unlink_run` | New | Removes a run; shapes stay |
+| `unlink_run` | New | Removes a run or releases a hold; shapes stay |
+| `hold_devices` | New (bid follow-up) | Records device locations that deliberately get no run, with the reason; excluded from totals, listed as held |
 | `takeoff_summary` / `export_takeoff` / `export_report` | Extended | Include the cable summary and runs |
 
 `link_run` refuses, with an actionable message, when a route ID is not a measured linear shape, a sheet is unscaled, the device condition lacks a required value, the TR ID is not a TR marker, or the device is already linked (one pull per location). An agent cannot submit a length; it can only link shapes that already carry measured geometry. A run whose route segment sits on a stitched surface (`stitch:<uid>`) survives MCP import → export → import with its stored length intact and is reported broken with a stated reason (stitches never round-trip through MCP), never dropped or zeroed.
@@ -226,6 +229,24 @@ Recorded from the Phase 1 review (Oct 21, 2026):
 - [x] **Cable setup over MCP.** A fresh opt-in or a device-type change keeps minting the device type's starting values for whatever the call does not state, and the `edit_condition` reply names every minted value under `cable.minted` with the note "starting values, not verified against spec". (The review left this choice blank; this is the less disruptive option and the canvas pre-fill in Phase 2 is unchanged either way.)
 - [x] **Shared trunk segments.** Kept allowed. (Left blank in the review; unchanged from the plan default.)
 - [x] **Stitched sheets in the canvas.** The Phase 2 Link Run tool links route segments on stitched surfaces: the library resolves a segment through the caller's scale answer, the canvas knows every stitch's scale, and `web/test/cable.test.ts` already proves a `stitch:<uid>` segment links there while the same run reads broken over MCP.
+
+Recorded from the first real bid (Oct 27, 2026): the user asked for items 1–6 of the review to be fixed before Phase 3.
+
+- [x] **By-TR subtotals sum to the totals.** A cable condition with no linked run sits in a no-TR group in `by_tr` and prints as "(no TR — no linked run)", so Device EA by TR reconciles (the bid read 103 against 111).
+- [x] **Device and TR sheets on the runs sheet.** Columns *Device sheet*, *Route sheet(s)* and *TR sheet* replace the spec's single *sheet(s)*; JSON keeps `sheets` (the route sheets) and adds `device_sheets` and `tr_sheet`.
+- [x] **Unconfirmed scale.** A linked run whose route sits on a sheet whose agent-set scale no person confirmed is flagged `scale_unconfirmed` with a note, and one warning names the sheets. It still counts; the scale gate is a flag, never a refusal. Every MCP `set_scale` lands unconfirmed, so every MCP takeoff warns until a person confirms in the canvas.
+- [x] **Holds.** A record in `cable_runs` carrying `hold: { reason }` (no route, no TR) names device locations that deliberately get no run. Held devices are excluded from totals like unlinked ones and listed apart with the reason. A hold rides the run list so it reuses the load gate, import merge, undo family and protocol field. New MCP verb `hold_devices` (56 → 57 default tools); `unlink_run` releases a hold; the canvas holds from the Runs panel. An agent's hold lands pending.
+- [x] **295 ft per cable.** `TIA_MAX_LINK_FT = 295` (TIA-568 copper permanent link, 90 m). A linked run over it counts, is flagged `over_length` with a note, and is named in one warning; the summary gains *Runs over 295 ft*. The check compares per-cable LF (route + vertical + loops) and is not medium-aware: the warning says fiber and coax are not bound by it rather than guessing from free-text `cable_type`.
+- [x] **Device-type aliases.** `edit_condition` reads `access_control`, `card_reader`, `wireless_access_point`, `cctv`, `data_outlet`, `speaker` and a few others as the canonical type and says so in `cable.device_type_alias`; the document stores only the six types. An unknown name is refused with the list. One vertical per condition stays: devices with different verticals are separate conditions.
+- [x] **Not done here:** splitting the branch LF of a shared trunk out of full-route polylines (it needs trunk segments traced as their own shapes, which the model already allows).
+
+Recorded while building Phase 3 (Oct 27, 2026):
+
+- [x] **Chip text and short run ID** as above; the full ID is in the Cable runs sheet.
+- [x] **Device tags.** Not in the spec's sentence, added because the first bid traced pathway on the ceiling plan and devices on the comms plan, and nothing on paper connected the two.
+- [x] **Generic route chips suppressed** for segments a run uses on that sheet; an unlinked route keeps its own chip.
+- [x] **Route condition on the cover**: no "waste -> LF" allowance beside it, and a line saying it is pathway, not a cable quantity.
+- [x] **Placement** is greedy against everything already placed (markers, TR names, tags, chips), trying points along each segment and beside it; with no room, the least-overlap point. Drawing text on the source sheet is not an obstacle.
 
 Recorded while building Phase 2 (Oct 27, 2026), each within the spec's Canvas UI section:
 

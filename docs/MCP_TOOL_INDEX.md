@@ -6,7 +6,7 @@ Refresh with `npm run check:tool-count --prefix mcp -- --write`; CI fails on sta
 For the operating workflow, read [the agent guide](AGENT_GUIDE.md) and [geometry workflow](GEOMETRY_WORKFLOW.md).
 For behavior and optional arguments, use the [tool reference](../mcp/README.md#tools) and the discovered input schema.
 
-Default build: **56 tools**. Coordinates, where present, are full-sheet image pixels at PDF render scale 2.0, top-left origin, y down.
+Default build: **57 tools**. Coordinates, where present, are full-sheet image pixels at PDF render scale 2.0, top-left origin, y down.
 
 | Tool | Stage | Availability | Required arguments |
 |---|---|---|---|
@@ -33,6 +33,7 @@ Default build: **56 tools**. Coordinates, where present, are full-sheet image pi
 | `find_schedule` | setup | Default | `kind` |
 | `find_text` | setup | Default | `sheet`, `q` |
 | `get_sheet_vectors` | setup | Default | `sheet` |
+| `hold_devices` | measure | Default | `device_shape_ids`, `reason` |
 | `import_takeoff` | handoff | Default | `path` |
 | `link_annotation` | revise | Default | `annotation_id`, `condition` |
 | `link_run` | measure | Default | `device_shape_ids`, `route_shape_ids`, `tr_id` |

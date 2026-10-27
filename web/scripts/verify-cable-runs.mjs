@@ -1,4 +1,4 @@
-// Division 27 Phase 2 — drive the canvas cable UI in a real browser.
+// Division 27 Phases 2 and 3 — drive the canvas cable UI in a real browser.
 // Run from web/ after `npm run build`:
 //   PLAYWRIGHT_MODULE=/.../playwright-core/index.mjs BROWSER_PATH=/.../chrome \
 //   node scripts/verify-cable-runs.mjs <fixture.json> <out/results.json> [dist]
@@ -14,8 +14,15 @@
 // links, ⌘Z unlinks and ⇧⌘Z re-links; Accept clears the pending run; the
 // condition editor shows the cable setup; the Report shows the Cable summary
 // and its Show button puts an unlinked device on screen; no console errors.
+// Added with the first-bid follow-ups and Phase 3 (CABLE_SETUP_PLAN.md §12–13):
+// a long vertical flags runs over 295 ft in the Runs panel; the last unlinked
+// device is HELD from the Runs panel with a reason (grey cue, Held list,
+// ⌘Z / ⇧⌘Z); the Report lists it as held; and the canvas's marked set
+// carries the route chips, the device run tags and the legend cable lines.
 import { dirname, join, resolve } from 'node:path';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -70,7 +77,7 @@ try {
   await page.waitForSelector('[data-cable-totals]');
   const totals1 = await page.locator('[data-cable-totals]').innerText();
   check('Runs panel: 1 pull, 2 cables of 3 devices, pending counted', /1 pull · 2 cables of 3 devices/.test(totals1) && /1 pending review/.test(totals1), totals1);
-  check('Runs panel: 2 unlinked devices + 2 unlinked routes listed', (await page.locator('[data-cable-unlinked] button').count()) === 4);
+  check('Runs panel: 2 unlinked devices + 2 unlinked routes listed', (await page.locator('[data-cable-unlinked] button[title^="Put this"]').count()) === 4);
   check('Runs panel: the TR name field holds MDF', (await page.locator('input[name="tr-name"]').inputValue()) === 'MDF');
   await shot('02-runs-panel.png');
 
@@ -148,6 +155,16 @@ try {
   await page.locator('input[name="condition-cable-vertical"]').fill('23');
   await page.waitForTimeout(300);
   check('entering it again restores 2 pulls', /2 pulls/.test(await page.locator('[data-cable-totals]').innerText()));
+  // over 295 ft per cable: 33.33 route + 300 vertical + 10 + 10 = 353.33 on both linked runs
+  await page.locator('input[name="condition-cable-vertical"]').fill('300');
+  await page.waitForSelector('[data-cable-flag="over-length"]');
+  const flags = await page.locator('[data-cable-flag="over-length"]').count();
+  const flagWarn = await page.locator('[data-cable-totals]').innerText();
+  check('a 300 ft vertical flags both runs over 295 ft (still counted) and warns once', flags === 2 && /2 pulls/.test(flagWarn) && /2 linked runs exceed 295 ft per cable/.test(flagWarn), { flags, flagWarn: flagWarn.slice(0, 300) });
+  await shot('09-over-295-flag.png');
+  await page.locator('input[name="condition-cable-vertical"]').fill('23');
+  await page.waitForTimeout(300);
+  check('back to 23 ft: no over-length flag', (await page.locator('[data-cable-flag="over-length"]').count()) === 0);
   await page.getByRole('button', { name: 'Quantities' }).first().click();
 
   // 8. Report: Cable summary + Show
@@ -161,6 +178,50 @@ try {
   await page.waitForTimeout(800);
   check('Report Show closes the Report and selects the unlinked device', !(await page.locator('[data-cable-report]').count()));
   await shot('06-show-unlinked.png');
+
+  // 9. hold the last unlinked device from the Runs panel, with a reason
+  if (!(await page.locator('[data-cable-totals]').count())) await page.getByRole('button', { name: /^Cable runs/ }).first().click();
+  await page.waitForSelector('[data-cable-hold-form]');
+  await page.locator('[data-cable-unlinked] input[type="checkbox"]').nth(1).check();
+  await page.locator('input[name="hold-reason"]').fill('Furnished by others');
+  await page.locator('[data-cable-hold-form] button').click();
+  await page.waitForSelector('[data-cable-held]');
+  const heldTotals = await page.locator('[data-cable-totals]').innerText();
+  const heldList = await page.locator('[data-cable-held]').innerText();
+  check('Hold: the device leaves the unlinked count, the totals say 1 held, the Held list names the reason',
+    /1 held/.test(heldTotals) && !/unlinked/.test(heldTotals) && /Furnished by others/.test(heldList) && /1 device/.test(heldList), { heldTotals, heldList });
+  check('Hold: the sheet shows the grey held cue in place of the amber one',
+    (await page.locator('[data-cable-cue="held-device"]').count()) === 1 && (await page.locator('[data-cable-cue="unlinked-device"]').count()) === 0);
+  await shot('10-held.png');
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(400);
+  check('⌘Z releases the hold: the device is unlinked again', (await page.locator('[data-cable-cue="unlinked-device"]').count()) === 1 && !(await page.locator('[data-cable-held]').count()));
+  await page.keyboard.press('Control+Shift+z');
+  await page.waitForTimeout(400);
+  check('⇧⌘Z re-holds it', (await page.locator('[data-cable-cue="held-device"]').count()) === 1);
+
+  // 10. the Report lists it as held, and the canvas's marked set burns the runs (Phase 3)
+  await page.getByRole('button', { name: 'Report', exact: true }).first().click();
+  await page.waitForSelector('[data-cable-report-held]');
+  check('Report: the Held list names the device and the reason', /Furnished by others/.test(await page.locator('[data-cable-report-held]').innerText()));
+  await page.getByRole('button', { name: /^Print/ }).first().click();
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.getByText(/^Download marked set/).first().click()]);
+  const pdfPath = join(mkdtempSync(join(tmpdir(), 'ot-cable-ms-')), 'marked-set.pdf');
+  await dl.saveAs(pdfPath);
+  const pdfjs = await import(pathToFileURL(resolve('node_modules/pdfjs-dist/legacy/build/pdf.mjs')).href);
+  const pdf = await pdfjs.getDocument({ data: new Uint8Array(readFileSync(pdfPath)), verbosity: 0 }).promise;
+  const pageText = async (n) => (await (await pdf.getPage(n)).getTextContent()).items.map((i) => i.str).join('\n');
+  const cover = await pageText(1), sheet = await pageText(2);
+  check('marked set cover: the cable line counts the held device; DATA-1 carries pulls, cables, net and order LF',
+    /Cable runs: 2 pulls linked · 1 run pending review · 0 unlinked devices · 1 held device/.test(cover) && /2 pulls · 4 cables · 305\.3 LF cable net · 342 LF order at 12% waste · 1 held/.test(cover), cover.slice(0, 900));
+  const chips = sheet.match(/run-[0-9a-f]+ · DATA-1 · 76\.3 LF/g) || [];
+  check('marked set sheet: a route chip per linked run (run ID · DATA-1 · 76.3 LF per cable), the TR named', chips.length === 2 && /MDF/.test(sheet), { chips, sheet: sheet.slice(0, 600) });
+  const ids = chips.map((c) => c.split(' ')[0]);
+  check('marked set sheet: each run ID also tags its device', ids.every((id) => sheet.split(id).length - 1 === 2), ids);
+  check('marked set sheet: the linked routes\' generic "ROUTE · 33.3 LF" chips gave way; the unlinked route keeps its own', (sheet.match(/ROUTE · 33\.3 LF/g) || []).length === 1);
+  await pdf.destroy();
+  writeFileSync(join(shots, 'marked-set-text.json'), JSON.stringify({ cover, sheet }, null, 2));
 } catch (e) {
   check('script ran to the end', false, String(e?.stack || e));
   await page.screenshot({ path: join(shots, 'error.png') }).catch(() => {});

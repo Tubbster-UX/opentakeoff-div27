@@ -311,3 +311,56 @@ PLAYWRIGHT_MODULE=/path/to/playwright-core/index.mjs BROWSER_PATH=/path/to/chrom
   node scripts/verify-cable-runs.mjs /tmp/cable-fixture.json ../docs/review/cable-runs-phase2/results.json
 ```
 
+## 12. Follow-ups from the first real bid, as built (Oct 27, 2026)
+
+The review of the user's bid outputs found six issues; the user asked for all six to be fixed
+before Phase 3. The decisions are in the spec's Decisions section.
+
+| Item | Change | Where |
+|---|---|---|
+| 1. By-TR undercount | A condition with no linked run lands in a no-TR group, so every summary quantity sums by TR to the total | `cable.js` `cableSummary`, `cableTables` |
+| 2. Device and TR sheets | Runs carry `device_sheet_ids` and `tr_sheet_id`; the runs sheet gains *Device sheet* and *TR sheet* | `cable.js` `resolveCableRuns`, `cableRunRows`; MCP `link_run` / `list_runs` |
+| 3. Unconfirmed scale | `resolveCableRuns` takes `scaleUnconfirmed` and `sheetLabel`; linked runs on such sheets are flagged, one warning names the sheets | `cable.js`; canvas memo reads the scale gate's map; MCP `cableInputs` |
+| 4. Holds | `mintCableHold`, `holdRefusal`, `isCableHold`; held devices listed apart and counted in *Held devices*; MCP `hold_devices`; Runs panel **Hold**, Held list, grey cue; Report Held list | `cable.js`, `session.ts`, `tools.ts`, `outputs.ts`, `staging.ts`, `RunsPanel.jsx`, `CableOverlay.jsx`, `CableReportSection.jsx`, protocol schema |
+| 5. 295 ft | `TIA_MAX_LINK_FT`; `over_length` per run, *Runs over 295 ft* column, one warning; Runs panel `>295` flag | `cable.js`, `RunsPanel.jsx`, MCP outputs |
+| 6. Aliases | `DEVICE_TYPE_ALIASES`, `normalizeDeviceType`; `edit_condition` normalizes before comparing types | `cable.js`, `session.ts`, `tools.ts` |
+
+Found while verifying item 4 in the browser and fixed: the canvas keyboard effect did not list
+`cableRuns` as a dependency, so ⌘Z or ⇧⌘Z could apply a cable command to the run list as it
+stood when the handler last subscribed, then set that stale list back. Redo after releasing a
+hold reproduced it; `cableRuns` is now a dependency, as `approvals` already was.
+
+## 13. Phase 3 — marked set, as built (Oct 27, 2026)
+
+| File | What it is |
+|---|---|
+| `web/src/lib/cableMarks.js` (new) | Pure: `cableSheetMarks` decides the chips, device tags, rings and TR names for one sheet and places them (`placeLabels`, greedy, against markers and each other); `cableLegend` words the cover's meta line, per-condition cable lines, key and warnings; `wrapText`. |
+| `web/src/lib/cable.js` | `runShortIds`: the six-hex short ID, lengthened until unique. |
+| `web/src/lib/markedset.js` | Draws what `cableMarks.js` returns; `chip()` takes a size; a linked route's generic chip is suppressed. Every addition is gated on a cable takeoff. |
+| `web/test/cableMarks.test.ts` (new) | Exact chip and tag text, placement, crowding, legend lines (×N, waste), wrap. |
+| `mcp/test/cable.test.ts` | `export_marked_pdf` end to end: the PDF's text carries the chips, tags, TR name, cover lines and warning; the generic route chip is gone. |
+| `web/scripts/make-cable-marked-sample.mts` (new) | An invented 12-run takeoff on the demo plan, exported as a marked set. |
+| `web/scripts/verify-cable-runs.mjs` | Adds the over-295 flag, hold / release / redo, the Report's Held list, and the canvas marked set's text. |
+
+### Check record (this container: Node 22, root)
+
+| Check | Result |
+|---|---|
+| `web` tests | 3,562 tests: 3,552 pass, 0 fail, 6 cancelled. The cancellations are `pictures.test.ts` (20 s file timeout) and 5 in `stageOcrModel.test.ts`; both cancel identically on the untouched base commit here. |
+| `web` typecheck, lint, ORT check, bench, build, OCR dist check | pass; `web/bench/results.json` unchanged |
+| `mcp` all test files (as CI runs them) | 299 tests: 298 pass, 1 fail (`safewrite` "unreadable file fails CLOSED", which fails because this container runs as root, as in §10) |
+| `mcp` typecheck, tool count (57 / 59 / 11), wiki, protocol resources, build, dist smoke | pass |
+| `protocol` check, `node scripts/check-doc-links.mjs` | pass |
+| A marked set with no cable work, base commit vs this branch, clock frozen | identical SHA-256 |
+| Browser: `verify-cable-runs.mjs` | 30 of 30 checks, no console errors; [`docs/review/cable-runs-phase3/`](../review/cable-runs-phase3/README.md) |
+
+To repeat:
+
+```
+cd web
+npm run build
+node --import tsx scripts/make-cable-fixture.mts /tmp/cable-fixture.json
+PLAYWRIGHT_MODULE=/path/to/playwright-core/index.mjs BROWSER_PATH=/path/to/chrome \
+  node scripts/verify-cable-runs.mjs /tmp/cable-fixture.json /tmp/cable-ui/results.json
+node --import tsx scripts/make-cable-marked-sample.mts /tmp/cable-marked-sample.pdf
+```

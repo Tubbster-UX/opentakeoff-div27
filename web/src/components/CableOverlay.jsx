@@ -2,7 +2,8 @@
 // — drawn per sheet inside the canvas's SVG group, after the committed shapes:
 //   • unlinked device markers get an amber dashed ring, unlinked route
 //     segments an amber halo, so they are caught before export (linked routes
-//     already draw in their condition color);
+//     already draw in their condition color); a HELD device (no run by
+//     decision) gets a quiet grey ring instead — seen, not alarming;
 //   • every TR marker prints its name beside it;
 //   • while the Link Run tool is armed, the draft's device, its segments
 //     (numbered in order) and its TR are highlighted in cobalt.
@@ -25,6 +26,7 @@ export default function CableOverlay({ panelKey, img, z, shapes, takeoff, draft 
   const dn = (vn) => vn.map(([x, y]) => [x * img.w, y * img.h]);
   const unlinkedDev = new Set((takeoff?.resolved?.unlinked?.devices || []).map((d) => d.shape_id));
   const unlinkedRoute = new Set((takeoff?.resolved?.unlinked?.routes || []).map((r) => r.shape_id));
+  const heldDev = new Set((takeoff?.resolved?.held || []).map((d) => d.shape_id));
   const ink = dark ? "#f3f1ea" : "#1c1a17";
   const out = [];
 
@@ -32,6 +34,9 @@ export default function CableOverlay({ panelKey, img, z, shapes, takeoff, draft 
     if (s.measure_role === "count" && unlinkedDev.has(s.id)) {
       const [cx, cy] = dn(s.verts_norm)[0];
       out.push(<circle key={"ud" + s.id} data-cable-cue="unlinked-device" cx={cx} cy={cy} r={13 / z} fill="none" stroke={AMBER} strokeWidth={2 / z} strokeDasharray={`${3 / z} ${2.5 / z}`} />);
+    } else if (s.measure_role === "count" && heldDev.has(s.id)) {
+      const [cx, cy] = dn(s.verts_norm)[0];
+      out.push(<circle key={"hd" + s.id} data-cable-cue="held-device" cx={cx} cy={cy} r={13 / z} fill="none" stroke={dark ? "#9a968c" : "#6b675e"} strokeWidth={1.5 / z} strokeDasharray={`${1 / z} ${3 / z}`} strokeLinecap="round" />);
     } else if (s.measure_role === "linear" && unlinkedRoute.has(s.id)) {
       out.push(<polyline key={"ur" + s.id} data-cable-cue="unlinked-route" points={dn(s.verts_norm).map((q) => q.join(",")).join(" ")} fill="none" stroke={AMBER} strokeOpacity={0.45} strokeWidth={9 / z} strokeLinecap="round" strokeLinejoin="round" />);
     }
