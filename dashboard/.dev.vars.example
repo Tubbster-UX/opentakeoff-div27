@@ -1,0 +1,8 @@
+# Copy to .dev.vars (gitignored) for `npm run dev`. Never commit real keys.
+# Local Supabase (`npx supabase start` from brink-merge/):
+#   SUPABASE_URL is the API URL it prints (http://127.0.0.1:54321).
+#   SUPABASE_SERVICE_ROLE_KEY is the service_role key it prints
+#   (`npx supabase status -o env` -> SERVICE_ROLE_KEY). It stays in the Worker;
+#   the browser never receives it.
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_SERVICE_ROLE_KEY=
