@@ -3,6 +3,11 @@
     "opentakeoff": {
       "command": "npx",
       "args": ["-y", "opentakeoff-mcp"]
+    },
+    "brink": {
+      "command": "node",
+      "args": ["brink-merge/bin/brink-merge-mcp.mjs"],
+      "env": { "BRINK_PGLITE_DIR": "brink-merge/.data/pglite" }
     }
   }
 }

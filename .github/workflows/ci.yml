@@ -304,6 +304,42 @@ jobs:
       - run: npm ci --prefix protocol
       - run: npm run check --prefix protocol
 
+  # brink-merge: Brink's internal OpenTakeoff -> EasySchematic merge (brink-merge/README.md).
+  # Self-contained; the DB tests run on PGlite and on a real Postgres service.
+  brink-merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: brink-merge
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: brink
+          POSTGRES_PASSWORD: brink
+          POSTGRES_DB: brink_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U brink" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      BRINK_TEST_DATABASE_URL: postgres://brink:brink@localhost:5432/brink_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: brink-merge/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: CLI end to end on a real OpenTakeoff fixture
+        run: |
+          node bin/brink-merge.mjs fixtures/div27-sample.takeoff.json --report fixtures/div27-sample.report.json \
+            --out "$RUNNER_TEMP/schematic.json" --bom "$RUNNER_TEMP/bom.csv" --bom-json "$RUNNER_TEMP/bom.json"
+          node -e 'const b=require(process.argv[1]); if (b.totals.cables!==23||b.totals.cableNetLf!==1795.13) process.exit(1)' "$RUNNER_TEMP/bom.json"
+
   capture:
     runs-on: ubuntu-latest
     steps:

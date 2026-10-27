@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "rows": [
+    {
+      "conditionKey": "DATA-1",
+      "kind": "device",
+      "esDeviceType": "wall-plate",
+      "esTemplateRef": { "manufacturer": null, "modelNumber": null },
+      "label": "Data outlet, 2-port keystone",
+      "port": { "signalType": "ethernet", "connectorType": "rj45", "rearConnectorType": "punch-down-110" },
+      "cableType": "CAT6A CMP",
+      "portalSku": null,
+      "status": "proposed",
+      "note": "OT device_type wall_outlet, 2 cables per location. Model to be confirmed."
+    },
+    {
+      "conditionKey": "WAP-1",
+      "kind": "device",
+      "esDeviceType": "access-point",
+      "esTemplateRef": { "manufacturer": null, "modelNumber": null },
+      "label": "Wireless access point",
+      "port": { "signalType": "ethernet", "connectorType": "rj45" },
+      "cableType": "CAT6A CMP",
+      "portalSku": null,
+      "status": "proposed",
+      "note": "OT device_type wap, 2 cables per location. Model to be confirmed."
+    },
+    {
+      "conditionKey": "CAM-1",
+      "kind": "device",
+      "esDeviceType": "camera",
+      "esTemplateRef": { "manufacturer": null, "modelNumber": null },
+      "label": "IP camera",
+      "port": { "signalType": "ethernet", "connectorType": "rj45" },
+      "cableType": "CAT6 CMP",
+      "portalSku": null,
+      "status": "proposed",
+      "note": "OT device_type camera. ES also has ptz-camera and turret-camera; pick per the camera schedule."
+    },
+    {
+      "conditionKey": "ACS-1",
+      "kind": "device",
+      "esDeviceType": "door-strike",
+      "esTemplateRef": { "manufacturer": null, "modelNumber": null },
+      "label": "Access-controlled door",
+      "port": { "signalType": "rs485", "connectorType": "terminal-block" },
+      "cableType": "18/4 SHLD CMP",
+      "portalSku": null,
+      "status": "proposed",
+      "note": "OT device_type access_door. ES has no card-reader type; door-strike is the closest. Signal rs485 assumes OSDP readers; confirm."
+    },
+    {
+      "conditionKey": "TR",
+      "kind": "tr",
+      "esDeviceType": "patch-panel",
+      "esTemplateRef": { "manufacturer": null, "modelNumber": null },
+      "label": "Patch panel",
+      "port": { "signalType": "ethernet", "connectorType": "rj45", "rearConnectorType": "punch-down-110" },
+      "cableType": null,
+      "portalSku": null,
+      "status": "proposed",
+      "note": "One patch-panel device per TR marker (MDF, IDF-1, ...), sized to the cables homed there."
+    },
+    {
+      "conditionKey": "ROUTE",
+      "kind": "route",
+      "esDeviceType": null,
+      "esTemplateRef": null,
+      "label": "Cable pathway",
+      "port": null,
+      "cableType": null,
+      "portalSku": null,
+      "status": "proposed",
+      "note": "Route condition: pathway LF, not a cable quantity."
+    },
+    {
+      "conditionKey": "TRUNK",
+      "kind": "route",
+      "esDeviceType": null,
+      "esTemplateRef": null,
+      "label": "Cable pathway, trunk",
+      "port": null,
+      "cableType": null,
+      "portalSku": null,
+      "status": "proposed",
+      "note": "Route condition (trunk): pathway LF for tray / J-hooks, not a cable quantity."
+    },
+    {
+      "conditionKey": "BRANCH",
+      "kind": "route",
+      "esDeviceType": null,
+      "esTemplateRef": null,
+      "label": "Cable pathway, branch",
+      "port": null,
+      "cableType": null,
+      "portalSku": null,
+      "status": "proposed",
+      "note": "Route condition (branch): pathway LF, not a cable quantity."
+    }
+  ]
+}

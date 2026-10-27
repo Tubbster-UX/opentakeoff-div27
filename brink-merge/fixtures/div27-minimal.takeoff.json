@@ -1,0 +1,260 @@
+{
+  "schema": "opentakeoff.takeoff_canvas.v1",
+  "project_name": "",
+  "sheets": [
+    {
+      "sheet_id": "sample-plan.pdf",
+      "units_per_px": 0.027777777777777776,
+      "scale_source": "upp",
+      "scale_confirmed": false
+    }
+  ],
+  "conditions": [
+    {
+      "id": "cnd-17b98553-8f07-4c9f-a7dd-a8ff44906011",
+      "created_at": "2026-10-27T16:41:36.107Z",
+      "finish_tag": "TR",
+      "color": "#c96442",
+      "fill": "#c96442",
+      "hatch": "diag",
+      "multiplier": 1,
+      "waste_pct": 0,
+      "materials": [],
+      "role": "tr"
+    },
+    {
+      "id": "cnd-6a7c5cc2-1951-448e-9b95-024c7d3f0352",
+      "created_at": "2026-10-27T16:41:36.109Z",
+      "finish_tag": "DATA-1",
+      "color": "#2f7d54",
+      "fill": "#2f7d54",
+      "hatch": "diag2",
+      "multiplier": 1,
+      "waste_pct": 12,
+      "materials": [],
+      "cable_setup": {
+        "device_type": "wall_outlet",
+        "cables_per_location": 2,
+        "cable_type": "CAT6A",
+        "vertical_ft": 23,
+        "loop_device_ft": 10,
+        "loop_tr_ft": 10
+      }
+    },
+    {
+      "id": "cnd-c5f9a813-e4df-4bd0-aa53-a290b2db4f7d",
+      "created_at": "2026-10-27T16:41:36.112Z",
+      "finish_tag": "ROUTE",
+      "color": "#2563eb",
+      "fill": "#2563eb",
+      "hatch": "cross",
+      "multiplier": 1,
+      "waste_pct": 0,
+      "materials": [],
+      "role": "route"
+    }
+  ],
+  "shapes": [
+    {
+      "id": "shp-22a0d33d-f40d-4938-bea7-51d184884fad",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-17b98553-8f07-4c9f-a7dd-a8ff44906011",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.12254901960784313,
+          0.1893939393939394
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        },
+        "agent_edits": 1
+      },
+      "label": "MDF"
+    },
+    {
+      "id": "shp-81899d86-1eb8-410b-877c-ae6bb5f8210e",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-6a7c5cc2-1951-448e-9b95-024c7d3f0352",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.6127450980392157,
+          0.1893939393939394
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-6f9a6ea0-ae32-4fbb-a845-19f416ab30ed",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-6a7c5cc2-1951-448e-9b95-024c7d3f0352",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.6127450980392157,
+          0.44191919191919193
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-01bc9227-4258-4e01-9bc5-4eec187d2c82",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-6a7c5cc2-1951-448e-9b95-024c7d3f0352",
+      "measure_role": "count",
+      "verts_norm": [
+        [
+          0.6127450980392157,
+          0.6313131313131313
+        ]
+      ],
+      "computed": {
+        "count": 1
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-d64ec280-b820-4265-9462-5f3a8c00358a",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-c5f9a813-e4df-4bd0-aa53-a290b2db4f7d",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.12254901960784313,
+          0.1893939393939394
+        ],
+        [
+          0.6127450980392157,
+          0.1893939393939394
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 33.33
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-fdd4a5e1-60e1-4641-b658-81d9787d7351",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-c5f9a813-e4df-4bd0-aa53-a290b2db4f7d",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.12254901960784313,
+          0.44191919191919193
+        ],
+        [
+          0.6127450980392157,
+          0.44191919191919193
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 33.33
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    },
+    {
+      "id": "shp-bdb02308-915d-4ea6-9735-94dc63adf2af",
+      "sheet_id": "sample-plan.pdf",
+      "condition_id": "cnd-c5f9a813-e4df-4bd0-aa53-a290b2db4f7d",
+      "measure_role": "linear",
+      "verts_norm": [
+        [
+          0.12254901960784313,
+          0.6313131313131313
+        ],
+        [
+          0.6127450980392157,
+          0.6313131313131313
+        ]
+      ],
+      "computed": {
+        "area_sf": 0,
+        "perimeter_lf": 33.33
+      },
+      "origin": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "assignment": {
+          "source": "asserted"
+        }
+      }
+    }
+  ],
+  "markups": [],
+  "rfis": [],
+  "cable_runs": [
+    {
+      "id": "run-34f8ff06-0694-48e8-9f26-227e1dea9070",
+      "device_shape_ids": [
+        "shp-81899d86-1eb8-410b-877c-ae6bb5f8210e"
+      ],
+      "route_shape_ids": [
+        "shp-d64ec280-b820-4265-9462-5f3a8c00358a"
+      ],
+      "tr_id": "shp-22a0d33d-f40d-4938-bea7-51d184884fad",
+      "provenance": {
+        "method": "manual",
+        "actor": "agent",
+        "reviewed": false,
+        "created_at": "2026-10-27T16:41:36.113Z"
+      }
+    }
+  ],
+  "sheet_group": [],
+  "last_group": [],
+  "sheet_tabs": []
+}
