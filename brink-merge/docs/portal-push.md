@@ -34,7 +34,7 @@ Everything comes from the import's BOM lines and the catalog in the database. Pr
 
 | BOM line | Pushed as | Quantity |
 |---|---|---|
-| `device`, `tr` | Its catalog row's part (`portal_sku` = Portal partId) | BOM qty (EA). It must be a whole number. Held and unlinked devices inside the count are named in the plan. |
+| `device`, `tr` | Its catalog row's part (`portal_sku` = Portal partId) | BOM qty (EA) **minus held devices**. It must be a whole number. A device held in OpenTakeoff (no run by decision, e.g. furnished and installed by others) is not Brink's to price: it is left off the proposal and listed under "not pushed" with its reason. Unlinked devices stay in the count and are named in the plan. |
 | `cable_order` (one per cable type) | The cable type's part in `cableParts` / `brink_portal_cable_parts` | `orderBasis: "box"`: OpenTakeoff's box count. `orderBasis: "ft"`: OpenTakeoff's order LF, rounded up to whole feet. |
 | `cable` (per condition and TR) | Not pushed | The cable is bought through its `cable_order` line. |
 | `pathway`, `other`, `material` | Not pushed | They are listed in the plan. A `pathway` or `other` row that has a `portal_sku` is an error, because no push rule exists for it. |

@@ -108,7 +108,7 @@ describe("Portal push plan", () => {
     expect(plan.errors).toEqual([]);
     expect(plan.items.map((i) => [i.seq, i.source, i.conditionKey, i.partId, i.itemQuantity])).toEqual([
       [1, "tr", "TR", 1005, 2],
-      [2, "device", "DATA-1", 1001, 7],
+      [2, "device", "DATA-1", 1001, 6], // 7 counted - 1 held ("furnished and installed by others")
       [3, "device", "WAP-1", 1002, 4],
       [4, "device", "CAM-1", 1003, 3],
       [5, "device", "ACS-1", 1004, 2],
@@ -117,9 +117,13 @@ describe("Portal push plan", () => {
       [8, "cable_order", "ACS-1", 2003, 152],
     ]);
     expect(plan.items[7].quantityRule).toContain("151.47");
+    expect(plan.items[1].quantityRule).toBe("BOM device count 7 EA minus 1 held = 6 EA; includes 1 unlinked");
+    // the held device is not priced and not on the proposal, but listed here with its reason
+    const held = plan.notPushed.find((n) => n.reason.startsWith("held"))!;
+    expect(held).toMatchObject({ lineNo: 2, kind: "device", conditionKey: "DATA-1", qty: 1 });
     // everything else is listed, never dropped silently
     expect(plan.notPushed.map((n) => `${n.lineNo}:${n.kind}`)).toEqual([
-      "3:cable", "4:cable", "5:material", "6:material", "8:cable", "9:cable", "11:cable", "12:cable", "13:material", "15:cable", "16:pathway", "17:pathway",
+      "2:device", "3:cable", "4:cable", "5:material", "6:material", "8:cable", "9:cable", "11:cable", "12:cable", "13:material", "15:cable", "16:pathway", "17:pathway",
     ]);
     expect(plan.proposalName).toBe("Brink Div 27 sample (invented) - Division 27");
     expect(plan.hash).toMatch(/^[0-9a-f]{16}$/);

@@ -162,13 +162,22 @@ export function buildPushPlan(o: PlanOptions): PushPlan {
         err(l, "negative_qty", `quantity ${l.qty} is negative`);
         continue;
       }
-      if (l.qty === 0) {
-        skip(l, "quantity 0");
+      // Held devices (OpenTakeoff hold_devices: no run by decision, e.g. furnished and installed
+      // by others) are not Brink's to price: they leave the Portal quantity and are listed as not
+      // pushed. heldQty carries the same x N multiplier as qty (OpenTakeoff's held_devices).
+      const held = l.heldQty ?? 0;
+      if (!Number.isInteger(held) || held < 0 || held > l.qty) {
+        err(l, "non_integer_qty", `held count ${held} does not fit the BOM count ${l.qty}`);
         continue;
       }
-      // the BOM count is pushed as is; held / unlinked devices inside it are named so the estimator sees them
-      const inside = [l.heldQty ? `${l.heldQty} held` : "", l.unlinkedQty ? `${l.unlinkedQty} unlinked` : ""].filter(Boolean).join(", ");
-      items.push({ source: l.kind, lineNo: l.lineNo, conditionKey: l.conditionKey, description: l.description, partId, itemQuantity: l.qty, quantityRule: `BOM ${l.kind} count (${l.qty} EA${inside ? `; includes ${inside}` : ""})` });
+      if (held > 0) skip({ ...l, qty: held }, "held in OpenTakeoff (no run by decision, e.g. furnished and installed by others): not priced, not on the proposal");
+      const pushQty = l.qty - held;
+      if (pushQty === 0) {
+        if (!held) skip(l, "quantity 0");
+        continue;
+      }
+      const inside = l.unlinkedQty ? `; includes ${l.unlinkedQty} unlinked` : "";
+      items.push({ source: l.kind, lineNo: l.lineNo, conditionKey: l.conditionKey, description: l.description, partId, itemQuantity: pushQty, quantityRule: `BOM ${l.kind} count ${l.qty} EA${held ? ` minus ${held} held` : ""} = ${pushQty} EA${inside}` });
       continue;
     }
 
