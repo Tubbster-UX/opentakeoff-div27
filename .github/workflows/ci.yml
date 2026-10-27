@@ -340,7 +340,7 @@ jobs:
             --out "$RUNNER_TEMP/schematic.json" --bom "$RUNNER_TEMP/bom.csv" --bom-json "$RUNNER_TEMP/bom.json"
           node -e 'const b=require(process.argv[1]); if (b.totals.cables!==23||b.totals.cableNetLf!==1795.13) process.exit(1)' "$RUNNER_TEMP/bom.json"
 
-  # dashboard: read-only live view of a brink-merge project (dashboard/README.md).
+  # dashboard: the Brink app shell (React SPA + Worker; Phase 1 read-only, live; dashboard/README.md).
   # Self-contained; runs the Worker + Durable Object in workerd (wrangler dev, local
   # only, nothing deployed) against a mock Supabase Realtime and a real Postgres
   # that brink-merge imports the invented fixture into.
