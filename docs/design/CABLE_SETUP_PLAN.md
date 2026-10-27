@@ -365,7 +365,121 @@ PLAYWRIGHT_MODULE=/path/to/playwright-core/index.mjs BROWSER_PATH=/path/to/chrom
 node --import tsx scripts/make-cable-marked-sample.mts /tmp/cable-marked-sample.pdf
 ```
 
-## 14.3 Duplicate device check (item 3), as built (Oct 27, 2026)
+## 14. Follow-ups after Phase 3 (Oct 27, 2026)
+
+Items 1–5 of the post-Phase 3 list, built in parallel by five agents on separate branches from `d680c88` and merged on `claude/div27-cable-setup-c6t9wu`. Each subsection keeps its own check record from its branch; the combined check record is §14.6.
+
+### 14.1 Auto-save
+
+**Why.** The user's Claude Code session ended, and the stdio server stopped with it. A whole
+bid's takeoff (81 linked cable runs) lived only in memory, and nothing had called
+`export_takeoff`. Nothing on the MCP side persisted work.
+
+**What.** From `load_plan` on, the session writes `<plan dir>/<plan> - takeoff autosave.json`
+(the `export_marked_pdf` naming rule). The file is exactly `exportPayload()` with one extra
+key, `autosave: { saved_at, tool, plan }`, placed second, right after `schema`, so a 512-byte
+head identifies it. Both importers read fields by name and ignore the key, and
+`export_takeoff` never carries it. No new tool: the count stays 57.
+
+- **Triggers.** `Session.record()` (every journaled verb), `undo_last`, `import_takeoff`, and
+  the writes the journal skips (a first `set_scale`, `annotate`, `link_annotation`). As a
+  safety net, the tool registry also schedules a check after every successful call. A write
+  only happens when the payload's bytes differ from the last write, so reads never write.
+  `load_plan` sets the empty session as the baseline, so loading never writes.
+- **Timing.** Trailing debounce 0.75 s, capped at 2 s after the first unsaved change. Timers
+  are `unref`'d, and `installExitFlush` (wired only in `server.ts`'s entry point) writes
+  synchronously on `exit`, SIGINT, SIGTERM and SIGHUP. A non-merge `load_plan` writes the
+  outgoing plan's file first, and `takeoff_summary` flushes before it replies.
+- **Atomic.** A temp file in the same directory, then rename.
+- **Never fails a call.** A failed write is stored, logged once to stderr and reported as
+  `takeoff_summary.autosave.error`. The next call, summary or plan switch tries again.
+- **Never clobbers.** A file at the path without the schema-then-marker head (including a plain
+  `export_takeoff` file) is never written over. `load_plan` and `takeoff_summary` both report it.
+- **Resume, never silently.** When `load_plan` finds an autosave there, the reply carries
+  `autosave.found` (time, tool, plan, shape, condition and linked-run counts) and a note telling
+  the agent to `import_takeoff` it. Importing that path resumes it in place. If the session
+  changes anything first, the found file is renamed to `… (before <time>).json` before the
+  first write (named in `autosave.moved_aside`), so a session that ignores the notice cannot
+  destroy the earlier bid.
+- **Environment.** `OPENTAKEOFF_AUTOSAVE=0` (also `off`, `false`, `no`) turns it off;
+  `=<file>` writes that file; `=<directory>` writes the default name there. A `Session` built
+  without an attached `Autosave` (every test and script) writes nothing and replies exactly as
+  before. The eval bench sets `OPENTAKEOFF_AUTOSAVE=0` so it never writes beside the repo's
+  plans.
+
+| File | Change |
+|---|---|
+| `mcp/src/autosave.ts` (new) | `Autosave` (debounce, compare, atomic write, foreign-file refusal, found-file move-aside, `flushSync`), `installExitFlush`, `autosaveModeFromEnv`, `defaultAutosavePath` |
+| `mcp/src/session.ts` | `autosave` field, `changed()` from `record()` / `undoLast` / unjournaled writes, `load_plan` reply `autosave` and note, `summary().autosave` |
+| `mcp/src/importing.ts` | `noteImport` + `changed("import_takeoff")` |
+| `mcp/src/tools.ts` | after-call check in the registry facade; `takeoff_summary` flushes first; `load_plan` and `takeoff_summary` descriptions |
+| `mcp/src/outputs.ts` | optional `autosave` on `load_plan` and `takeoff_summary` |
+| `mcp/server.ts` | attach `Autosave` and the exit hook at the stdio entry point |
+| `mcp/test/autosave.test.ts` (new) | 15 tests, listed below |
+| Docs | `docs/MCP.md` (Auto-save), `mcp/README.md` (Auto-save, `load_plan` and `takeoff_summary` rows), `docs/AGENT_GUIDE.md` §3, `docs/CONNECT.md`, `docs/wiki/mcp.md` (+ regenerated `wiki.generated.ts`), `protocol/INVENTORY.md` (`autosave` row), `CHANGELOG.md` |
+
+The tests cover: a write after a mutation (head, marker, the body byte-equal to
+`exportPayload()`, no temp file left, the summary's `{path, saved_at}`); 30 calls in one burst
+coalesced into 1 write, with reads writing nothing; the 2 s cap under a continuous burst;
+`undo_last`, a conditions-only `import_takeoff` and the summary flush; `OPENTAKEOFF_AUTOSAVE=0`;
+an explicit file and a directory; a foreign file and a markerless export left untouched and
+reported, with the tool call still succeeding; a failed write reported and then cleared; a
+round trip through `import_takeoff` (byte-equal export) and the app's
+`parseTakeoffImport` / `mergeTakeoffImport`; `load_plan` finding an earlier autosave, resuming
+by import, and moving it aside when ignored; `flushSync` and the plan-switch flush; merge
+keeping the primary path; a bare `Session` writing nothing; and the real stdio server writing
+the last change, inside the debounce window, when stdin closes and on SIGTERM.
+
+#### Check record (this container: Node 22, root)
+
+| Check | Result |
+|---|---|
+| `mcp/test/autosave.test.ts` | 15 of 15 pass |
+| `mcp` all test files (as CI runs them) | 314 tests: 313 pass, 1 fail (`safewrite` "unreadable file fails CLOSED", root, as in §10) |
+| `mcp` typecheck, `check:tool-count` (57 / 59 / 11), `check:wiki`, `check:protocol-resources`, build, `smoke:dist` | pass |
+| `web` typecheck, lint | pass (no web code changed) |
+| `protocol` check, `node scripts/check-doc-links.mjs` | pass |
+| Built `dist/server.js` over real stdio: `load_plan`, one `place_count`, close stdin | the server exited in 46 ms, inside the debounce, and the file held the count, `tool: "place_count"` |
+
+### 14.2 Trunk and branch routes, as built (Oct 27, 2026)
+
+Item 2 of the follow-ups: the bid traced each run device-to-TR as one polyline, so route LF
+could not give branch length and J-hooks were a lump allowance. A route condition now says
+whether its segments are trunk or branch; the decisions are in the spec's Decisions section
+("Recorded while building item 2").
+
+| File | Change |
+|---|---|
+| `web/src/lib/cable.js` | `ROUTE_KINDS`, `routeKindOf`, `usesRouteKinds`; `resolveCableRuns` gives each segment its `kind` and each run `trunk_lf` / `branch_lf` / `other_lf`; `pathwayRollup` (pure); `computeCableTakeoff().pathway` (null until a route condition is tagged); `routeSplit`; the runs table gains *Branch LF* / *Trunk LF* before *Reason / notes* and a `pathway` matrix; `cableReportBlock` appends `pathway` |
+| `web/src/lib/totals.js`, `web/src/lib/xlsx.js` | CSV *Pathway* section, Excel *Pathway* tab, both gated |
+| `web/src/lib/cableMarks.js` | a tagged route condition's cover line names its kind and pathway LF |
+| `web/src/lib/canvasUtil.js`, `TakeoffCanvas.jsx` (`condToTemplate`) | `route_kind` rides templates with the route role |
+| `web/src/components/CableSetupEditor.jsx` | **Kind** (Unspecified / Trunk / Branch) on a cable-route condition; **Cable route: trunk / branch** in the opt-in; ✕ clears the kind with the role |
+| `web/src/components/CableReportSection.jsx`, `RunsPanel.jsx` | the Report's Pathway table; the run tooltip shows the split |
+| `mcp/src/session.ts`, `tools.ts`, `outputs.ts` | `edit_condition { route_kind }` (refused off a route condition before anything is written; null clears; leaving the route role drops it; journaled and undone with the other knobs; the reply echoes the pathway row); the split on `link_run` and `list_runs`; `pathway` on `list_runs`, `takeoff_summary.cable` and `export_report.cable`. No new tool (57) |
+| `protocol/v1/condition.schema.json`, `protocol/INVENTORY.md` | `route_kind` enum, inventory row, a current-records case |
+| Tests | `web/test/cableTrunkBranch.test.ts` (new, 9 tests); `mcp/test/cable.test.ts` (+2); `protocol/test/current-records.test.mjs` (+1 case) |
+
+Exact values pinned: a 40 ft branch + shared 100 ft trunk → route 140, branch 40, trunk 100;
+two runs sharing the trunk → pathway trunk LF 100 (once), cable route LF 280; J-hooks per 5 ft
+on a 40 ft + 35 ft branch condition → 15, 30 at ×2; an untagged cable takeoff's CSV equals the
+literal captured from `d680c88`, and its report JSON and workbook hash to the values taken there.
+
+#### Check record (this container: Node 22, root, four other agents building in parallel)
+
+| Check | Result |
+|---|---|
+| `web` typecheck, lint, build | pass |
+| `web` tests | 3,570 tests: 3,559 pass, 1 fail, 6 cancelled, 4 skipped. The cancellations are `pictures.test.ts` and 5 in `stageOcrModel.test.ts`, as in §13. The failure is `ocrPageRead.test.ts` "cancel shows Stopping… until the read settles", a timing test that passed on one of three solo reruns and failed on the others while the container was loaded; nothing in it touches cable code. Every `cable*.test.ts` passes (59 tests) |
+| `web/bench/results.json` | not touched (the bench was not rerun; nothing here reaches the flood engine) |
+| `mcp` typecheck; all test files as CI runs them | pass; 301 tests, 300 pass, 1 fail (`safewrite` "an unreadable file fails CLOSED", root, as in §10) |
+| `mcp` check:tool-count (57 / 59 / 11), check:wiki, check:protocol-resources | pass after `--write` |
+| `protocol` `npm run check` | 62 tests pass; docs match 11 schemas |
+| `node scripts/check-doc-links.mjs` | pass |
+| Browser: `verify-cable-runs.mjs` on the invented fixture | 30 of 30, no console errors |
+| Browser: tag the fixture's ROUTE as Trunk in the condition editor, open the Report | the Pathway table reads `ROUTE · Trunk · 3 · 99.99 · 33.33 · 66.66 · 1 · 1 · 99.99`, no console errors |
+
+### 14.3 Duplicate device check (item 3), as built (Oct 27, 2026)
 
 The first real bid counted 14 cameras twice: camera outlets on the comms plan T3.1 and CAM markers on the security plan T4.1, at one page size and scale, both on cable conditions. The check flags; it never merges, moves or deletes a marker, and no count changes. The thresholds and their reasons are in the spec's Decisions ("Recorded while building item 3").
 
@@ -382,7 +496,7 @@ The first real bid counted 14 cameras twice: camera outlets on the comms plan T3
 
 The canvas compares only sheets rendered in this session, because page sizes are known only for those; a sheet with cable markers not yet opened is listed under `not_compared`, never guessed. Not done here: a browser check of the Runs panel list (no browser in this container).
 
-### Check record (this container: Node 22, root)
+#### Check record (this container: Node 22, root)
 
 | Check | Result |
 |---|---|
@@ -393,3 +507,120 @@ The canvas compares only sheets rendered in this session, because page sizes are
 | `mcp` typecheck, all test files (as CI runs them) | 301 tests: 300 pass, 1 fail (`safewrite` "an unreadable file fails CLOSED", root container, as in §10) |
 | `mcp` check:tool-count (57 / 59 / 11), check:wiki, check:protocol-resources | pass, no `--write` needed |
 | `protocol` check, `node scripts/check-doc-links.mjs` | pass (62 tests; 44 files) |
+
+### 14.4 Per-run vertical (item 4), as built (Oct 27, 2026)
+
+A run may state its own vertical, the `cables_override` pattern: `vertical_override` (feet,
+≥ 0) replaces the condition's `vertical_ft` for that location only. The decisions are in the
+spec's Decisions ("Recorded while building item 4"); this relaxes "one vertical per
+condition".
+
+| File | Change |
+|---|---|
+| `web/src/lib/cable.js` | `runVerticalOverride`; `mintCableRun` mints `vertical_override` when valid; `sanitizeCableRuns` keeps a valid one in place and drops an invalid one; `resolveCableRuns` uses the run's vertical, checks the setup with it (a condition missing only its vertical does not withhold a run that states one), reports `vertical_ft` used and `vertical_override` / `cables_override` when set, and notes `vertical 9 ft (run override; condition 23 ft)`; `cableRunRows` adds `vertical_override` only when set; `linkRunRefusal` takes `vertical_override` (refuses a negative one; the missing-vertical refusal names it as a next move); `applyCableRunCommand` gains `override` with an exact inverse (values and key order) |
+| `web/src/components/RunsPanel.jsx` | **↕** per run opens the vertical / cables editor (display units, blank = the condition's, unchanged fields keep their stored value); an overridden run shows `run's own: …` under its row |
+| `web/src/pages/TakeoffCanvas.jsx` | One prop: `onOverride` dispatches `{ type: "override" }` on the cable undo family |
+| `web/src/components/CableReportSection.jsx` | Footnote wording (the vertical is the condition's or a run's own) |
+| `mcp/src/tools.ts`, `session.ts`, `outputs.ts` | `link_run` takes optional `vertical_ft` (≥ 0, stored as `vertical_override`); `link_run` and `list_runs` rows carry `vertical_override` / `cables_override` when set; descriptions say to change a run by unlink and relink. No new tool (57 / 59 / 11) |
+| `protocol/v1/document-fields.schema.json`, `INVENTORY.md`, `test/current-records.test.mjs` | `cable_runs[].vertical_override` (number, minimum 0); a conforming record and a negative one that does not |
+| `web/test/cableRunVertical.test.ts` (new), `mcp/test/cable.test.ts` | See below |
+| `web/scripts/verify-cable-runs.mjs` | 8 checks for the ↕ editor |
+
+Tests (`web/test/cableRunVertical.test.ts`, 12 cases): a 23 ft wall outlet with one run at
+9 ft gives 87.5 + 9 + 10 + 10 = 116.5 per cable, × 2 = 233, 260.96 at 12%, and its sibling
+keeps 130.5; an access_door with no vertical withholds the run without an override (existing
+reason) and links the one at 12 ft (97 LF); other missing values still withhold; 0 is a stated
+value; invalid overrides drop at mint and at the load gate; the runs sheet keeps its columns
+and marks the override in Reason / notes; the document round trip; an old document loads and
+exports byte-identically; the command and its inverse, byte for byte, including a sanitized
+record's key order; a withheld run released by its own vertical. `mcp/test/cable.test.ts`
+adds `link_run vertical_ft` on an access_door with no vertical (refused without, linked with
+12 and with 0), a negative value refused by the schema, `list_runs`, `export_takeoff` →
+`import_takeoff`, and `undo_last`.
+
+Old documents: the base commit's `cable.js` and this one were run side by side on the browser
+fixture (three variants: as is, verticals cleared, ×2 with 300 ft) over the load gate, the
+summary, the report block, the cable tables and the run rows: all 15 data outputs identical.
+The only difference is the wording of the missing-vertical refusal, which now names the run's
+own vertical as a next move.
+
+#### Check record (this container: Node 22, root, shared with four other agents; load 13–20 on 4 cores)
+
+| Check | Result |
+|---|---|
+| `web` typecheck, lint, build | pass |
+| `web` tests | 3,552 tests: 3,537 pass, 1 fail, 10 cancelled. Every failure and cancellation is a timing or per-file timeout under load: `sheetTree.test.ts` "a 5,000-sheet set builds … quickly" (128 ms against its budget) and the per-file timeouts in `hybridReplay`, `ocrPageRead`, `pictures`, `planSearch` and `sheetName`, which pass on their own with a 120 s timeout (sheetTree 15/15, sheetName 10/10, the rest 262/264 with two timing asserts under load); `stageOcrModel.test.ts` cancels 5, as on the base commit. Every cable test passes. |
+| `web/bench/results.json` | unchanged |
+| `mcp` typecheck; all test files as CI runs them | pass; 300 tests: 299 pass, 1 fail (`safewrite` "unreadable file fails CLOSED", root, as in §10) |
+| `mcp` check:tool-count, check:wiki, check:protocol-resources | pass after `-- --write` (57 default / 59 gated / 11 setup) |
+| `protocol` `npm run check` | pass after `node protocol/scripts/check-docs.mjs --write` |
+| `node scripts/check-doc-links.mjs` | pass |
+| Browser: `verify-cable-runs.mjs` | 38 of 38, no console errors; [`docs/review/cable-runs-run-vertical/`](../review/cable-runs-run-vertical/README.md) |
+
+### 14.5 Parts per cable and per pull (item 5, Oct 27, 2026)
+
+The bid workbook figured parts by hand: every DATA-1 location carries a jack and a patch cord
+per cable and a faceplate per pull; every camera a mount per pull and an outdoor patch cord per
+cable. A supporting-materials row could only key on the device count, so "jacks = cables" meant
+`per = 1 ÷ cables per location`, which goes wrong on a run's `cables_override` and on every
+unlinked or held device. Two new materials bases fix it: `cables` and `pulls`, the condition's
+linked figures from the cable summary. Decisions are in the spec's Decisions ("Recorded while
+building item 5"); `cable_lf` was considered and left out (the cable is already the summary's
+net and order LF, and no materials basis carries waste).
+
+| File | Change |
+|---|---|
+| `web/src/lib/cable.js` | `CABLE_MATERIAL_BASES`, `isCableMaterialBasis`, `cableQtyByShape` (linked pulls and cables per device shape, unmultiplied), `cableMaterialReason` (why a row reads 0). |
+| `web/src/lib/totals.js` | `conditionTotals` takes `ctx.cableByShape` beside `ctx.seamByShape`; the `cables` / `pulls` bases; `reason` on a zero cables/pulls line only; `materialBasisLabel`, `materialCoverage`, `materialNote` shared by the CSV and the workbook; the grouped-row JSDoc. |
+| `web/src/lib/xlsx.js` | The Materials tab reads the shared coverage and note cells. |
+| `web/src/components/ReportPanel.jsx` | The cable map rides the Report's materials ctx (rows, grouped views, CSV, XLSX, JSON); the by-finish line prints a row's reason; the footnote names the rule when a cable/pull line exists. |
+| `web/src/components/TakeoffsPanel.jsx` | The basis picker offers **cable** and **pull** only on a condition with a cable setup (kept visible on a row that already uses one); the row shows *N cables linked* / *N pulls linked*, or why it reads 0. The library picker shows them only on an entry promoted from such a row. |
+| `web/src/pages/TakeoffCanvas.jsx` | Wiring only: the materials ctx memo moves below the cable takeoff memo and gains `cableByShape`. |
+| `mcp/src/session.ts` | `MaterialRow.basis` gains the two values; `materialsCtx()` (seams + cables) for `takeoff_summary`; `export_report` hands the cable map in; `edit_materials` replies with `computed` on a condition the bases concern. |
+| `mcp/src/tools.ts`, `mcp/src/outputs.ts` | The `edit_materials` basis enum and description ("per cable: 1 jack per cable → per 1, basis cables"); the output schemas carry the new bases, `computed` and `reason`. No new tool (57 default). |
+| `protocol/v1/condition.schema.json`, `protocol/INVENTORY.md` | `materials[].basis` described (still a string, not an enum); an inventory row. Generated: `protocol/README.md`, `mcp/src/protocol.generated.ts`. |
+| `web/test/cableMaterials.test.ts`, `web/test/fixtures/cableMaterials.noCable.ts` (new), `mcp/test/cable.test.ts` | Tests below. |
+| Docs | `USER_GUIDE.md` (Supporting materials, Cable runs, the buy list), `AGENT_GUIDE.md` (two rows: use `cables` / `pulls`, never `per = 1 ÷ quantity`; a zero with a reason), `MCP.md`, `mcp/README.md`, `FEATURES.md`, `CHANGELOG.md`, the spec's Decisions. |
+
+**Tests.** `web/test/cableMaterials.test.ts` (8): DATA-1 with three linked runs at 4 cables, one
+run overridden to 2 (one of them a pending agent run), a device on a broken run and a held
+device reads jacks 14, faceplates 4, patch cords 14 against a count row's 6; ×2 reads 28, 8, 28
+and equals `cableByCondition`; non-1 coverage rounds up and `round:false` keeps two places; a
+condition with no cable setup, one with no linked run, and a caller with no cable takeoff each
+read 0 with their own reason; the by-sheet slice splits 8 / 6; the buy list, CSV, workbook and
+report JSON carry the parts and the reason; and an invented takeoff with no cable work (area,
+linear, count, seam_lf, basis-less, round:false and unnamed rows, by sheet and by label) hashes
+to the SHA-256 the base commit `d680c88` printed for its report JSON, CSV and workbook, with no
+cable ctx and with an empty one. `mcp/test/cable.test.ts` (+1): `edit_materials` adds jack,
+faceplate and patch-cord rows on DATA-1 (2 linked runs, one overridden to 3, one device
+unlinked) and the reply's `computed` reads 5 / 2 / 5; `export_report`'s buy list reads 5 / 2 / 5
+and 10 / 4 / 10 at ×2; an unknown basis is refused by the schema; a VCT-1 row on `cables` reads 0
+with its reason in the reply and the report; an ordinary `edit_materials` reply has no
+`computed`; `undo_last` restores the rows.
+
+#### Check record (this container: Node 22, root)
+
+| Check | Result |
+|---|---|
+| `web` typecheck, lint, build | pass |
+| `web` tests | 3,436 tests: 3,421 pass, 0 fail, 11 cancelled. Six are the known environment-only ones (`pictures.test.ts`'s 20 s file timeout and 5 in `stageOcrModel.test.ts`); the other five files (`hybridReplay`, `ocrPageRead`, `planSearch`, `scheduleOcrReplay`, `sheetName`) timed out while the MCP suite ran beside them and pass alone (224 of 224). |
+| `web/bench/results.json` | unchanged (not touched) |
+| `mcp` typecheck; all test files as CI runs them | pass; 300 tests: 299 pass, 1 fail (`safewrite` "an unreadable file fails CLOSED", root, as in §10) |
+| `mcp` check:tool-count, check:wiki, check:protocol-resources | pass (57 default / 59 gated / 11 setup; 9 wiki pages; 11 schemas, after `--write`) |
+| `protocol` `npm run check` | pass after `node protocol/scripts/check-docs.mjs --write` |
+| `node scripts/check-doc-links.mjs` | pass |
+| Browser, built app, invented fixture on the demo plan (scratch script, not committed) | 8 of 8: the Report's buy list reads RJ45 jack 5, Faceplate 2 against a count row's 3; the VCT-1 per-cable line reads 0 with its reason; DATA-1's picker offers cable and pull and its rows show *5 cables linked* / *2 pulls linked*; VCT-1's picker keeps its row's basis, offers no pull and says it reads 0; no console errors |
+
+### 14.6 Combined check record (all five merged; Node 22, root, run alone)
+
+| Check | Result |
+|---|---|
+| `web/test/cableCombined.test.ts` (new) | 1 of 1: one takeoff using a run's own vertical over branch + shared trunk, a hold, a double-clicked outlet and parts per cable and pull, exact values |
+| `web` cable test files | 91 pass |
+| `web` `npm test` | 3,603 tests: 3,593 pass, 0 fail, 6 cancelled (`pictures.test.ts` and 5 in `stageOcrModel.test.ts`, identical on the base commit) |
+| `web` typecheck, lint, build, OCR dist check; `web/bench/results.json` | pass; unchanged |
+| `mcp` all test files as CI runs them | 320 tests: 319 pass, 1 fail (`safewrite` "an unreadable file fails CLOSED", root) |
+| `mcp` typecheck, tool count (57 / 59 / 11), wiki, protocol resources, build, dist smoke | pass |
+| `protocol` check, doc links | pass |
+| Browser `verify-cable-runs.mjs` | 38 of 38, no console errors |
+| A marked set with no cable work vs `d680c88`, clock frozen | identical SHA-256 |
