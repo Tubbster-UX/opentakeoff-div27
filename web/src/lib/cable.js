@@ -9,6 +9,9 @@
 //      footprint estimate, no default length for anything unlinked.
 //   2. Per cable = route + vertical + loop at device + loop at TR; the
 //      vertical and loops are per-condition constants on the cable setup.
+//      A run may STATE its own vertical (`vertical_override`, feet), which
+//      replaces the condition's vertical_ft for that location only — the
+//      cables_override precedent. It is a stated allowance, never guessed.
 //   3. Pulls are per location, cables are per pull × cables per location.
 //   4. Waste applies only to the ORDER quantity (cable_lf_order), never to
 //      the measured route or the net cable LF — the house convention.
@@ -132,10 +135,20 @@ export function cableSetupProblems(setup) {
 
 const strArr = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === "string" && x.length > 0) : []);
 
+/** A run's own vertical, in feet: a finite number ≥ 0 (0 is a stated value —
+ *  a device at the TR's own elevation), else null (use the condition's). */
+export function runVerticalOverride(run) {
+  const v = run?.vertical_override;
+  return finiteNonNeg(v) ? v : null;
+}
+const validCablesOverride = (n) => Number.isInteger(n) && n >= 1;
+
 /** Mint a run record. `provenance` follows the shape-origin vocabulary:
  *  `{ method, actor?, reviewed?, created_at, author? }` — a human at the canvas
- *  omits actor; an agent passes `actor: "agent"` and lands `reviewed: false`. */
-export function mintCableRun({ device_shape_ids, route_shape_ids, tr_id, cables_override, provenance } = {}) {
+ *  omits actor; an agent passes `actor: "agent"` and lands `reviewed: false`.
+ *  `vertical_override` (feet, ≥ 0) replaces the condition's vertical_ft for
+ *  this location only; omitted (or invalid) = the condition's. */
+export function mintCableRun({ device_shape_ids, route_shape_ids, tr_id, cables_override, vertical_override, provenance } = {}) {
   const prov = { method: "manual", ...(provenance && typeof provenance === "object" ? provenance : {}) };
   if (prov.actor === "agent" && prov.reviewed == null) prov.reviewed = false;
   if (!prov.created_at) prov.created_at = nowIso();
@@ -146,6 +159,7 @@ export function mintCableRun({ device_shape_ids, route_shape_ids, tr_id, cables_
     route_shape_ids: strArr(route_shape_ids),
     tr_id: typeof tr_id === "string" ? tr_id : "",
     ...(Number.isInteger(n) && n >= 1 ? { cables_override: n } : {}),
+    ...(finiteNonNeg(vertical_override) ? { vertical_override } : {}),
     provenance: prov,
   };
 }
@@ -215,6 +229,9 @@ export function sanitizeCableRuns(v) {
     const prov = r.provenance && typeof r.provenance === "object" && !Array.isArray(r.provenance) ? r.provenance : { method: "manual" };
     seen.add(r.id);
     const { cables_override: _dropped, ...rest } = r;
+    // vertical_override keeps its slot when valid (a record round-trips in
+    // its own key order) and is dropped when it is not a number ≥ 0
+    if ("vertical_override" in rest && !finiteNonNeg(rest.vertical_override)) delete rest.vertical_override;
     out.push(normalizeRunReview({
       ...rest,
       device_shape_ids: strArr(r.device_shape_ids),
@@ -313,7 +330,16 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
     if (devShapes.length && !cond) reasons.push(`condition ${condIds[0]} no longer exists`);
     if (cond && !hasCableSetup(cond)) reasons.push(`condition ${cond.finish_tag} has no cable setup`);
     const setup = cond && hasCableSetup(cond) ? cond.cable_setup : null;
-    if (setup) withheld = cableSetupProblems(setup).map((p) => `${cond.finish_tag}: ${p}`);
+    // the run's own vertical replaces the condition's for this location only:
+    // a condition whose ONLY gap is its vertical (an access_door before the
+    // job's vertical is entered) does not withhold a run that states one
+    const vOverride = runVerticalOverride(run);
+    const vertical = setup ? (vOverride != null ? vOverride : setup.vertical_ft) : null;
+    if (setup) withheld = cableSetupProblems(vOverride != null ? { ...setup, vertical_ft: vOverride } : setup).map((p) => `${cond.finish_tag}: ${p}`);
+    if (setup && vOverride != null) {
+      const cv = setup.vertical_ft;
+      notes.push(`vertical ${round2(vOverride)} ft (run override; ${finiteNonNeg(cv) ? `condition ${round2(cv)} ft` : "condition has none"})`);
+    }
     // ── TR ─────────────────────────────────────────────────────────────────
     const trShape = run.tr_id ? shapeById.get(run.tr_id) : null;
     if (!run.tr_id) reasons.push("no TR");
@@ -353,7 +379,7 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
       routeLf += len;
     }
     const status = reasons.length ? "broken" : withheld.length ? "withheld" : "linked";
-    const cables = Number.isInteger(run.cables_override) && run.cables_override >= 1
+    const cables = validCablesOverride(run.cables_override)
       ? run.cables_override : (setup ? setup.cables_per_location : null);
     const base = {
       id: run.id,
@@ -376,9 +402,11 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
       ...(notes.length ? { notes } : {}),
       ...(legWarning ? { leg_warning: true } : {}),
       ...(status !== "linked" ? { reason: (reasons.length ? reasons : withheld).join("; "), reasons: reasons.length ? reasons : withheld } : {}),
+      ...(vOverride != null ? { vertical_override: vOverride } : {}),
+      ...(validCablesOverride(run.cables_override) ? { cables_override: run.cables_override } : {}),
     };
     if (status === "linked") {
-      const perCable = routeLf + setup.vertical_ft + setup.loop_device_ft + setup.loop_tr_ft;
+      const perCable = routeLf + vertical + setup.loop_device_ft + setup.loop_tr_ft;
       const over = perCable > TIA_MAX_LINK_FT;
       const flagNotes = [];
       if (over) {
@@ -396,16 +424,15 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
         ...(allNotes.length ? { notes: allNotes } : {}),
         ...(over ? { over_length: true } : {}),
         ...(runUnconfirmed.size ? { scale_unconfirmed: true } : {}),
-        vertical_ft: setup.vertical_ft, loop_device_ft: setup.loop_device_ft, loop_tr_ft: setup.loop_tr_ft,
+        vertical_ft: vertical, loop_device_ft: setup.loop_device_ft, loop_tr_ft: setup.loop_tr_ft,
         per_cable_lf: perCable, cables, location_lf: perCable * cables,
-        ...(Number.isInteger(run.cables_override) ? { cables_override: run.cables_override } : {}),
       });
       for (const id of devIds) linkedDevices.add(id);
       for (const seg of segments) linkedRoutes.add(seg.shape_id);
     } else {
       resolved.push({
         ...base,
-        vertical_ft: setup ? setup.vertical_ft : null, loop_device_ft: setup ? setup.loop_device_ft : null, loop_tr_ft: setup ? setup.loop_tr_ft : null,
+        vertical_ft: vertical, loop_device_ft: setup ? setup.loop_device_ft : null, loop_tr_ft: setup ? setup.loop_tr_ft : null,
         per_cable_lf: null, cables, location_lf: null,
       });
     }
@@ -638,6 +665,7 @@ export function cableRunRows(takeoff, sheetLabel = null) {
     location_lf: r.location_lf == null ? null : round2(r.location_lf),
     multiplier: condMult.get(r.condition_id) || 1,
     status: r.status, review_status: r.review, reason: r.reason || "",
+    ...(r.vertical_override != null ? { vertical_override: r.vertical_override } : {}),
     ...(r.over_length ? { over_length: true } : {}),
     ...(r.scale_unconfirmed ? { scale_unconfirmed: true } : {}),
     ...(r.notes ? { notes: r.notes.join("; ") } : {}),
@@ -706,15 +734,18 @@ export function cableTables(takeoff, { sheetLabel = null, L = (v) => v, lengthUn
 /** The shared refusal for link_run (MCP) and the Link Run tool (canvas): the
  *  first thing wrong with the proposed link, worded with its next move, or
  *  null when the link is sound. Checks run against the CURRENT shapes.
- *  @param {{ device_shape_ids?: string[], route_shape_ids?: string[], tr_id?: string, cables_override?: number | null }} link
+ *  A stated `vertical_override` (feet, ≥ 0) is the run's own vertical: a
+ *  condition missing only its vertical_ft accepts a link that states one.
+ *  @param {{ device_shape_ids?: string[], route_shape_ids?: string[], tr_id?: string, cables_override?: number | null, vertical_override?: number | null }} link
  *  @param {any[]} conditions
  *  @param {any[]} shapes
  *  @param {any[]} [runs]
  *  @param {{ uppFor?: (sheetId: string) => number | null | undefined, scaleReason?: (sheetId: string) => string }} [opts]
  *  @returns {string | null} */
-export function linkRunRefusal({ device_shape_ids, route_shape_ids, tr_id, cables_override }, conditions, shapes, runs = [], opts = {}) {
-  const probe = mintCableRun({ device_shape_ids, route_shape_ids, tr_id, cables_override });
+export function linkRunRefusal({ device_shape_ids, route_shape_ids, tr_id, cables_override, vertical_override }, conditions, shapes, runs = [], opts = {}) {
+  const probe = mintCableRun({ device_shape_ids, route_shape_ids, tr_id, cables_override, vertical_override });
   if (cables_override !== undefined && cables_override !== null && !(Number.isInteger(cables_override) && cables_override >= 1)) return "cables_override must be a whole number of 1 or more (omit it to use the condition's cables_per_location)";
+  if (vertical_override !== undefined && vertical_override !== null && !finiteNonNeg(vertical_override)) return "the run's vertical must be a number of feet, 0 or more (omit it to use the condition's vertical_ft)";
   const ids = strArr(device_shape_ids);
   for (const id of ids) {
     const other = (runs || []).find((r) => Array.isArray(r.device_shape_ids) && r.device_shape_ids.includes(id));
@@ -729,7 +760,7 @@ export function linkRunRefusal({ device_shape_ids, route_shape_ids, tr_id, cable
   if (/is not a TR marker/.test(first)) return `${first} — place the TR with place_count on a condition set role "tr" through edit_condition`;
   if (/is not a count marker/.test(first)) return `${first} — a device location is a place_count / symbol_sweep marker`;
   if (/has no cable setup/.test(first)) return `${first} — set cable_setup on it with edit_condition before linking`;
-  if (r.status === "withheld") return `${first} — set it with edit_condition { cable_setup: { … } } and link again (no length is ever assumed)`;
+  if (r.status === "withheld") return `${first}${/vertical_ft is required/.test(first) ? " — set it with edit_condition { cable_setup: { vertical_ft } }, or state this run's own vertical (link_run vertical_ft), and link again (no length is ever assumed)" : " — set it with edit_condition { cable_setup: { … } } and link again (no length is ever assumed)"}`;
   return first;
 }
 
@@ -743,6 +774,14 @@ export function linkRunRefusal({ device_shape_ids, route_shape_ids, tr_id, cable
 //   review     { ids, ts? }            → pending runs get reviewed:true + accepted_ts;
 //                                        inverse provenance (verbatim prior origins)
 //   provenance { restore: [{ id, provenance }] } → put provenance back verbatim
+//   override   { id, vertical_override?, cables_override?, key_order? }
+//                                      → set (a value) or clear (null) the run's own
+//                                        vertical / cable count; an omitted key is left
+//                                        alone. Inverse: an override restoring each
+//                                        touched key's prior value (null = absent) and
+//                                        the record's prior key order, so undo puts the
+//                                        record back exactly. A hold, an invalid value
+//                                        or a no-op changes nothing.
 // Accepting a run never touches its shapes: each keeps its own review status.
 // A command that changes nothing returns inverse null (nothing to record).
 /** @param {any[]} runs @param {any} cmd @returns {{ runs: any[], inverse: any }} */
@@ -784,7 +823,35 @@ export function applyCableRunCommand(runs, cmd) {
       });
       return restore.length ? { runs: next, inverse: { type: "provenance", restore } } : { runs: list, inverse: null };
     }
+    case "override": {
+      const index = list.findIndex((r) => r.id === cmd.id);
+      if (index < 0 || isCableHold(list[index])) return { runs: list, inverse: null };
+      const prev = list[index];
+      const touched = OVERRIDE_KEYS.filter((k) => cmd[k] !== undefined);
+      if (!touched.length) return { runs: list, inverse: null };
+      for (const k of touched) if (cmd[k] !== null && !OVERRIDE_VALID[k](cmd[k])) return { runs: list, inverse: null };
+      if (touched.every((k) => (cmd[k] === null ? !(k in prev) : prev[k] === cmd[k]))) return { runs: list, inverse: null };
+      let entries = Object.entries(prev);
+      for (const k of touched) {
+        const at = entries.findIndex(([key]) => key === k);
+        if (cmd[k] === null) { if (at >= 0) entries.splice(at, 1); continue; }
+        if (at >= 0) { entries[at] = [k, cmd[k]]; continue; }
+        // a new key takes its mint slot: after tr_id (cables_override), then after cables_override
+        const after = Math.max(...OVERRIDE_SLOT[k].map((a) => entries.findIndex(([key]) => key === a)));
+        entries.splice(after + 1, 0, [k, cmd[k]]);
+      }
+      if (Array.isArray(cmd.key_order)) {
+        const pos = new Map(cmd.key_order.map((k, i) => [k, i]));
+        entries = entries.map((e, i) => ({ e, i })).sort((a, b) => (pos.get(a.e[0]) ?? Infinity) - (pos.get(b.e[0]) ?? Infinity) || a.i - b.i).map((x) => x.e);
+      }
+      const next = Object.fromEntries(entries);
+      const inverse = { type: "override", id: prev.id, ...Object.fromEntries(touched.map((k) => [k, k in prev ? prev[k] : null])), key_order: Object.keys(prev) };
+      return { runs: list.map((r, i) => (i === index ? next : r)), inverse };
+    }
     default:
       return { runs: list, inverse: null };
   }
 }
+const OVERRIDE_KEYS = Object.freeze(["vertical_override", "cables_override"]);
+const OVERRIDE_VALID = Object.freeze({ vertical_override: finiteNonNeg, cables_override: validCablesOverride });
+const OVERRIDE_SLOT = Object.freeze({ cables_override: ["tr_id"], vertical_override: ["tr_id", "cables_override"] });

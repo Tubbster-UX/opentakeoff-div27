@@ -4,14 +4,16 @@
 // (linked / withheld / broken with the reason) and review state, the
 // Unlinked list (check devices and Hold them with a reason when they
 // deliberately get no run), the Held list, and the telecom rooms with their
-// names. A run over 295 ft per cable carries a flag. Clicking an item
+// names. A run over 295 ft per cable carries a flag. Each run can state its
+// own vertical and cable count (the ↕ editor), replacing the condition's for
+// that location only; an overridden run says so under its row. Clicking an item
 // puts it on screen. A pure view over the canvas's computeCableTakeoff
 // result — the records change only through the callbacks, which the canvas
 // puts on its undo stack.
 import { useState } from "react";
 import { Icon } from "../brand/icons.jsx";
 import { DEVICE_TYPE_LABELS, isTrCondition, TIA_MAX_LINK_FT } from "../lib/cable.js";
-import { lenVal, lenUnit } from "../lib/units";
+import { lenVal, lenUnit, heightVal, heightUnit, heightInputToFeet } from "../lib/units";
 import { HatchSwatch } from "./hatches.jsx";
 
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -38,14 +40,75 @@ function TrName({ shape, onRename }) {
   );
 }
 
+/** The per-run override editor: the run's own vertical (feet, shown in the
+ *  display units) and cable count, each blank = the condition's. Set commits
+ *  both through onOverride (one undo step); an unchanged field keeps its
+ *  stored value exactly (no metric round-trip drift). */
+function RunOverride({ run, cond, units, onOverride, onDone }) {
+  const HU = heightUnit(units);
+  const show = (ft) => (ft == null ? "" : String(r2(heightVal(ft, units))));
+  const v0 = show(run.vertical_override ?? null);
+  const c0 = run.cables_override != null ? String(run.cables_override) : "";
+  const [v, setV] = useState(v0);
+  const [c, setC] = useState(c0);
+  const [err, setErr] = useState("");
+  const condV = cond?.cable_setup?.vertical_ft;
+  const condC = cond?.cable_setup?.cables_per_location;
+  const commit = () => {
+    const patch = {};
+    if (v.trim() !== v0) {
+      if (!v.trim()) patch.vertical_override = null;
+      else {
+        const n = Number(v);
+        if (!(Number.isFinite(n) && n >= 0)) { setErr(`vertical must be a number of ${HU}, 0 or more`); return; }
+        patch.vertical_override = heightInputToFeet(n, units);
+      }
+    }
+    if (c.trim() !== c0) {
+      if (!c.trim()) patch.cables_override = null;
+      else {
+        const n = Number(c);
+        if (!(Number.isInteger(n) && n >= 1)) { setErr("cables must be a whole number of 1 or more"); return; }
+        patch.cables_override = n;
+      }
+    }
+    if (Object.keys(patch).length) onOverride(run.id, patch);
+    onDone();
+  };
+  const keys = (e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") onDone(); };
+  const field = { width: 52, margin: "0 3px", padding: "1px 4px", borderRadius: 0, border: "1px solid var(--ink-faint)", background: "var(--paper-bright)", color: "var(--ink)", fontSize: 11, ...mono };
+  return (
+    <div data-cable-override-form={run.id} style={{ padding: "3px 0 5px 14px", fontSize: 10.5, color: "var(--ink-secondary)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <label title={`This run's own vertical, replacing the condition's for this location only. Blank = the condition's${condV != null ? ` (${show(condV)} ${HU})` : " (none entered)"}.`}>
+          vertical <input name="run-vertical" autoFocus inputMode="decimal" value={v} onChange={(e) => { setV(e.target.value); setErr(""); }} onKeyDown={keys}
+            placeholder={condV != null ? show(condV) : "none"} style={field} /> {HU}
+        </label>
+        <label title={`Cables at this location, replacing the condition's cables per location. Blank = the condition's${condC != null ? ` (${condC})` : ""}.`}>
+          cables <input name="run-cables" inputMode="numeric" value={c} onChange={(e) => { setC(e.target.value); setErr(""); }} onKeyDown={keys}
+            placeholder={condC != null ? String(condC) : ""} style={{ ...field, width: 34 }} />
+        </label>
+        <button onClick={commit} title="Save this run's own values (blank = the condition's) — ⌘Z undoes" style={smallBtn("pos")}>Set</button>
+        <button onClick={onDone} title="Close without changing (Esc)" style={smallBtn()}>Esc</button>
+      </div>
+      <div style={{ marginTop: 2, color: err ? "var(--c-danger)" : "var(--ink-muted)" }}>
+        {err || `Blank = the condition's (vertical ${condV != null ? `${show(condV)} ${HU}` : "not entered"}, ${condC ?? "?"} cable${condC === 1 ? "" : "s"}). A stated value, never a guess.`}
+      </div>
+    </div>
+  );
+}
+
 /**
  * @param {{ takeoff: any, conditions: any[], shapes: any[], units?: string, linkArmed?: boolean,
  *   onArmLink: () => void, onLocate: (shapeId: string) => void, onUnlink: (runId: string) => void,
  *   onAccept: (runIds: string[]) => void, onRenameTr: (shapeId: string, name: string) => void,
- *   onHold?: (shapeIds: string[], reason: string) => boolean, onClose: () => void }} props
+ *   onHold?: (shapeIds: string[], reason: string) => boolean,
+ *   onOverride?: (runId: string, patch: { vertical_override?: number | null, cables_override?: number | null }) => boolean,
+ *   onClose: () => void }} props
  */
-export default function RunsPanel({ takeoff, conditions, shapes, units = "imperial", linkArmed = false, onArmLink, onLocate, onUnlink, onAccept, onRenameTr, onHold = null, onClose }) {
+export default function RunsPanel({ takeoff, conditions, shapes, units = "imperial", linkArmed = false, onArmLink, onLocate, onUnlink, onAccept, onRenameTr, onHold = null, onOverride = null, onClose }) {
   const [checked, setChecked] = useState(() => new Set());
+  const [editing, setEditing] = useState(null);   // run id whose override editor is open
   const [holdReason, setHoldReason] = useState("");
   const LU = lenUnit(units);
   const L = (ft) => (ft == null ? "—" : `${r2(lenVal(ft, units))} ${LU}`);
@@ -81,18 +144,45 @@ export default function RunsPanel({ takeoff, conditions, shapes, units = "imperi
     <button onClick={() => onLocate(id)} title={title} style={{ ...smallBtn(), color: "var(--cobalt)" }}>⌖</button>
   );
 
+  const HU = heightUnit(units);
+  const H = (ft) => `${r2(heightVal(ft, units))} ${HU}`;
+  // a run that states its own vertical or cable count says so on a line of
+  // its own under the row, with the condition's value beside it
+  const overrideLine = (r) => {
+    const cs = condById.get(r.condition_id)?.cable_setup;
+    const parts = [
+      r.vertical_override != null ? `vertical ${H(r.vertical_override)} (condition ${cs?.vertical_ft != null ? H(cs.vertical_ft) : "has none"})` : "",
+      r.cables_override != null ? `${r.cables_override} cable${r.cables_override === 1 ? "" : "s"} (condition ${cs?.cables_per_location ?? "?"})` : "",
+    ].filter(Boolean);
+    if (!parts.length) return null;
+    return (
+      <div data-cable-flag="override" title="This run's own values replace the condition's for this location only — ↕ edits them"
+        style={{ ...mono, fontSize: 10, padding: "0 0 3px 14px", color: "var(--cobalt)" }}>run's own: {parts.join(" · ")}</div>
+    );
+  };
   const runRow = (r) => (
-    <div key={r.id} data-cable-run={r.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0", borderTop: "1px solid var(--paper-cream)", fontSize: 11 }}>
-      <span title={r.status === "linked" ? "Linked — counts in every total" : r.reason} style={{ width: 8, height: 8, flexShrink: 0, background: STATUS_COLOR[r.status] }} />
-      <span style={{ ...mono, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-        title={`${r.id}\nroute ${L(r.route_lf)} over ${r.route_shape_ids.length} segment(s)${r.reason ? `\n${r.status}: ${r.reason}` : ""}${r.notes ? `\n${r.notes.join("\n")}` : ""}`}>
-        → {r.tr_name || r.tr_id || "?"} · {r.status === "linked" ? `${L(r.per_cable_lf)} × ${r.cables}` : r.status}
-      </span>
-      {r.over_length && <span data-cable-flag="over-length" title={`Per cable ${L(r.per_cable_lf)} exceeds ${TIA_MAX_LINK_FT} ft — the TIA-568 copper permanent-link limit (90 m). It still counts: check the route; if it stands, it needs a closer TR or a length test and owner notice.`}
-        style={{ ...mono, fontSize: 9.5, padding: "0 4px", border: "1px solid #b66b00", color: "#b66b00", flexShrink: 0 }}>&gt;{TIA_MAX_LINK_FT}</span>}
-      {r.pending && <button onClick={() => onAccept([r.id])} title="Accept this agent-linked run (its route segments keep their own review status)" style={smallBtn("pos")}>Accept</button>}
-      {locBtn(r.device_shape_ids[0], "Put the device on screen")}
-      <button onClick={() => onUnlink(r.id)} title="Unlink — the shapes stay; ⌘Z re-links" style={smallBtn("danger")}>✕</button>
+    <div key={r.id} style={{ borderTop: "1px solid var(--paper-cream)" }}>
+      <div data-cable-run={r.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0", fontSize: 11 }}>
+        <span title={r.status === "linked" ? "Linked — counts in every total" : r.reason} style={{ width: 8, height: 8, flexShrink: 0, background: STATUS_COLOR[r.status] }} />
+        <span style={{ ...mono, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          title={`${r.id}\nroute ${L(r.route_lf)} over ${r.route_shape_ids.length} segment(s)${r.reason ? `\n${r.status}: ${r.reason}` : ""}${r.notes ? `\n${r.notes.join("\n")}` : ""}`}>
+          → {r.tr_name || r.tr_id || "?"} · {r.status === "linked" ? `${L(r.per_cable_lf)} × ${r.cables}` : r.status}
+        </span>
+        {r.over_length && <span data-cable-flag="over-length" title={`Per cable ${L(r.per_cable_lf)} exceeds ${TIA_MAX_LINK_FT} ft — the TIA-568 copper permanent-link limit (90 m). It still counts: check the route; if it stands, it needs a closer TR or a length test and owner notice.`}
+          style={{ ...mono, fontSize: 9.5, padding: "0 4px", border: "1px solid #b66b00", color: "#b66b00", flexShrink: 0 }}>&gt;{TIA_MAX_LINK_FT}</span>}
+        {r.pending && <button onClick={() => onAccept([r.id])} title="Accept this agent-linked run (its route segments keep their own review status)" style={smallBtn("pos")}>Accept</button>}
+        {onOverride && r.condition_id && condById.has(r.condition_id) && (
+          <button data-cable-override={r.id} onClick={() => setEditing((e) => (e === r.id ? null : r.id))}
+            title="This run's own vertical or cable count — replaces the condition's for this location only"
+            style={{ ...smallBtn(), ...(editing === r.id ? { borderColor: "var(--cobalt)", color: "var(--cobalt)" } : {}) }}>↕</button>
+        )}
+        {locBtn(r.device_shape_ids[0], "Put the device on screen")}
+        <button onClick={() => onUnlink(r.id)} title="Unlink — the shapes stay; ⌘Z re-links" style={smallBtn("danger")}>✕</button>
+      </div>
+      {overrideLine(r)}
+      {editing === r.id && onOverride && (
+        <RunOverride key={`${r.vertical_override ?? ""}|${r.cables_override ?? ""}`} run={r} cond={condById.get(r.condition_id)} units={units} onOverride={onOverride} onDone={() => setEditing(null)} />
+      )}
     </div>
   );
 

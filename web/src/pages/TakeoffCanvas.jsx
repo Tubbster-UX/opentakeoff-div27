@@ -11154,6 +11154,7 @@ export default function TakeoffCanvas() {
             onLocate={locateCableShape}
             onUnlink={(id) => { dispatchCableRun({ type: "unlink", id }); setCommitMsg(id.startsWith("hold-") ? "Hold released — its devices are unlinked again. ⌘Z re-holds them." : "Run unlinked — the shapes stay. ⌘Z re-links it."); }}
             onHold={holdCableDevices}
+            onOverride={(id, patch) => { const r = dispatchCableRun({ type: "override", id, ...patch }); if (r.inverse) setCommitMsg("Run override saved — this run's own vertical / cables replace the condition's for this location only. ⌘Z undoes."); return !!r.inverse; }}
             onAccept={(ids) => { const r = dispatchCableRun({ type: "review", ids }); if (r.inverse) setCommitMsg(`${r.inverse.restore.length} run${r.inverse.restore.length === 1 ? "" : "s"} accepted — their route segments keep their own review status.`); }}
             onRenameTr={(id, name) => dispatchShape({ type: "label", ids: [id], value: name })}
             onClose={() => setRunsPanelOpen(false)} />

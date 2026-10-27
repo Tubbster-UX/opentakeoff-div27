@@ -364,3 +364,52 @@ PLAYWRIGHT_MODULE=/path/to/playwright-core/index.mjs BROWSER_PATH=/path/to/chrom
   node scripts/verify-cable-runs.mjs /tmp/cable-fixture.json /tmp/cable-ui/results.json
 node --import tsx scripts/make-cable-marked-sample.mts /tmp/cable-marked-sample.pdf
 ```
+
+## 14.4 Per-run vertical (item 4), as built (Oct 27, 2026)
+
+A run may state its own vertical, the `cables_override` pattern: `vertical_override` (feet,
+≥ 0) replaces the condition's `vertical_ft` for that location only. The decisions are in the
+spec's Decisions ("Recorded while building item 4"); this relaxes "one vertical per
+condition".
+
+| File | Change |
+|---|---|
+| `web/src/lib/cable.js` | `runVerticalOverride`; `mintCableRun` mints `vertical_override` when valid; `sanitizeCableRuns` keeps a valid one in place and drops an invalid one; `resolveCableRuns` uses the run's vertical, checks the setup with it (a condition missing only its vertical does not withhold a run that states one), reports `vertical_ft` used and `vertical_override` / `cables_override` when set, and notes `vertical 9 ft (run override; condition 23 ft)`; `cableRunRows` adds `vertical_override` only when set; `linkRunRefusal` takes `vertical_override` (refuses a negative one; the missing-vertical refusal names it as a next move); `applyCableRunCommand` gains `override` with an exact inverse (values and key order) |
+| `web/src/components/RunsPanel.jsx` | **↕** per run opens the vertical / cables editor (display units, blank = the condition's, unchanged fields keep their stored value); an overridden run shows `run's own: …` under its row |
+| `web/src/pages/TakeoffCanvas.jsx` | One prop: `onOverride` dispatches `{ type: "override" }` on the cable undo family |
+| `web/src/components/CableReportSection.jsx` | Footnote wording (the vertical is the condition's or a run's own) |
+| `mcp/src/tools.ts`, `session.ts`, `outputs.ts` | `link_run` takes optional `vertical_ft` (≥ 0, stored as `vertical_override`); `link_run` and `list_runs` rows carry `vertical_override` / `cables_override` when set; descriptions say to change a run by unlink and relink. No new tool (57 / 59 / 11) |
+| `protocol/v1/document-fields.schema.json`, `INVENTORY.md`, `test/current-records.test.mjs` | `cable_runs[].vertical_override` (number, minimum 0); a conforming record and a negative one that does not |
+| `web/test/cableRunVertical.test.ts` (new), `mcp/test/cable.test.ts` | See below |
+| `web/scripts/verify-cable-runs.mjs` | 8 checks for the ↕ editor |
+
+Tests (`web/test/cableRunVertical.test.ts`, 12 cases): a 23 ft wall outlet with one run at
+9 ft gives 87.5 + 9 + 10 + 10 = 116.5 per cable, × 2 = 233, 260.96 at 12%, and its sibling
+keeps 130.5; an access_door with no vertical withholds the run without an override (existing
+reason) and links the one at 12 ft (97 LF); other missing values still withhold; 0 is a stated
+value; invalid overrides drop at mint and at the load gate; the runs sheet keeps its columns
+and marks the override in Reason / notes; the document round trip; an old document loads and
+exports byte-identically; the command and its inverse, byte for byte, including a sanitized
+record's key order; a withheld run released by its own vertical. `mcp/test/cable.test.ts`
+adds `link_run vertical_ft` on an access_door with no vertical (refused without, linked with
+12 and with 0), a negative value refused by the schema, `list_runs`, `export_takeoff` →
+`import_takeoff`, and `undo_last`.
+
+Old documents: the base commit's `cable.js` and this one were run side by side on the browser
+fixture (three variants: as is, verticals cleared, ×2 with 300 ft) over the load gate, the
+summary, the report block, the cable tables and the run rows: all 15 data outputs identical.
+The only difference is the wording of the missing-vertical refusal, which now names the run's
+own vertical as a next move.
+
+### Check record (this container: Node 22, root, shared with four other agents; load 13–20 on 4 cores)
+
+| Check | Result |
+|---|---|
+| `web` typecheck, lint, build | pass |
+| `web` tests | 3,552 tests: 3,537 pass, 1 fail, 10 cancelled. Every failure and cancellation is a timing or per-file timeout under load: `sheetTree.test.ts` "a 5,000-sheet set builds … quickly" (128 ms against its budget) and the per-file timeouts in `hybridReplay`, `ocrPageRead`, `pictures`, `planSearch` and `sheetName`, which pass on their own with a 120 s timeout (sheetTree 15/15, sheetName 10/10, the rest 262/264 with two timing asserts under load); `stageOcrModel.test.ts` cancels 5, as on the base commit. Every cable test passes. |
+| `web/bench/results.json` | unchanged |
+| `mcp` typecheck; all test files as CI runs them | pass; 300 tests: 299 pass, 1 fail (`safewrite` "unreadable file fails CLOSED", root, as in §10) |
+| `mcp` check:tool-count, check:wiki, check:protocol-resources | pass after `-- --write` (57 default / 59 gated / 11 setup) |
+| `protocol` `npm run check` | pass after `node protocol/scripts/check-docs.mjs --write` |
+| `node scripts/check-doc-links.mjs` | pass |
+| Browser: `verify-cable-runs.mjs` | 38 of 38, no console errors; [`docs/review/cable-runs-run-vertical/`](../review/cable-runs-run-vertical/README.md) |

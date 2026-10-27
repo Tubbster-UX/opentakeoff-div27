@@ -12,7 +12,7 @@ import { conditionTotals } from "../../web/src/lib/totals.js";
 import { buildProjectArchive, parseProjectArchive } from "../../web/src/lib/projectArchive.js";
 import { sanitizeStitches } from "../../web/src/lib/stitches.ts";
 import { computeCableTakeoff, mintCableSetup, mintCableRun, mintCableHold } from "../../web/src/lib/cable.js";
-import { validator, assertValid, legacyId, draftId } from "./helpers.mjs";
+import { validator, assertValid, legacyId, draftId, schemaBase } from "./helpers.mjs";
 
 const ajv = validator();
 const plan = fileURLToPath(new URL("../../demo/sample-plan.pdf", import.meta.url));
@@ -232,6 +232,13 @@ test("Division 27 cable setup, TR role and cable runs conform as additive record
   checkBoth(d);
   const t = computeCableTakeoff(d.conditions, d.shapes, d.cable_runs);
   assert.deepEqual({ per: t.resolved.runs[0].per_cable_lf, order: t.summary.totals.cable_lf_order }, { per: 130.5, order: 292.32 });
+  // a run's own vertical (vertical_override, feet) replaces the condition's for that run only
+  const withVertical = { ...d, cable_runs: [{ ...d.cable_runs[0], vertical_override: 9 }] };
+  checkBoth(withVertical);
+  const tv = computeCableTakeoff(withVertical.conditions, withVertical.shapes, withVertical.cable_runs);
+  assert.deepEqual({ v: tv.resolved.runs[0].vertical_ft, per: tv.resolved.runs[0].per_cable_lf, order: tv.summary.totals.cable_lf_order }, { v: 9, per: 116.5, order: 260.96 });
+  const draftCheck = ajv.getSchema(`${schemaBase}v1/takeoff-document.schema.json`);
+  assert.equal(draftCheck({ ...structuredClone(withVertical), schema: draftId, cable_runs: [{ ...withVertical.cable_runs[0], vertical_override: -1 }] }), false, "a negative vertical does not conform");
   // a HOLD rides the same list: devices deliberately without a run, with the reason
   const withHold = { ...d, shapes: [...d.shapes, { id: "dev-2", sheet_id: sheet, condition_id: "condition-data", measure_role: "count", verts_norm: [[0.7, 0.6]], computed: { count: 1 }, origin: { method: "manual" } }] };
   withHold.cable_runs = [...d.cable_runs, { ...mintCableHold({ device_shape_ids: ["dev-2"], reason: "by others" }), id: "hold-1" }];

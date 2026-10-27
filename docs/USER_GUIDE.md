@@ -401,13 +401,15 @@ estimated: horizontal length comes only from route segments you trace.
 **+ cable…** in its properties:
 
 - **A device type** (Wall outlet, WAP, Camera, Access control door, Other ceiling device,
-  Custom) makes it a device condition. One vertical applies to every device on a condition,
-  so devices with different verticals (door contacts and a keypad, say) go on separate
-  conditions. The type fills in its starting vertical and service
+  Custom) makes it a device condition. The condition's vertical applies to each of its
+  devices unless a run states its own (see the Runs panel below), so devices that share a
+  type but not a vertical (door contacts at the head and a keypad at 48″, say) can stay on
+  one condition. The type fills in its starting vertical and service
   loops, and the condition's waste becomes 12% if it had none. The project spec governs: edit
   **Cables/loc**, **Type** (free text such as `CAT6A`, which groups the summary), **Vertical**,
   **Loop dev** and **Loop TR** to match it. An Access control door has no starting vertical;
-  until you enter one, its runs are withheld and the reason shows in red under the fields.
+  until you enter one, its runs are withheld and the reason shows in red under the fields,
+  except a run that states its own vertical.
 - **Telecom room (TR)** makes a count condition's markers the rooms runs home to.
 - **Cable route (linear)** on a linear condition marks its lines as routes. Any route
   segment that no run uses is listed as unlinked.
@@ -431,6 +433,18 @@ appears as a label bucket in the Report's group-by-label view and the workbook's
 tab). **⌖** puts any item on screen. Unlinked devices carry an amber dashed ring on the sheet,
 unlinked routes an amber halo, and each TR prints its name.
 
+**A run's own vertical.** **↕** on a run opens two fields: **vertical** (ft, or m in metric)
+and **cables**. A value there replaces the condition's for that location only, such as one
+camera on a tall pole or a keypad among door contacts; blank means the condition's value,
+shown as the placeholder. Press **Set** or `⏎`. The run then reads `run's own: vertical 9 ft
+(condition 23 ft)` under its row, and the Cable runs sheet shows the vertical used, with the
+same words in Reason / notes. A run that states its own vertical counts even when its
+condition has none entered (an Access control door); every other missing value still
+withholds it. A vertical is a value you state from the drawings or spec, never a guess; 0 is
+allowed. Setting and clearing it are on the undo stack. To give a new run its own vertical,
+link it first, then use **↕**. A run on a condition with no vertical can't be linked with
+`W` yet, so enter the condition's vertical, link, and set the run's own.
+
 **Hold devices that get no run.** When you decide some devices get no run, such as an area whose
 routing the drawings don't show or devices furnished by others, tick them in the panel's
 Unlinked list, type the reason, and press **Hold**. Held devices stay out of every total, as
@@ -445,10 +459,11 @@ stands, the run needs a closer TR or a length test and an owner notice. A route 
 whose scale an agent set and no person has confirmed is flagged the same way. Confirm the
 scale before pricing, because every cable length on that sheet rests on it.
 
-Per cable LF = measured route + vertical + both loops. Pulls are per location and cables per
-pull; the condition's waste % applies only to the order figure and ×N to the whole row.
-Linking, unlinking and accepting are on the undo stack (`⌘Z`); cable setup field edits, like
-other condition properties, are not.
+Per cable LF = measured route + vertical (the run's own, else the condition's) + both loops.
+Pulls are per location and cables per pull; the condition's waste % applies only to the order
+figure and ×N to the whole row. Linking, unlinking, accepting and a run's own vertical or
+cables are on the undo stack (`⌘Z`); cable setup field edits, like other condition
+properties, are not.
 
 The Report shows a **Cable summary** (per condition and TR, subtotaled by TR and by cable type,
 device EA beside pulls, so the gap is exactly the unlinked plus held devices), the **Held**

@@ -19,6 +19,10 @@
 // device is HELD from the Runs panel with a reason (grey cue, Held list,
 // ⌘Z / ⇧⌘Z); the Report lists it as held; and the canvas's marked set
 // carries the route chips, the device run tags and the legend cable lines.
+// Added with item 4 (per-run vertical, CABLE_SETUP_PLAN.md §14.4): a run's ↕
+// editor sets its own vertical (chip, per-cable LF, totals), ⌘Z / ⇧⌘Z, a
+// cables override beside it, a negative vertical refused inline, and clearing
+// both returns the run to the condition's values.
 import { dirname, join, resolve } from 'node:path';
 import { mkdirSync, writeFileSync, readFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -200,6 +204,47 @@ try {
   await page.keyboard.press('Control+Shift+z');
   await page.waitForTimeout(400);
   check('⇧⌘Z re-holds it', (await page.locator('[data-cable-cue="held-device"]').count()) === 1);
+
+  // 9b. per-run vertical (item 4): the run's own vertical replaces the condition's 23 ft
+  const net = async () => (await page.locator('[data-cable-totals]').innerText()).match(/([\d.]+) LF net/)?.[1];
+  const net0 = await net();
+  const runId = await page.locator('[data-cable-override]').first().getAttribute('data-cable-override');
+  const openEditor = async () => { await page.locator(`[data-cable-override="${runId}"]`).click(); await page.waitForSelector(`[data-cable-override-form="${runId}"]`); };
+  await openEditor();
+  check('override editor: blank fields with the condition\'s 23 ft and 2 cables as placeholders',
+    (await page.locator('input[name="run-vertical"]').inputValue()) === '' && (await page.locator('input[name="run-vertical"]').getAttribute('placeholder')) === '23' && (await page.locator('input[name="run-cables"]').getAttribute('placeholder')) === '2');
+  await page.locator('input[name="run-vertical"]').fill('-2');
+  await page.locator(`[data-cable-override-form="${runId}"] button`, { hasText: 'Set' }).click();
+  check('a negative vertical is refused inline and changes nothing', /vertical must be a number of ft, 0 or more/.test(await page.locator(`[data-cable-override-form="${runId}"]`).innerText()) && (await net()) === net0, { net0 });
+  await page.locator('input[name="run-vertical"]').fill('9');
+  await shot('11-run-override-editor.png');
+  await page.locator('input[name="run-vertical"]').press('Enter');
+  await page.waitForSelector('[data-cable-flag="override"]');
+  const row9 = await page.locator(`[data-cable-run="${runId}"]`).innerText();
+  const line9 = await page.locator('[data-cable-flag="override"]').innerText();
+  check('vertical 9 ft on one run: its row reads 62.33 LF × 2, a line under it names the condition\'s 23 ft; totals drop 305.32 → 277.32 LF net',
+    net0 === '305.32' && /62\.33 LF × 2/.test(row9) && line9 === "run's own: vertical 9 ft (condition 23 ft)" && (await net()) === '277.32', { net0, row9, line9, net: await net() });
+  await shot('12-run-vertical-override.png');
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(400);
+  check('⌘Z takes the override back (305.32 LF net, no chip)', (await net()) === '305.32' && (await page.locator('[data-cable-flag="override"]').count()) === 0);
+  await page.keyboard.press('Control+Shift+z');
+  await page.waitForTimeout(400);
+  check('⇧⌘Z puts it back (277.32 LF net)', (await net()) === '277.32');
+  await openEditor();
+  check('the editor opens with the run\'s own vertical', (await page.locator('input[name="run-vertical"]').inputValue()) === '9');
+  await page.locator('input[name="run-cables"]').fill('3');
+  await page.locator('input[name="run-cables"]').press('Enter');
+  await page.waitForTimeout(300);
+  check('cables 3 beside it: 62.33 × 3 + 152.66 = 339.65 LF net, named under the row', (await net()) === '339.65' && /vertical 9 ft \(condition 23 ft\) · 3 cables \(condition 2\)/.test(await page.locator('[data-cable-flag="override"]').innerText()), await net());
+  await openEditor();
+  await page.locator('input[name="run-vertical"]').fill('');
+  await page.locator('input[name="run-cables"]').fill('');
+  await page.locator(`[data-cable-override-form="${runId}"] button`, { hasText: 'Set' }).click();
+  await page.waitForTimeout(300);
+  check('blank both and Set: the run reads the condition\'s values again (305.32 LF net, no chip)', (await net()) === '305.32' && (await page.locator('[data-cable-flag="override"]').count()) === 0);
+  await page.evaluate(() => document.activeElement?.blur());
 
   // 10. the Report lists it as held, and the canvas's marked set burns the runs (Phase 3)
   await page.getByRole('button', { name: 'Report', exact: true }).first().click();

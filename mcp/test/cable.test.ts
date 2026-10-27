@@ -182,6 +182,43 @@ test("link_run refusals: not a linear shape, unscaled sheet, missing vertical, n
   await refused(two, "link_run", { device_shape_ids: [dw], route_shape_ids: [rt], tr_id: trId }, /Set the scale for sample-plan\.pdf first — use set_scale/);
 });
 
+test("link_run vertical_ft: a run states its own vertical — an access_door with no vertical links, the reply and list_runs say so, a sibling keeps the condition's; a negative value refuses; round trip keeps it", async () => {
+  const { client, tr, devW, rtW, rtC } = await worked();
+  // the per-run override on a wall outlet at 23 ft: 87.5 + 9 + 10 + 10 = 116.5, ×2 = 233
+  const w = await ok(client, "link_run", { device_shape_ids: [devW], route_shape_ids: [rtW], tr_id: tr, vertical_ft: 9 });
+  assert.deepEqual({ v: w.vertical_ft, over: w.vertical_override, per: w.per_cable_lf, loc: w.location_lf }, { v: 9, over: 9, per: 116.5, loc: 233 });
+  assert.equal(w.notes[0], "vertical 9 ft (run override; condition 23 ft)");
+  // an access_door condition with no vertical: refused without one, linked with one
+  await ok(client, "place_count", { sheet: KEY, points: [[1800, 1000], [2000, 1000]], condition: "ACS-1" });
+  await ok(client, "edit_condition", { condition: "ACS-1", waste_pct: 12, cable_setup: { device_type: "access_door" } });
+  const [d1, d2] = (await ok(client, "list_shapes", { condition: "ACS-1" })).shapes.map((s: any) => s.id);
+  await refused(client, "link_run", { device_shape_ids: [d1], route_shape_ids: [rtC], tr_id: tr }, /ACS-1: vertical_ft is required[\s\S]*state this run's own vertical \(link_run vertical_ft\)/);
+  const bad: any = await client.callTool({ name: "link_run", arguments: { device_shape_ids: [d1], route_shape_ids: [rtC], tr_id: tr, vertical_ft: -1 } });
+  assert.ok(bad.isError && /MCP error -32602/.test(bad.content[0].text) && /vertical_ft/.test(bad.content[0].text), "a negative vertical is a schema violation (number ≥ 0)");
+  assert.equal((await ok(client, "list_runs", {})).count, 1, "refusals minted nothing");
+  const d = await ok(client, "link_run", { device_shape_ids: [d1], route_shape_ids: [rtC], tr_id: tr, vertical_ft: 12 });
+  assert.deepEqual({ status: d.status, v: d.vertical_ft, over: d.vertical_override, per: d.per_cable_lf }, { status: "linked", v: 12, over: 12, per: 140 + 12 + 15 + 10 });
+  assert.equal(d.notes[0], "vertical 12 ft (run override; condition has none)");
+  const zero = await ok(client, "link_run", { device_shape_ids: [d2], route_shape_ids: [rtC], tr_id: tr, vertical_ft: 0 });
+  assert.deepEqual({ v: zero.vertical_ft, per: zero.per_cable_lf }, { v: 0, per: 165 }, "0 is a stated vertical");
+  const runs = await ok(client, "list_runs", {});
+  assert.deepEqual(runs.runs.map((r: any) => [r.condition, r.status, r.vertical_ft, r.vertical_override]), [["DATA-1", "linked", 9, 9], ["ACS-1", "linked", 12, 12], ["ACS-1", "linked", 0, 0]]);
+  const acs = runs.summary.rows.find((r: any) => r.finish_tag === "ACS-1");
+  assert.deepEqual({ pulls: acs.pulls, net: acs.cable_lf, order: acs.cable_lf_order }, { pulls: 2, net: 342, order: 383.04 });
+  // the record carries it; export → import keeps it; undo_last takes the link back
+  const payload = await ok(client, "export_takeoff", {});
+  assert.deepEqual(payload.cable_runs.map((r: any) => r.vertical_override), [9, 12, 0]);
+  const dir = await mkdtemp(path.join(tmpdir(), "ot-cable-v-"));
+  const file = path.join(dir, "v.json");
+  await writeFile(file, JSON.stringify(payload));
+  const two = await pair();
+  await ok(two, "load_plan", { path: PLAN });
+  await ok(two, "import_takeoff", { path: file });
+  assert.deepEqual((await ok(two, "list_runs", {})).runs.map((r: any) => [r.status, r.per_cable_lf]), [["linked", 116.5], ["linked", 177], ["linked", 165]]);
+  await ok(client, "undo_last", { n: 1 });
+  assert.equal((await ok(client, "list_runs", {})).count, 2);
+});
+
 test("unlink_run removes the link only; undo_last re-seats it; the device goes back on the unlinked list meanwhile", async () => {
   const { client, tr, devW, rtW } = await worked();
   const w = await ok(client, "link_run", { device_shape_ids: [devW], route_shape_ids: [rtW], tr_id: tr });

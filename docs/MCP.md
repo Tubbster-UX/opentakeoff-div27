@@ -190,11 +190,14 @@ Fifty-two tools, in the order an agent tends to reach for them:
   `withdraw_condition_edit` drops it. Design: `design/PROPOSALS.md`
 - **Cable runs** (Division 27, [`design/CABLE_SETUP.md`](design/CABLE_SETUP.md))—`link_run`
   joins one device marker, its traced route segments in order and the TR marker it homes to;
-  per cable LF = Σ measured route + the condition's vertical and service loops, cables per
-  location from the setup or a per-run override, waste only on the report's order figure. No
+  per cable LF = Σ measured route + the vertical and service loops, cables per location from
+  the setup or a per-run override, waste only on the report's order figure. The vertical is the
+  condition's unless the run states its own (`link_run vertical_ft`, feet, 0 or more), which
+  replaces it for that location only, so a device whose vertical differs from its type's stays
+  on its condition; change an existing run's vertical by `unlink_run` and linking again. No
   routing factor and no estimated length: an agent links shapes that already carry measured
-  geometry, and a route on an unscaled sheet, a device condition missing its vertical, or an id
-  that is not the right kind of shape refuses with the next move. `list_runs` resolves every
+  geometry, and a route on an unscaled sheet, a device condition missing its vertical (unless
+  the run states one), or an id that is not the right kind of shape refuses with the next move. `list_runs` resolves every
   run (linked / withheld / broken, with reasons), lists unlinked devices and routes—every line on
   a `role: "route"` condition no linked run uses (excluded from totals, never assigned a
   length)—and rolls the summary up per condition × TR, by TR and
