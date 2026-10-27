@@ -45,6 +45,31 @@ export default function CableReportSection({ takeoff, units = "imperial", sheetL
       <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--ink-muted)", lineHeight: 1.5 }}>
         Pulls, cables and cable LF come only from linked runs: measured route + the condition's vertical and service loops, × cables. Device EA beside Pulls shows the gap, which is exactly the unlinked plus held devices. Pending runs are counted, like pending shapes. Waste applies only to the order column; ×N applies across the row.
       </p>
+      {t.pathway && (
+        <div style={{ marginTop: 14 }} data-cable-report-pathway>
+          <h3 style={{ ...H3, fontSize: 11 }}>Pathway — each segment counted once</h3>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", background: "var(--paper-bright)", border: "1px solid var(--ink-faint)" }}>
+              <thead>
+                <tr>{t.pathway[0].map((h) => <th key={h} style={{ ...cell, textAlign: "left", fontSize: 10.5, color: "var(--ink-muted)", fontWeight: 600 }}>{h}</th>)}</tr>
+              </thead>
+              <tbody>
+                {t.pathway.slice(1).map((row, i) => {
+                  const sub = typeof row[0] === "string" && (row[0].startsWith("Subtotal") || row[0] === "TOTAL");
+                  return (
+                    <tr key={i} style={sub ? { background: "var(--paper-cream)", fontWeight: row[0] === "TOTAL" ? 700 : 500 } : undefined}>
+                      {row.map((v, j) => <td key={j} style={{ ...cell, textAlign: numeric(v) ? "right" : "left", fontFamily: numeric(v) ? "var(--f-mono)" : undefined }}>{v}</td>)}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--ink-muted)", lineHeight: 1.5 }}>
+            The pathway itself, not the cable in it: a trunk that ten runs ride is counted once here and once per run in the cable figures above. Buy J-hooks from a Linear material row on the branch condition (per = hook spacing); its basis is that condition's LF ×N, each segment once.
+          </p>
+        </div>
+      )}
       {held.length > 0 && (
         <div style={{ marginTop: 14 }} data-cable-report-held>
           <h3 style={{ ...H3, fontSize: 11 }}>Held — no run by decision, excluded from totals</h3>

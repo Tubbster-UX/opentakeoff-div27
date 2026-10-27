@@ -15,7 +15,7 @@ comes from the runtime, including stage ownership and required inputs.
 | Floor, base/trim, wall face | `measure_polygon`, `measure_line`, `measure_surface` respectively | Overlay inspection and per-role quantities |
 | Device/count census | `count_marks` | Inspect withheld entries; use more specific sweeps where needed |
 | Located opening | `cut_out` | Surviving geometry; numeric derived-base allowances cannot be clipped |
-| Division 27 cable run | `edit_condition` (`cable_setup`, `role: "tr"`), `place_count`, `measure_line`, then `link_run` | `list_runs` for withheld, broken and unlinked items; nothing is estimated |
+| Division 27 cable run | `edit_condition` (`cable_setup`, `role: "tr"`; `role: "route"` with `route_kind` trunk or branch), `place_count`, `measure_line` (trunk once, each branch on its own), then `link_run` with `[branch, trunk…]` | `list_runs` for withheld, broken and unlinked items and the pathway block; nothing is estimated |
 | Pending shape or crowded note | `edit_shape` or `edit_annotation` | Reinspect; `undo_last` restores the edit |
 | Check and hand off | `takeoff_summary`, `export_report`, `export_takeoff`, `export_marked_pdf` | Reopen and inspect; leave human review pending |
 

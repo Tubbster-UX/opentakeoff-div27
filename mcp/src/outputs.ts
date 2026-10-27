@@ -432,6 +432,25 @@ export const cableSummaryRow = z.object({
   withheld_runs: z.number().int().optional(),
 }).passthrough();
 const cableGroupRow = z.object({ ...cableQty }).passthrough();
+// trunk / branch (route_kind on a route condition): present only once one is tagged
+const routeSplitFields = {
+  branch_lf: z.number().optional().describe("Route LF on segments of a route condition tagged branch — present once any route condition carries route_kind"),
+  trunk_lf: z.number().optional().describe("Route LF on segments of a route condition tagged trunk (a shared trunk counts in full on every run that rides it)"),
+  other_lf: z.number().optional().describe("Route LF on segments of an untagged route condition (or a line on a condition that is not a route). branch_lf + trunk_lf + other_lf = route_lf"),
+};
+const pathwayQty = {
+  segments: z.number().int().describe("Linear shapes on the route condition(s)"),
+  pathway_lf: z.number().describe("Measured pathway LF, each segment counted ONCE however many runs ride it (plan length, unmultiplied)"),
+  used_lf: z.number().describe("LF of segments at least one linked run uses"),
+  unused_lf: z.number().describe("LF of segments no linked run uses (unlinked, or named only by a broken or withheld run)"),
+  linked_runs: z.number().int().describe("Distinct linked runs using at least one segment"),
+  pathway_lf_total: z.number().describe("pathway_lf × the condition's multiplier — the basis a linear materials row on the condition (J-hooks, per = spacing) divides, less any rise/drop legs"),
+};
+export const cablePathwayBlock = z.object({
+  rows: z.array(z.object({ condition_id: z.string(), finish_tag: z.string(), route_kind: z.enum(["trunk", "branch", ""]).describe('"" = unspecified'), ...pathwayQty, multiplier: z.number() })).describe("One row per role \"route\" condition"),
+  by_kind: z.array(z.object({ route_kind: z.enum(["trunk", "branch", ""]), ...pathwayQty })),
+  totals: z.object(pathwayQty),
+}).describe("Trunk/branch PATHWAY rollup — what the pathway measures, each segment once (cable LF stays per run). Present only once a route condition carries route_kind");
 const cableRunRow = z.object({
   run_id: z.string(),
   status: z.enum(["linked", "withheld", "broken"]).describe("linked = figured and counted; withheld = the condition's setup lacks a required value; broken = a referenced shape is gone, is the wrong kind, or sits on a sheet with no scale answer. Only linked runs count"),
@@ -442,6 +461,7 @@ const cableRunRow = z.object({
   over_length: z.literal(true).optional().describe("Per-cable LF exceeds 295 ft (TIA-568 copper permanent link, 90 m) — counted; check the route"),
   scale_unconfirmed: z.literal(true).optional().describe("A route segment sits on a sheet whose agent-set scale no person has confirmed"),
   route_lf: z.number().describe("Σ segment plan lengths, each at its own sheet's scale — reported on a broken run too, never zeroed"),
+  ...routeSplitFields,
   vertical_ft: z.number().optional(), loop_device_ft: z.number().optional(), loop_tr_ft: z.number().optional(),
   per_cable_lf: z.number().optional().describe("route + vertical + both loops"),
   cables: z.number().optional(), location_lf: z.number().optional().describe("per_cable_lf × cables — unmultiplied, no waste"),
@@ -464,7 +484,7 @@ export const linkRunOutput = {
   status: z.literal("linked"),
   condition: z.string(), device_type: z.string(), cable_type: z.string(), tr: z.string(), sheets: z.array(z.string()),
   device_sheets: z.array(z.string()), tr_sheet: z.string(),
-  route_lf: z.number(), vertical_ft: z.number(), loop_device_ft: z.number(), loop_tr_ft: z.number(),
+  route_lf: z.number(), ...routeSplitFields, vertical_ft: z.number(), loop_device_ft: z.number(), loop_tr_ft: z.number(),
   per_cable_lf: z.number().describe("route + vertical + loop at device + loop at TR"),
   cables: z.number(), location_lf: z.number().describe("per_cable_lf × cables (no waste, no ×N — export_report's cable block applies both)"),
   reviewed: z.literal(false),
@@ -480,6 +500,7 @@ export const listRunsOutput = {
   holds: cableHolds.describe("The hold records — unlink_run takes a hold id to release it"),
   warnings: z.array(z.string()).describe("One per condition whose route segments carry rise/drop legs: that condition's LF in the regular report is not a cable length"),
   summary: cableSummaryBlock.nullable(),
+  pathway: cablePathwayBlock.optional(),
   count: z.number().int(),
   note: z.string().optional(),
 };
@@ -497,7 +518,7 @@ export const holdDevicesOutput = {
 
 export const takeoffSummaryOutput = {
   conditions: z.array(summaryRow),
-  cable: cableSummaryBlock.extend({ unlinked_devices: z.number().int(), unlinked_routes: z.number().int(), held_devices: z.number().int(), warnings: z.array(z.string()) }).optional().describe("Division 27 cable rollups — present only when a condition carries a cable_setup or a run exists (list_runs has the per-run detail)"),
+  cable: cableSummaryBlock.extend({ unlinked_devices: z.number().int(), unlinked_routes: z.number().int(), held_devices: z.number().int(), warnings: z.array(z.string()), pathway: cablePathwayBlock.optional() }).optional().describe("Division 27 cable rollups — present only when a condition carries a cable_setup or a run exists (list_runs has the per-run detail)"),
   totals: z.object({
     total_sf: z.number(),
     total_sf_net: z.number(),
@@ -824,6 +845,7 @@ export const exportReportOutput = {
     summary: z.array(cableSummaryRow), by_tr: z.array(cableGroupRow), by_cable_type: z.array(cableGroupRow), totals: cableGroupRow,
     runs: z.array(z.record(z.unknown())).describe("One row per run, unmultiplied, with a multiplier column and its status / review status"),
     unlinked: cableUnlinked, warnings: z.array(z.string()),
+    pathway: cablePathwayBlock.optional(),
   }).optional().describe("Division 27 cable schedule (docs/design/CABLE_SETUP.md) — present only when a cable condition or a run exists, so every other report is byte-identical"),
 };
 
@@ -878,6 +900,8 @@ export const editConditionOutput = {
   }).passthrough().optional().describe("The figured order (same row export_report's roll_goods carries) — present when the roll-goods condition has floor shapes on scaled sheets"),
   cable_setup: cableSetupShape.optional().describe("The condition's Division 27 cable setup after this write — present while opted in"),
   role: z.enum(["tr", "route"]).optional().describe("Present when flagged: \"tr\" = the condition's count markers are telecom rooms (link_run's tr_id targets); \"route\" = its linear shapes are cable routes (unlinked ones are listed by list_runs)"),
+  route_kind: z.enum(["trunk", "branch"]).optional().describe("Present when a route condition is tagged: trunk = shared pathway, branch = device out to the trunk"),
+  pathway: z.record(z.unknown()).optional().describe("A tagged route condition's Pathway row (each segment once) — the same row list_runs.pathway carries"),
   cable: z.object({
     problems: z.array(z.string()).describe("Required values still missing from the setup — while any remain, every run on this condition is WITHHELD with this reason (no length is assumed)"),
     rows: z.array(cableSummaryRow).describe("The condition's Cable summary row(s), one per TR it homes to, ×N and waste applied as in export_report"),

@@ -238,6 +238,20 @@ test("Division 27 cable setup, TR role and cable runs conform as additive record
   checkBoth(withHold);
   const th = computeCableTakeoff(withHold.conditions, withHold.shapes, withHold.cable_runs);
   assert.deepEqual({ pulls: th.summary.totals.pulls, held: th.summary.totals.held_devices }, { pulls: 1, held: 1 });
+  // trunk / branch: route_kind on role "route" conditions, a run listing [branch, trunk]
+  const tb = {
+    ...d,
+    conditions: [...d.conditions,
+      { id: "condition-tray", finish_tag: "TRAY", multiplier: 1, waste_pct: 0, materials: [], role: "route", route_kind: "trunk" },
+      { id: "condition-branch", finish_tag: "BRANCH", multiplier: 1, waste_pct: 0, materials: [{ id: "m-1", name: "J-hook", per: 5, basis: "linear", unit: "EA" }], role: "route", route_kind: "branch" }],
+    shapes: [...d.shapes,
+      { id: "tray-1", sheet_id: sheet, condition_id: "condition-tray", measure_role: "linear", verts_norm: [[0.2, 0.4], [0.6, 0.4]], computed: { area_sf: 0, perimeter_lf: 100 }, origin: { method: "manual" } },
+      { id: "br-1", sheet_id: sheet, condition_id: "condition-branch", measure_role: "linear", verts_norm: [[0.6, 0.4], [0.6, 0.6]], computed: { area_sf: 0, perimeter_lf: 40 }, origin: { method: "manual" } }],
+    cable_runs: [{ ...mintCableRun({ device_shape_ids: ["dev-1"], route_shape_ids: ["br-1", "tray-1"], tr_id: "tr-1" }), id: "run-1" }],
+  };
+  checkBoth(tb);
+  const tt = computeCableTakeoff(tb.conditions, tb.shapes, tb.cable_runs);
+  assert.deepEqual({ route: tt.resolved.runs[0].route_lf, branch: tt.resolved.runs[0].branch_lf, trunk: tt.resolved.runs[0].trunk_lf, pathway: tt.pathway.totals.pathway_lf }, { route: 140, branch: 40, trunk: 100, pathway: 140 });
   // the MCP writer emits none of the keys for a session without cable work
   const session = new Session();
   await session.loadPlan(plan);
@@ -247,5 +261,6 @@ test("Division 27 cable setup, TR role and cable runs conform as additive record
   assert.equal("cable_runs" in record, false);
   assert.equal("cable_setup" in record.conditions[0], false);
   assert.equal("role" in record.conditions[0], false);
+  assert.equal("route_kind" in record.conditions[0], false);
   checkBoth(record);
 });

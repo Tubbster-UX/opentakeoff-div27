@@ -8484,6 +8484,7 @@ export default function TakeoffCanvas() {
     ...(c.roll_setup ? { roll_setup: { ...c.roll_setup } } : {}),   // #136 — the roll spec is part of what makes a CPT-1 template CPT-1
     ...(c.cable_setup ? { cable_setup: { ...c.cable_setup } } : {}),   // Division 27 — so is a device condition's cable setup
     ...(c.role === "tr" || c.role === "route" ? { role: c.role } : {}),
+    ...(c.role === "route" && (c.route_kind === "trunk" || c.route_kind === "branch") ? { route_kind: c.route_kind } : {}),
     materials: (c.materials || []).map(({ id: _id, ...m }) => (m.grout ? { ...m, grout: { ...m.grout } } : m)),   // ids are minted on instantiation; grout never shared by reference
   });
   const saveActiveAsTemplate = () => {

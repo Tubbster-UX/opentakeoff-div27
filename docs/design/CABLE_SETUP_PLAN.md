@@ -364,3 +364,41 @@ PLAYWRIGHT_MODULE=/path/to/playwright-core/index.mjs BROWSER_PATH=/path/to/chrom
   node scripts/verify-cable-runs.mjs /tmp/cable-fixture.json /tmp/cable-ui/results.json
 node --import tsx scripts/make-cable-marked-sample.mts /tmp/cable-marked-sample.pdf
 ```
+
+## 14.2 Trunk and branch routes, as built (Oct 27, 2026)
+
+Item 2 of the follow-ups: the bid traced each run device-to-TR as one polyline, so route LF
+could not give branch length and J-hooks were a lump allowance. A route condition now says
+whether its segments are trunk or branch; the decisions are in the spec's Decisions section
+("Recorded while building item 2").
+
+| File | Change |
+|---|---|
+| `web/src/lib/cable.js` | `ROUTE_KINDS`, `routeKindOf`, `usesRouteKinds`; `resolveCableRuns` gives each segment its `kind` and each run `trunk_lf` / `branch_lf` / `other_lf`; `pathwayRollup` (pure); `computeCableTakeoff().pathway` (null until a route condition is tagged); `routeSplit`; the runs table gains *Branch LF* / *Trunk LF* before *Reason / notes* and a `pathway` matrix; `cableReportBlock` appends `pathway` |
+| `web/src/lib/totals.js`, `web/src/lib/xlsx.js` | CSV *Pathway* section, Excel *Pathway* tab, both gated |
+| `web/src/lib/cableMarks.js` | a tagged route condition's cover line names its kind and pathway LF |
+| `web/src/lib/canvasUtil.js`, `TakeoffCanvas.jsx` (`condToTemplate`) | `route_kind` rides templates with the route role |
+| `web/src/components/CableSetupEditor.jsx` | **Kind** (Unspecified / Trunk / Branch) on a cable-route condition; **Cable route: trunk / branch** in the opt-in; ✕ clears the kind with the role |
+| `web/src/components/CableReportSection.jsx`, `RunsPanel.jsx` | the Report's Pathway table; the run tooltip shows the split |
+| `mcp/src/session.ts`, `tools.ts`, `outputs.ts` | `edit_condition { route_kind }` (refused off a route condition before anything is written; null clears; leaving the route role drops it; journaled and undone with the other knobs; the reply echoes the pathway row); the split on `link_run` and `list_runs`; `pathway` on `list_runs`, `takeoff_summary.cable` and `export_report.cable`. No new tool (57) |
+| `protocol/v1/condition.schema.json`, `protocol/INVENTORY.md` | `route_kind` enum, inventory row, a current-records case |
+| Tests | `web/test/cableTrunkBranch.test.ts` (new, 9 tests); `mcp/test/cable.test.ts` (+2); `protocol/test/current-records.test.mjs` (+1 case) |
+
+Exact values pinned: a 40 ft branch + shared 100 ft trunk → route 140, branch 40, trunk 100;
+two runs sharing the trunk → pathway trunk LF 100 (once), cable route LF 280; J-hooks per 5 ft
+on a 40 ft + 35 ft branch condition → 15, 30 at ×2; an untagged cable takeoff's CSV equals the
+literal captured from `d680c88`, and its report JSON and workbook hash to the values taken there.
+
+### Check record (this container: Node 22, root, four other agents building in parallel)
+
+| Check | Result |
+|---|---|
+| `web` typecheck, lint, build | pass |
+| `web` tests | 3,570 tests: 3,559 pass, 1 fail, 6 cancelled, 4 skipped. The cancellations are `pictures.test.ts` and 5 in `stageOcrModel.test.ts`, as in §13. The failure is `ocrPageRead.test.ts` "cancel shows Stopping… until the read settles", a timing test that passed on one of three solo reruns and failed on the others while the container was loaded; nothing in it touches cable code. Every `cable*.test.ts` passes (59 tests) |
+| `web/bench/results.json` | not touched (the bench was not rerun; nothing here reaches the flood engine) |
+| `mcp` typecheck; all test files as CI runs them | pass; 301 tests, 300 pass, 1 fail (`safewrite` "an unreadable file fails CLOSED", root, as in §10) |
+| `mcp` check:tool-count (57 / 59 / 11), check:wiki, check:protocol-resources | pass after `--write` |
+| `protocol` `npm run check` | 62 tests pass; docs match 11 schemas |
+| `node scripts/check-doc-links.mjs` | pass |
+| Browser: `verify-cable-runs.mjs` on the invented fixture | 30 of 30, no console errors |
+| Browser: tag the fixture's ROUTE as Trunk in the condition editor, open the Report | the Pathway table reads `ROUTE · Trunk · 3 · 99.99 · 33.33 · 66.66 · 1 · 1 · 99.99`, no console errors |

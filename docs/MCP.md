@@ -203,7 +203,15 @@ Fifty-two tools, in the order an agent tends to reach for them:
   unlinked. A run over 295 ft per cable (TIA-568 copper) is flagged and warned, and a route on an
   agent-set scale no person confirmed is flagged. `takeoff_summary` and
   `export_report` carry a `cable` block whenever a cable condition exists; agent-linked runs
-  land pending and count exactly as pending agent shapes do
+  land pending and count exactly as pending agent shapes do. **Trunk and branch:** trace the
+  shared trunk once under a route condition tagged `edit_condition { route_kind: "trunk" }` and
+  each device's branch as its own segment under one tagged `"branch"`, then `link_run` with
+  `[branch, trunk…]` in order from the device. Each run then carries `branch_lf`, `trunk_lf` and
+  `other_lf` (untagged) beside `route_lf`, and `list_runs`, `takeoff_summary.cable` and
+  `export_report.cable` gain a `pathway` block, one row per route condition with each segment
+  counted once. J-hooks are an `edit_materials` row on the branch condition (basis `"linear"`,
+  `per` = spacing), whose basis is that condition's LF counted once. Never derive branch LF by
+  dividing a full-route LF
 - **Scope collision** (#366)—`takeoff_summary.shared_floor_sf` is the floor
   claimed by more than one shape across the takeoff (Σ areas − union, once per
   cell), the number that has to read zero before a total means anything;

@@ -8,13 +8,16 @@
 //             → Telecom room   (count condition: role "tr" — its markers are
 //                                the TRs runs home to, named by their label)
 //             → Cable route    (linear condition: role "route" — every line on
-//                                it no linked run uses is listed as unlinked)
+//                                it no linked run uses is listed as unlinked;
+//                                Kind: Trunk / Branch / unspecified sets its
+//                                route_kind, which splits each run's route LF
+//                                and adds the Report's Pathway table)
 //
 // Required values left empty show inline, in the danger color, with the
 // reason the library withholds the condition's runs. Field edits follow the
 // condition editor's convention (not on the undo stack), like roll goods.
 // All defaults and validation come from lib/cable.js — nothing is computed here.
-import { DEVICE_TYPES, DEVICE_TYPE_LABELS, CABLE_DEFAULTS, mintCableSetup, hasCableSetup, cableSetupProblems } from "../lib/cable.js";
+import { DEVICE_TYPES, DEVICE_TYPE_LABELS, CABLE_DEFAULTS, ROUTE_KINDS, ROUTE_KIND_LABELS, mintCableSetup, hasCableSetup, cableSetupProblems, routeKindOf } from "../lib/cable.js";
 import { lenVal, lenUnit, heightVal, heightInputToFeet, heightUnit } from "../lib/units";
 
 const box = { display: "flex", flexDirection: "column", gap: 5, paddingTop: 6, marginTop: 1, borderTop: "1px solid var(--ink-faint)" };
@@ -47,12 +50,27 @@ export default function CableSetupEditor({ cond: c, onUpdateCond, row = null, ca
       <div style={box}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={cap}>{tr ? "Telecom rooms (TR)" : "Cable routes"}</span>
-          <button onClick={() => onUpdateCond({ role: undefined })} title={tr ? "Stop treating this condition's markers as telecom rooms (runs that home to them read broken)" : "Stop treating this condition's lines as cable routes (they leave the unlinked list; links stay)"} style={xBtn}>✕</button>
+          <button onClick={() => onUpdateCond({ role: undefined, route_kind: undefined })} title={tr ? "Stop treating this condition's markers as telecom rooms (runs that home to them read broken)" : "Stop treating this condition's lines as cable routes (they leave the unlinked list; links stay)"} style={xBtn}>✕</button>
         </div>
+        {!tr && (
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ color: "var(--ink-muted)" }} title="Trunk: shared pathway many runs ride (cable tray, a corridor run), traced once. Branch: one device out to the trunk. Each run's route LF splits by kind; the Report's Pathway table counts each segment once.">Kind</span>
+            <select name="condition-route-kind" value={routeKindOf(c) || ""} style={sel}
+              title="Trunk or branch — splits each run's route LF and feeds the Report's Pathway table"
+              onChange={(e) => onUpdateCond({ route_kind: e.target.value || undefined })}>
+              <option value="">Unspecified</option>
+              {ROUTE_KINDS.map((k) => <option key={k} value={k}>{ROUTE_KIND_LABELS[k]}</option>)}
+            </select>
+          </div>
+        )}
         <span style={{ color: "var(--ink-muted)", lineHeight: 1.45 }}>
           {tr
             ? "Each Count marker here is a TR a run homes to. Name it in the Runs panel (MDF, IDF-1) — the name is the marker's label."
-            : "Trace each route segment here with Linear. Any segment no linked run uses is listed as unlinked."}
+            : routeKindOf(c) === "trunk"
+              ? "Trace the shared pathway once here with Linear; every run that rides it lists the same segment. Any segment no linked run uses is listed as unlinked."
+              : routeKindOf(c) === "branch"
+                ? "Trace each device's run out to the trunk here with Linear, one segment per device. J-hooks: add a Linear material row here (per = hook spacing)."
+                : "Trace each route segment here with Linear. Any segment no linked run uses is listed as unlinked."}
         </span>
       </div>
     );
@@ -68,6 +86,7 @@ export default function CableSetupEditor({ cond: c, onUpdateCond, row = null, ca
             const v = e.target.value;
             if (!v) return;
             if (v === "tr" || v === "route") { onUpdateCond({ role: v }); return; }
+            if (v.startsWith("route:")) { onUpdateCond({ role: "route", route_kind: v.slice(6) }); return; }
             const d = CABLE_DEFAULTS[v];
             onUpdateCond({ cable_setup: mintCableSetup(v), ...(!(Number(c.waste_pct) > 0) && d.waste_pct != null ? { waste_pct: d.waste_pct } : {}) });
           }}
@@ -78,6 +97,7 @@ export default function CableSetupEditor({ cond: c, onUpdateCond, row = null, ca
           </optgroup>}
           {countOk && <option value="tr">Telecom room (TR)</option>}
           {routeOk && <option value="route">Cable route (linear)</option>}
+          {routeOk && ROUTE_KINDS.map((k) => <option key={k} value={`route:${k}`}>Cable route: {k === "trunk" ? "trunk (shared pathway)" : "branch (device to trunk)"}</option>)}
         </select>
       </div>
     );

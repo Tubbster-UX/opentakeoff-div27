@@ -111,6 +111,25 @@ export function isTrCondition(c) { return c?.role === "tr"; }
 export function isRouteCondition(c) { return c?.role === "route"; }
 export const CONDITION_ROLES = Object.freeze(["tr", "route"]);
 
+/** Trunk and branch (item 2 of the bid follow-ups): a route condition may say
+ *  what its segments ARE. "trunk" = shared pathway (the cable tray or the
+ *  corridor run many cables ride); "branch" = the run from one device out to
+ *  the trunk. Absent = unspecified, which is how every route condition read
+ *  before this field existed, and which stays fully valid (a run whose
+ *  segments are all unspecified is not a fault). The field means something
+ *  only on a role "route" condition: anywhere else it is ignored, and the
+ *  writers (edit_condition, the canvas) never leave one behind. */
+export const ROUTE_KINDS = Object.freeze(["trunk", "branch"]);
+export const ROUTE_KIND_LABELS = Object.freeze({ trunk: "Trunk", branch: "Branch" });
+export function isRouteKind(k) { return ROUTE_KINDS.includes(k); }
+/** "trunk" | "branch" for a tagged route condition, else null. */
+export function routeKindOf(c) { return isRouteCondition(c) && isRouteKind(c.route_kind) ? c.route_kind : null; }
+/** True once any route condition is tagged trunk or branch — the gate for
+ *  every trunk/branch output (the per-run split columns, the Pathway block,
+ *  section and tab), so a takeoff that never tagged one exports exactly as
+ *  it did before the field existed. */
+export function usesRouteKinds(conditions) { return (conditions || []).some((c) => routeKindOf(c) != null); }
+
 const finiteNonNeg = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0;
 
 /** The reasons a setup cannot figure a run yet — empty when complete. These
@@ -324,6 +343,7 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
     const routeIds = strArr(run.route_shape_ids);
     if (!routeIds.length) reasons.push("no route segments");
     let routeLf = 0;
+    const split = { trunk: 0, branch: 0, other: 0 };   // route_lf by the segment condition's route_kind
     const sheetIds = [];
     const segments = [];
     const runUnconfirmed = new Set();
@@ -349,8 +369,12 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
           warnings.push(`Condition ${sc?.finish_tag ?? s.condition_id} carries rise/drop legs: its LF in the regular report includes those legs and is not a cable length. Cable runs read each segment's plan length only.`);
         }
       }
-      segments.push({ shape_id: id, sheet_id: s.sheet_id, length_lf: len });
+      // a segment on an untagged route condition, or on a condition that is
+      // not a route condition at all (linking is by shape id), is "other"
+      const kind = routeKindOf(sc) || "other";
+      segments.push({ shape_id: id, sheet_id: s.sheet_id, length_lf: len, kind });
       routeLf += len;
+      split[kind] += len;
     }
     const status = reasons.length ? "broken" : withheld.length ? "withheld" : "linked";
     const cables = Number.isInteger(run.cables_override) && run.cables_override >= 1
@@ -370,6 +394,9 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
       tr_sheet_id: trShape?.sheet_id ?? "",
       segments,
       route_lf: routeLf,
+      // route_lf = trunk_lf + branch_lf + other_lf, each segment by its own
+      // condition's route_kind — never derived by dividing a full-route LF
+      trunk_lf: split.trunk, branch_lf: split.branch, other_lf: split.other,
       status,
       review: runReviewStatus(run),
       pending: run.provenance?.reviewed === false,
@@ -591,14 +618,79 @@ export function cableByCondition(summary) {
   return out;
 }
 
+/**
+ * The PATHWAY rollup: one row per route condition — what the pathway itself
+ * measures, as opposed to what the cable in it measures. Each segment is
+ * counted ONCE however many runs ride it (a 100 ft trunk under 30 runs is
+ * 100 ft of tray; its cable, 30 × 100 ft, lives on the runs). Lengths are
+ * each segment's plan length (routeLengthFt), the same number a run reads.
+ * ×N: the LF columns are measured (unmultiplied) and pathway_lf_total =
+ * pathway_lf × the condition's multiplier — the basis a "linear" materials
+ * row on that condition divides (J-hooks per 5 ft on a branch condition),
+ * except that a materials row reads the condition's regular LF, which also
+ * carries any rise/drop legs (the leg warning says when a route has them).
+ * used_lf = segments at least one LINKED run uses; unused_lf = the rest (an
+ * unlinked segment, or one only a broken or withheld run names).
+ *
+ * @returns {{ rows: any[], by_kind: any[], totals: any }}
+ */
+export function pathwayRollup(resolved, conditions, shapes) {
+  const usedBy = new Map();   // segment id → Set(linked run ids)
+  for (const r of resolved?.runs || []) {
+    if (r.status !== "linked") continue;
+    for (const seg of r.segments || []) {
+      if (!usedBy.has(seg.shape_id)) usedBy.set(seg.shape_id, new Set());
+      usedBy.get(seg.shape_id).add(r.id);
+    }
+  }
+  const LF_KEYS = ["pathway_lf", "used_lf", "unused_lf", "pathway_lf_total"];
+  const empty = () => ({ segments: 0, pathway_lf: 0, used_lf: 0, unused_lf: 0, pathway_lf_total: 0, runs: new Set() });
+  const raw = [];
+  for (const c of (conditions || []).filter(isRouteCondition)) {
+    const mult = c.multiplier || 1;
+    const q = empty();
+    for (const s of shapes || []) {
+      if (s.condition_id !== c.id || s.measure_role !== "linear") continue;
+      const len = routeLengthFt(s) ?? 0;
+      const u = usedBy.get(s.id);
+      q.segments += 1;
+      q.pathway_lf += len;
+      q.pathway_lf_total += len * mult;
+      if (u && u.size) { q.used_lf += len; for (const id of u) q.runs.add(id); } else q.unused_lf += len;
+    }
+    raw.push({ c, mult, q });
+  }
+  // linked_runs is DISTINCT linked runs: in a group or the total, a run on a
+  // branch and the trunk is one run, not two
+  const fin = (q) => ({
+    segments: q.segments, pathway_lf: round2(q.pathway_lf), used_lf: round2(q.used_lf), unused_lf: round2(q.unused_lf),
+    linked_runs: q.runs.size, pathway_lf_total: round2(q.pathway_lf_total),
+  });
+  const fold = (list) => list.reduce((a, { q }) => {
+    a.segments += q.segments;
+    for (const k of LF_KEYS) a[k] += q[k];
+    for (const id of q.runs) a.runs.add(id);
+    return a;
+  }, empty());
+  const kindOf = (c) => routeKindOf(c) || "";
+  const rows = raw.map(({ c, mult, q }) => ({ condition_id: c.id, finish_tag: c.finish_tag, route_kind: kindOf(c), ...fin(q), multiplier: mult }));
+  const by_kind = [...ROUTE_KINDS, ""].map((k) => ({ k, list: raw.filter((x) => kindOf(x.c) === k) }))
+    .filter((g) => g.list.length).map((g) => ({ route_kind: g.k, ...fin(fold(g.list)) }));
+  return { rows, by_kind, totals: fin(fold(raw)) };
+}
+
 /** The whole cable takeoff, figured once: conditions + shapes + runs → what
  *  every surface reads. `null` when no condition carries a cable setup, so a
- *  project that never used the feature pays nothing and exports byte-identically. */
+ *  project that never used the feature pays nothing and exports byte-identically.
+ *  `pathway` is the trunk/branch rollup, present only once a route condition
+ *  is tagged trunk or branch (usesRouteKinds) and null otherwise, so a cable
+ *  takeoff made before route_kind existed exports exactly as it did. */
 export function computeCableTakeoff(conditions, shapes, runs, opts = {}) {
   if (!(conditions || []).some((c) => hasCableSetup(c) || isRouteCondition(c)) && !(runs || []).length) return null;
   const resolved = resolveCableRuns(conditions, shapes, runs, opts);
   const summary = cableSummary(resolved, conditions, shapes);
-  return { resolved, summary, byCond: cableByCondition(summary) };
+  const pathway = usesRouteKinds(conditions) ? pathwayRollup(resolved, conditions, shapes) : null;
+  return { resolved, summary, byCond: cableByCondition(summary), pathway };
 }
 
 /** Short, still-unique display ids for runs and holds — what a marked-set
@@ -621,6 +713,13 @@ export function runShortIds(records, min = 6) {
 
 // ── export rows ─────────────────────────────────────────────────────────────
 
+/** A resolved run's route LF by kind, rounded for a wire or export row:
+ *  branch_lf + trunk_lf + other_lf = route_lf (other = segments on an
+ *  untagged route condition or on a condition that is not a route). */
+export function routeSplit(r) {
+  return { branch_lf: round2(r?.branch_lf || 0), trunk_lf: round2(r?.trunk_lf || 0), other_lf: round2(r?.other_lf || 0) };
+}
+
 /** One Cable-runs row per run record, unmultiplied, every status included. */
 /** @param {any} takeoff computeCableTakeoff() result
  *  @param {((sheetId: string) => string) | null} [sheetLabel] */
@@ -628,12 +727,16 @@ export function cableRunRows(takeoff, sheetLabel = null) {
   const label = (id) => (sheetLabel ? sheetLabel(id) : id);
   const condMult = new Map();
   for (const row of takeoff?.summary?.rows || []) condMult.set(row.condition_id, row.multiplier);
+  // the trunk/branch split rides only once a route condition is tagged
+  const split = !!takeoff?.pathway;
   return (takeoff?.resolved?.runs || []).map((r) => ({
     run_id: r.id, condition: r.finish_tag, device_type: r.device_type, cable_type: r.cable_type,
     tr: r.tr_name || r.tr_id, sheets: r.sheet_ids.map(label).join(" | "), sheet_ids: r.sheet_ids,
     device_sheets: (r.device_sheet_ids || []).map(label).join(" | "), device_sheet_ids: r.device_sheet_ids || [],
     tr_sheet: r.tr_sheet_id ? label(r.tr_sheet_id) : "", tr_sheet_id: r.tr_sheet_id || "",
-    route_lf: round2(r.route_lf), vertical_ft: r.vertical_ft, loop_device_ft: r.loop_device_ft, loop_tr_ft: r.loop_tr_ft,
+    route_lf: round2(r.route_lf),
+    ...(split ? routeSplit(r) : {}),
+    vertical_ft: r.vertical_ft, loop_device_ft: r.loop_device_ft, loop_tr_ft: r.loop_tr_ft,
     per_cable_lf: r.per_cable_lf == null ? null : round2(r.per_cable_lf), cables: r.cables,
     location_lf: r.location_lf == null ? null : round2(r.location_lf),
     multiplier: condMult.get(r.condition_id) || 1,
@@ -664,12 +767,20 @@ export function cableReportBlock(takeoff, sheetLabel = null) {
     held: (takeoff.resolved.held || []).map((d) => ({ ...d, sheet: label(d.sheet_id) })),
     holds: takeoff.resolved.holds || [],
     warnings: takeoff.summary.warnings,
+    // trunk/branch (present once a route condition is tagged): one row per
+    // route condition, each segment counted once, then by kind and in total
+    ...(takeoff.pathway ? { pathway: takeoff.pathway } : {}),
   };
 }
 
 export const CABLE_SUMMARY_HEADER = Object.freeze(["Condition", "Device type", "Cable type", "TR", "Multiplier", "Waste %", "Device EA", "Pulls", "Cables", "Measured route LF", "Cable LF (net)", "Cable LF (order, with waste)", "Unlinked devices", "Held devices", "Pending runs", `Runs over ${TIA_MAX_LINK_FT} ft`, "Note"]);
 export const CABLE_RUNS_HEADER = Object.freeze(["Run ID", "Condition", "Device type", "Cable type", "TR", "Device sheet", "Route sheet(s)", "TR sheet", "Route LF", "Vertical ft", "Loop at device ft", "Loop at TR ft", "Per-cable LF", "Cables", "Location LF", "Multiplier", "Status", "Review status", "Reason / notes"]);
 export const CABLE_UNLINKED_HEADER = Object.freeze(["Kind", "Shape", "Condition", "Sheet", "Length LF", "Reason"]);
+/** Inserted before "Reason / notes" on the runs sheet once a route condition
+ *  is tagged — every column a bid workbook references keeps its position. */
+export const CABLE_RUNS_SPLIT_HEADER = Object.freeze(["Branch LF", "Trunk LF"]);
+export const CABLE_PATHWAY_HEADER = Object.freeze(["Route condition", "Kind", "Segments", "Pathway LF (each segment once)", "Used by linked runs LF", "Not used by a linked run LF", "Linked runs", "Multiplier", "Pathway LF ×N"]);
+const KIND_CELL = (k) => (k ? ROUTE_KIND_LABELS[k] : "unspecified");
 
 const rowNote = (r) => [r.withheld ? `withheld: ${r.withheld}` : "", r.leg_warning ? "route segment(s) carry rise/drop legs (ignored)" : "", r.over_length_runs ? `${r.over_length_runs} run${r.over_length_runs === 1 ? "" : "s"} over ${TIA_MAX_LINK_FT} ft per cable` : ""].filter(Boolean).join("; ");
 const NO_TR = "(no TR — no linked run)";
@@ -691,16 +802,30 @@ export function cableTables(takeoff, { sheetLabel = null, L = (v) => v, lengthUn
   for (const g of takeoff.summary.by_tr) summary.push(["Subtotal by TR", "", "", g.tr_name || g.tr_id || NO_TR, "", "", ...qtyCells(g)]);
   for (const g of takeoff.summary.by_cable_type) summary.push(["Subtotal by cable type", "", g.cable_type, "", "", "", ...qtyCells(g)]);
   summary.push(["TOTAL", "", "", "", "", "", ...qtyCells(takeoff.summary.totals)]);
-  const runs = [CABLE_RUNS_HEADER.map(lenHdr)];
+  const split = !!takeoff.pathway;
+  const runsHead = CABLE_RUNS_HEADER.map(lenHdr);
+  const runs = [split ? [...runsHead.slice(0, -1), ...CABLE_RUNS_SPLIT_HEADER.map(lenHdr), runsHead.at(-1)] : runsHead];
   for (const r of cableRunRows(takeoff, sheetLabel)) {
-    runs.push([r.run_id, r.condition, r.device_type, r.cable_type, r.tr, r.device_sheets, r.sheets, r.tr_sheet, conv(r.route_lf), conv(r.vertical_ft), conv(r.loop_device_ft), conv(r.loop_tr_ft), conv(r.per_cable_lf), r.cables ?? "", conv(r.location_lf), r.multiplier, r.status, r.review_status, [r.reason, r.notes].filter(Boolean).join("; ")]);
+    runs.push([r.run_id, r.condition, r.device_type, r.cable_type, r.tr, r.device_sheets, r.sheets, r.tr_sheet, conv(r.route_lf), conv(r.vertical_ft), conv(r.loop_device_ft), conv(r.loop_tr_ft), conv(r.per_cable_lf), r.cables ?? "", conv(r.location_lf), r.multiplier, r.status, r.review_status,
+      ...(split ? [conv(r.branch_lf), conv(r.trunk_lf)] : []), [r.reason, r.notes].filter(Boolean).join("; ")]);
+  }
+  // Pathway (trunk/branch): what J-hooks, tray and sleeves are bought from —
+  // each segment once, never per run. null when no route condition is tagged.
+  let pathway = null;
+  if (split) {
+    const p = takeoff.pathway;
+    const cells = (g) => [g.segments, conv(g.pathway_lf), conv(g.used_lf), conv(g.unused_lf), g.linked_runs];
+    pathway = [CABLE_PATHWAY_HEADER.map(lenHdr)];
+    for (const r of p.rows) pathway.push([r.finish_tag, KIND_CELL(r.route_kind), ...cells(r), r.multiplier, conv(r.pathway_lf_total)]);
+    for (const g of p.by_kind) pathway.push([`Subtotal ${KIND_CELL(g.route_kind).toLowerCase()}`, KIND_CELL(g.route_kind), ...cells(g), "", conv(g.pathway_lf_total)]);
+    pathway.push(["TOTAL", "", ...cells(p.totals), "", conv(p.totals.pathway_lf_total)]);
   }
   const label = (id) => (sheetLabel ? sheetLabel(id) : id);
   const unlinked = [CABLE_UNLINKED_HEADER.map(lenHdr)];
   for (const d of takeoff.resolved.unlinked.devices) unlinked.push(["device", d.shape_id, d.finish_tag, label(d.sheet_id), "", d.reason]);
   for (const r of takeoff.resolved.unlinked.routes) unlinked.push(["route", r.shape_id, r.finish_tag, label(r.sheet_id), conv(r.length_lf), r.reason]);
   for (const d of takeoff.resolved.held || []) unlinked.push(["held device", d.shape_id, d.finish_tag, label(d.sheet_id), "", `held (${d.hold_id}): ${d.reason}`]);
-  return { summary, runs, unlinked, warnings: takeoff.summary.warnings };
+  return { summary, runs, unlinked, ...(pathway ? { pathway } : {}), warnings: takeoff.summary.warnings };
 }
 
 /** The shared refusal for link_run (MCP) and the Link Run tool (canvas): the

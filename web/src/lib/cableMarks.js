@@ -19,7 +19,7 @@
 // Chips and tags are placed greedily against everything already placed (the
 // markers included), trying points along the route and beside it, so dense
 // corridors spread out instead of stacking.
-import { runShortIds, hasCableSetup, isTrCondition, isRouteCondition, TIA_MAX_LINK_FT } from "./cable.js";
+import { runShortIds, hasCableSetup, isTrCondition, isRouteCondition, routeKindOf, TIA_MAX_LINK_FT } from "./cable.js";
 
 /** Font sizes, points. */
 export const CHIP_PT = 7;
@@ -191,6 +191,7 @@ export function cableLegend(cable, conditions, { fmtLen }) {
   ].join(" · ");
   const byCond = cable.byCond instanceof Map ? cable.byCond : new Map();
   const lines = new Map();
+  const pathwayRow = new Map((cable.pathway?.rows || []).map((r) => [r.condition_id, r]));
   for (const c of conditions || []) {
     if (hasCableSetup(c)) {
       const q = byCond.get(c.id);
@@ -201,7 +202,13 @@ export function cableLegend(cable, conditions, { fmtLen }) {
         q.unlinked_devices ? `${q.unlinked_devices} unlinked` : "", q.held_devices ? `${q.held_devices} held` : "",
       ].filter(Boolean).join(" · "));
     } else if (isRouteCondition(c)) {
-      lines.set(c.id, "cable route pathway, not a cable quantity: cable LF is figured per run on each device condition");
+      // a trunk or branch condition names its kind and its pathway LF, each
+      // segment counted once; an untagged one keeps the line it always had
+      const kind = routeKindOf(c);
+      const p = pathwayRow.get(c.id);
+      lines.set(c.id, kind && p
+        ? `${kind} pathway, ${fmtLen(p.pathway_lf)} measured once: not a cable quantity; cable LF is figured per run on each device condition`
+        : "cable route pathway, not a cable quantity: cable LF is figured per run on each device condition");
     } else if (isTrCondition(c)) {
       lines.set(c.id, "telecom room: where the runs home");
     }
