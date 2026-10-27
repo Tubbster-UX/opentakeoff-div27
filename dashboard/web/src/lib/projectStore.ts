@@ -36,6 +36,8 @@ const FLASH_MS = 2600;
 export class ProjectStore {
   private state: ProjectState = { snap: null, notFound: false, error: null, feed: [], flash: {} };
   private readonly listeners = new Set<() => void>();
+  /** Raw relayed changes, for views that keep their own state (the schematic editor frame). */
+  private readonly changeListeners = new Set<(c: RowChange) => void>();
   private readonly socket: LiveSocket;
   private loading = false;
   private resyncAgain = false;
@@ -71,6 +73,12 @@ export class ProjectStore {
 
   getState = (): ProjectState => this.state;
 
+  /** Every relayed row change, as it arrives (before the snapshot logic). */
+  onChange(l: (c: RowChange) => void): () => void {
+    this.changeListeners.add(l);
+    return () => this.changeListeners.delete(l);
+  }
+
   private set(patch: Partial<ProjectState>): void {
     this.state = { ...this.state, ...patch };
     // Many changes can land in one burst: render once per frame.
@@ -89,6 +97,9 @@ export class ProjectStore {
       // Changes made before the relay's subscription was live were not delivered: read again.
       if (m.upstream === "live") void this.resync();
     } else if (m.type === "change") {
+      for (const l of this.changeListeners) l(m.change);
+      // The edit layer is not part of the snapshot: only the editor frame uses it.
+      if (m.change.table === "brink_schematic_edits") return;
       if (this.loading || !this.state.snap) this.buffer.push(m.change);
       else this.applyOne(m.change, true);
     }

@@ -4,7 +4,7 @@
 //   1. Projects page: Live, totals match the database; a BOM edit updates the row live
 //   2. BOM & Issues tab: UPDATE a BOM line and a connection, INSERT / DELETE an issue,
 //      each appears without a reload
-//   3. Schematic tab: placeholder + outline; a connection edit appears live
+//   3. Schematic tab: the generated-rows outline under the editor; a connection edit appears live
 //   4. Takeoff tab: placeholder
 //   5. re-import with the brink-merge CLI: the page switches to the new import
 //   6. phone width (390 px): no horizontal page scroll on any view
@@ -139,9 +139,9 @@ try {
 
   // --- 3. Schematic ---
   await page.locator('[data-tab="schematic"]').click();
-  await page.locator('[data-placeholder="Phase 2"]').waitFor();
+  await page.locator("iframe[data-es-frame]").waitFor();
   await page.locator("#schematic-outline").waitFor();
-  check("Schematic tab: Phase 2 placeholder and outline", true);
+  check("Schematic tab: editor frame and the generated-rows outline", (await page.locator("iframe[data-es-frame]").count()) === 1);
   const t5 = Date.now();
   const len2 = Math.round((newLen + 1.25) * 100) / 100;
   await q("update brink_schematic_connections set cable_length_ft = $2 where import_id = $1 and seq = 1", [imp, len2]);

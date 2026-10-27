@@ -30,7 +30,7 @@ export function Shell() {
         <Link to="/" className="font-semibold text-ink no-underline">
           Brink
         </Link>
-        <span className="text-xs text-muted">internal · read-only</span>
+        <span className="text-xs text-muted">internal</span>
         <LivePill />
       </header>
       <main className="mx-auto max-w-[1280px] p-4">

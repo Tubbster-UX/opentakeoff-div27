@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Schematic editor · Brink</title>
+  </head>
+  <body>
+    <!-- EasySchematic (AGPL-3.0, github.com/duremovich/EasySchematic), vendored in vendor/easyschematic. -->
+    <script>
+      // Upstream's dark-mode bootstrap, reading the frame's namespaced preference (web/src/es/storage.ts).
+      (function () {
+        var stored = null;
+        try { stored = localStorage.getItem("brink-es:easyschematic-theme"); } catch (e) {}
+        if (stored === "dark" || (!stored && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/es/frame.ts"></script>
+  </body>
+</html>

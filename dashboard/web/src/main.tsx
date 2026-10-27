@@ -1,7 +1,7 @@
-// Brink app: one site per brink-merge project. Phase 1 is read-only and live.
+// Brink app: one site per brink-merge project, live. The Schematic tab edits (Phase 2); everything else reads.
 //   /                         Projects
 //   /projects/:id/takeoff     OpenTakeoff canvas (Phase 3 placeholder)
-//   /projects/:id/schematic   EasySchematic editor (Phase 2 placeholder + read-only outline)
+//   /projects/:id/schematic   EasySchematic editor (the edit layer) + the generated rows outline
 //   /projects/:id/bom         BOM & Issues (live)
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

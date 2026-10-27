@@ -18,7 +18,7 @@ export interface ProjectTab {
 
 export const PROJECT_TABS: ProjectTab[] = [
   { path: "takeoff", label: "Takeoff", phase: "Phase 3", Component: TakeoffTab },
-  { path: "schematic", label: "Schematic", phase: "Phase 2", Component: SchematicTab },
+  { path: "schematic", label: "Schematic", Component: SchematicTab },
   { path: "bom", label: "BOM & Issues", Component: BomIssuesTab },
 ];
 
