@@ -144,9 +144,14 @@ export function removeProfile(state, id) {
 // File/Blob → PNG dataURL, ready for pdf-lib's embedPng. Downscales to fit
 // 600×300 CSS px (logos print ~1in tall; bigger is waste) and retries smaller
 // until it fits LOGO_LIMIT. Browser-only (canvas + image decode).
+// An SVG is vector: it rasterizes AT the 600×300 box, not at its decoded
+// size. An SVG sized width="100%" has no intrinsic size, so the browser
+// decodes it into its small default box (a logo came out 174×150 px and
+// printed soft); its aspect ratio is still right, so scaling up is lossless.
 export async function normalizeLogoToPng(file) {
   const { source, width, height, close } = await decodeImage(file);
-  const fit = Math.min(600 / width, 300 / height, 1);
+  const vector = isSvg(file);
+  const fit = Math.min(600 / width, 300 / height, vector ? Infinity : 1);
   let w = Math.max(1, Math.round(width * fit));
   let h = Math.max(1, Math.round(height * fit));
   try {
@@ -164,6 +169,11 @@ export async function normalizeLogoToPng(file) {
     close();
   }
   throw new Error("Logo too large — use a simpler image");
+}
+
+/** An SVG upload, by type or by name (some pickers hand an empty type). */
+export function isSvg(file) {
+  return file?.type === "image/svg+xml" || /\.svg$/i.test(String(file?.name || ""));
 }
 
 // createImageBitmap first (fast path), <img> + objectURL fallback — some
