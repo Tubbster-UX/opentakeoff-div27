@@ -16,6 +16,7 @@
     "check": "npm run check:vendor && npm run typecheck && npm test && npm run build",
     "check:vendor": "node scripts/sync-easyschematic.mjs --check",
     "live-check": "node scripts/live-check.mjs",
+    "es-check": "node scripts/es-check.mjs",
     "dev:web": "vite",
     "postinstall": "patch-package --patch-dir vendor/easyschematic/patches"
   },
