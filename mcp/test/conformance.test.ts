@@ -31,6 +31,7 @@ import {
   proposeTakeoffOutput, reviseProposalOutput, withdrawProposalOutput,
   proposeConditionEditOutput, withdrawConditionEditOutput, listShapesOutput,
   scopeDuplicatesOutput, scopeMergeOutput,
+  linkRunOutput, listRunsOutput, unlinkRunOutput,
 } from "../src/outputs.ts";
 
 const PLAN = fileURLToPath(new URL("../../demo/sample-plan.pdf", import.meta.url));
@@ -78,6 +79,9 @@ const SCHEMAS: Record<string, z.ZodTypeAny> = {
   propose_condition_edit: z.object(proposeConditionEditOutput),
   withdraw_condition_edit: z.object(withdrawConditionEditOutput),
   scope_duplicates: z.object(scopeDuplicatesOutput),
+  link_run: z.object(linkRunOutput),
+  list_runs: z.object(listRunsOutput),
+  unlink_run: z.object(unlinkRunOutput),
   scope_merge: z.object(scopeMergeOutput),
 };
 

@@ -21,6 +21,10 @@ import { annotationScene, pathString } from './annotationTools.js';
 
 import { conditionTotals, sheetTotals, roundSheetRow, hasMultipliers, BY_SHEET_BASE_NOTE } from "./totals.js";
 import { approvalInk, approvalTally, APPROVAL_R } from "./approvals.js";
+// Division 27 cable marks (Phase 3): route chips, device run tags, rings, TR
+// names and the legend's cable lines — placed and worded by the pure module
+import { cableSheetMarks, cableLegend, wrapText, CHIP_PT, TAG_PT } from "./cableMarks.js";
+import { isRouteCondition } from "./cable.js";
 
 // The cover's author line (#314), pure for the node runner: named authors
 // sorted, unattributed counted last, null when NO shape carries an author so
@@ -234,7 +238,7 @@ function invertPixels(cv) {
   ctx.restore();
 }
 
-export async function buildMarkedSetPdf({ projectName, dark, sheets, shapes, markups, approvals = [], rfis: rfisIn = [], conditions, getPage, loadPdfData, company, clientInfo, credit = null, provenance = null, coverTitle = "Marked Set", units = "imperial" }) {
+export async function buildMarkedSetPdf({ projectName, dark, sheets, shapes, markups, approvals = [], rfis: rfisIn = [], conditions, getPage, loadPdfData, company, clientInfo, credit = null, provenance = null, coverTitle = "Marked Set", units = "imperial", cable = null }) {
   // a withdrawn RFI is a tombstone (rfi.js liveRfis): its number stays
   // reserved but it prints nowhere — the schedule keeps the gap. An agent-
   // raised RFI prints exactly like a panel-raised one; who asked is on the
@@ -380,6 +384,17 @@ export async function buildMarkedSetPdf({ projectName, dark, sheets, shapes, mar
       metaY -= 12;
       draw(`Approval stamps: ${apCount.estimator} estimator-approved · ${apCount.agent} agent-marked`, { x: 52, y: metaY, size: 9.5, font, color: muted });
     }
+    // cable runs (Division 27, docs/design/CABLE_SETUP.md) — the pull count
+    // and its pencil share, drawn only when a cable takeoff exists (the
+    // provenance-line convention), so every other export stays byte-identical.
+    // Phase 3: the line also counts held devices and runs over 295 ft when
+    // there are any; the per-condition cable lines ride the CONDITIONS rows.
+    const fmtLen = (ft) => `${num(uL(ft || 0))} ${LU}`;
+    const legend = cable ? cableLegend(cable, conditions, { fmtLen }) : null;
+    if (legend) {
+      metaY -= 12;
+      draw(legend.meta, { x: 52, y: metaY, size: 9.5, font, color: muted });
+    }
     // author attribution (#314) — the legend names who marked the set. Drawn
     // only when a shape carries an author (the provenance-line convention), so
     // an unattributed export stays byte-identical.
@@ -408,10 +423,36 @@ export async function buildMarkedSetPdf({ projectName, dark, sheets, shapes, mar
       ].filter(Boolean).join(" · ");
       // Count totals have no waste-adjusted field. Do not invent an area
       // quantity for a linear/count condition on the cover.
-      const allowance = orderQty ? `waste ${r.waste_pct}% -> ${orderQty}` : "";
+      // a cable ROUTE condition's LF is pathway, not an order quantity: no
+      // "waste -> LF" allowance beside it (its line below says what it is)
+      const allowance = orderQty && !(legend && isRouteCondition(c)) ? `waste ${r.waste_pct}% -> ${orderQty}` : "";
       draw([c.hatch && c.hatch !== "solid" ? c.hatch : "", allowance].filter(Boolean).join(" · "), { x: 420, y, size: 8.5, font, color: muted });
       y -= 15;
+      // cable (Phase 3): pulls, cables, net and order LF under a device
+      // condition; what a route or TR condition is, under those
+      const cableLine = legend?.lines.get(r.id);
+      if (cableLine) { draw(cableLine, { x: 72, y: y + 3, size: 8, font, color: muted }); y -= 10; }
       if (y < 120) break;
+    }
+    if (legend) {
+      // the key to the sheet marks, then the cable warnings (over-length
+      // runs, unconfirmed scales, legs), wrapped — a warning is never cut
+      y -= 2;
+      for (const ln of wrapText(legend.key, 508, (t) => font.widthOfTextAtSize(winAnsiSafe(t), 8))) { if (y < 110) break; draw(ln, { x: 52, y, size: 8, font, color: muted }); y -= 10; }
+      // boxes / reels per cable type — present only once a condition states
+      // package_ft, so a cover without one is byte-identical
+      for (const o of legend.order || []) {
+        for (const ln of wrapText(o, 508, (t) => font.widthOfTextAtSize(winAnsiSafe(t), 8))) { if (y < 110) break; draw(ln, { x: 52, y, size: 8, font, color: ink }); y -= 10; }
+      }
+      const shownW = [];
+      for (const w of legend.warnings) {
+        const lines = wrapText(w, 500, (t) => font.widthOfTextAtSize(winAnsiSafe(t), 8));
+        if (y - lines.length * 10 < 110) break;
+        y -= 3;
+        lines.forEach((ln, i) => { draw(`${i ? "  " : "! "}${ln}`, { x: 52, y, size: 8, font, color: ink }); y -= 10; });
+        shownW.push(w);
+      }
+      if (shownW.length < legend.warnings.length && y >= 100) { draw(`+${legend.warnings.length - shownW.length} more cable warning(s): see the report's Cable summary`, { x: 52, y, size: 8, font, color: muted }); y -= 10; }
     }
     y -= 10;
     draw("BY SHEET", { x: 52, y, size: 9, font: bold, color: muted }); y -= 16;
@@ -656,18 +697,24 @@ export async function buildMarkedSetPdf({ projectName, dark, sheets, shapes, mar
       });
       L.lines.forEach((ln, i) => { if (ln) text(ln, ax, lineBaseline(ay, L, i), NOTE_PT, colorRgb, bold); });
     };
-    const chip = (raw, x, y, borderRgb) => {
+    // size 7.5 is the shape chip; the cable marks (Phase 3) draw smaller.
+    // Box height is size + 4.5 pt, centered on the point (12 pt at 7.5).
+    const chip = (raw, x, y, borderRgb, size = 7.5, fnt = font, textRgb = ink, borderWidth = 0.7) => {
       const t = winAnsiSafe(raw);
-      const size = 7.5;
-      const w = font.widthOfTextAtSize(t, size) + 8;
+      const w = fnt.widthOfTextAtSize(t, size) + 8;
       const [px, py] = toPage(x, y);
       pg.drawRectangle({
-        x: px - w / 2, y: py - 5.5, width: w, height: 12,
+        x: px - w / 2, y: py - (size * 11) / 15, width: w, height: size + 4.5,   // 5.5 / 12 at 7.5, exactly as before
         color: dark ? rgb(0.08, 0.1, 0.12) : rgb(1, 1, 1), opacity: 0.85,
-        borderColor: borderRgb, borderWidth: 0.7, rotate: chipRot,
+        borderColor: borderRgb, borderWidth, rotate: chipRot,
       });
-      pg.drawText(t, { x: px - w / 2 + 4, y: py - 2.5, size, font, color: ink, rotate: chipRot });
+      pg.drawText(t, { x: px - w / 2 + 4, y: py - size / 3, size, font: fnt, color: textRgb, rotate: chipRot });
     };
+    // cable marks for this sheet (Phase 3) — null-cable exports skip it all
+    const cm = cable ? cableSheetMarks(cable, {
+      sheetId: sh.key, shapes: shapesBy.get(sh.key) || [], conditions, W, H, ptScale,
+      measure: (t, size) => font.widthOfTextAtSize(winAnsiSafe(t), size), fmtLen: (ft) => `${num(uL(ft || 0))} ${LU}`,
+    }) : null;
 
     const alphaBoost = dark ? 0.22 : 0;   // honest colors, brighter on negative linework
     for (const s of shapesBy.get(sh.key) || []) {
@@ -701,11 +748,26 @@ export async function buildMarkedSetPdf({ projectName, dark, sheets, shapes, mar
         const segDash = s.measure_role === "linear" ? pdfDashFor(cond?.line_style || "solid") : undefined;
         for (let i = 1; i < pts.length; i++) line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], col, 1.4, 0.95, segDash);
         const mid = pts[Math.floor((pts.length - 1) / 2)];
-        chip(shapeChip(s, cond, M), mid[0], mid[1] - 14, col);
+        // a linked route's generic chip gives way to its run chip(s) below
+        if (!cm?.suppress.has(s.id)) chip(shapeChip(s, cond, M), mid[0], mid[1] - 14, col);
       } else if (s.measure_role === "count") {
         const [px, py] = toPage(pts[0][0], pts[0][1]);
         pg.drawEllipse({ x: px, y: py, xScale: 4.5, yScale: 4.5, borderColor: col, borderWidth: 1.2, color: col, opacity: 0.35 });
       }
+    }
+    // ── cable marks (Division 27, Phase 3): rings on the gaps, then the TR
+    // names, the device run tags and the route chips, each where cableMarks
+    // placed it clear of the others. Amber = over 295 ft; red = not counted.
+    if (cm) {
+      const amber = rgb(...hex("#b66b00")), grey = dark ? rgb(0.6, 0.59, 0.55) : rgb(0.42, 0.4, 0.37);
+      for (const r of cm.rings) {
+        const [px, py] = toPage(r.x, r.y);
+        pg.drawEllipse({ x: px, y: py, xScale: 7.5, yScale: 7.5, borderColor: r.kind === "held" ? grey : amber, borderWidth: r.kind === "held" ? 0.9 : 1.2, borderDashArray: r.kind === "held" ? [0.8, 2] : [2.4, 1.6] });
+      }
+      for (const t of cm.trLabels) chip(t.text, t.x, t.y, ink, TAG_PT, bold);
+      const toneRgb = (it, fallback) => (it.tone === "bad" ? rgb(...hex(DEDUCT_RED)) : it.tone === "over" ? amber : fallback);
+      for (const t of cm.tags) chip(t.text, t.x, t.y, toneRgb(t, t.color ? rgb(...hex(t.color)) : muted), TAG_PT);
+      for (const c of cm.chips) chip(c.text, c.x, c.y, toneRgb(c, c.color ? rgb(...hex(c.color)) : muted), CHIP_PT, font, c.tone === "over" ? amber : ink, c.tone === "ok" ? 0.8 : 1.2);
     }
     // highlights draw FIRST (behind) so their translucent fill never dims the
     // linework of clouds/callouts/text above — same z-order as the canvas.

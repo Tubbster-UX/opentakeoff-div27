@@ -155,6 +155,9 @@ export async function exportMarkedPdf(session: Session, opts: MarkedPdfOpts) {
     credit,
     provenance: assignmentDisclosure(session.shapes, session.scheduleWithheld),
     coverTitle: "OpenTakeoff · Marked Set",
+    // cable runs (Division 27): the cover's pull / pending / unlinked line,
+    // present only when a cable takeoff exists
+    cable: session.cableForMarkedSet(),
   });
 
   await writeFile(outPath, bytes);

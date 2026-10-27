@@ -38,6 +38,8 @@ import { materialKind, MATERIAL_PRESETS, GROUT_DEFAULTS, groutDerivedFields, sho
 import { draftCommitValue, blurCommitValue, blurCommitNonNegative } from "../lib/draftInput.js";
 import { ROLL_FLOORING_TYPES } from "../lib/rollgoods.js";
 import { hasRollSetup, mintRollSetup } from "../lib/rollTakeoff.js";
+import { hasCableSetup, isCableMaterialBasis } from "../lib/cable.js";
+import CableSetupEditor from "./CableSetupEditor.jsx";
 import { Z } from "../lib/ui.js";
 import { ftIn } from "../lib/units";
 import { describeConditionEdit } from "../lib/proposals.js";
@@ -186,7 +188,10 @@ function CoveragePresetSelect({ material: m, onPick }) {
 // Editable supporting-materials rows for a condition (coverage-derived order qty).
 function MaterialsEditor({ materials, onAdd, onUpdate, onRemove, library, libById, overridden, onRevert, onAttach, onPromote,
     twin = false, parentTag = "", dropped = [], parentRows = [], onFollowFamilyRow, onRestoreDroppedRow,
-    heightFt = 0 }) {
+    heightFt = 0, cableSetup = false, cableQty = null }) {
+  // cableSetup: the condition carries a cable setup, so the picker offers the
+  // two FIGURED cable bases (per cable, per pull); cableQty is its linked
+  // { pulls, cables } (×N applied) from the cable summary, null when none.
   // library link affordances (#47, all optional so the editor works standalone):
   // linked lines show ⛓; a field differing from its library entry tints amber
   // and grows a per-field ↺ revert; unlinked lines can be promoted to the library
@@ -247,8 +252,23 @@ function MaterialsEditor({ materials, onAdd, onUpdate, onRemove, library, libByI
               <option value="linear">linear LF</option>
               <option value="count">each</option>
               <option value="seam_lf" title="Figured seam length from the roll layout — 0 until this condition carries a roll setup">seam LF</option>
+              {/* per cable / per pull: figured from the linked cable runs —
+                  offered only on a condition with a cable setup (and kept
+                  visible on a row that already uses one, so it still reads) */}
+              {(cableSetup || m.basis === "cables") && <option value="cables" title="Per cable — the condition's linked cables from the Cable summary (×N applied; unlinked, held, withheld and broken excluded). A jack per cable: per 1">cable</option>}
+              {(cableSetup || m.basis === "pulls") && <option value="pulls" title="Per pull — the condition's linked pulls (one per location) from the Cable summary. A faceplate per pull: per 1">pull</option>}
             </select>
             {ov("basis") && rv(m, "basis")}
+            {isCableMaterialBasis(m.basis) && (() => {
+              const n = cableQty ? (m.basis === "cables" ? cableQty.cables : cableQty.pulls) : 0;
+              const why = !cableSetup ? "no cable setup on this condition — reads 0" : n > 0 ? "" : "no linked cable run yet — reads 0";
+              return (
+                <span title={why || `Figured from the linked runs: ${n} ${m.basis === "cables" ? "cables" : "pulls"} on this condition`}
+                  style={{ fontFamily: "var(--f-mono, monospace)", fontSize: 11, color: why ? "var(--c-warning)" : "var(--ink-muted)" }}>
+                  {why || `${num(n, 0)} ${m.basis === "cables" ? (n === 1 ? "cable" : "cables") : (n === 1 ? "pull" : "pulls")} linked`}
+                </span>
+              );
+            })()}
             <label style={{ display: "inline-flex", alignItems: "center", gap: 4, color: ov("round") ? "var(--c-warning)" : "var(--ink-muted)" }} title="Round up to whole units (you buy whole buckets/bags)">
               <input name="material-round" type="checkbox" checked={m.round !== false} onChange={(e) => onUpdate(m.id, { round: e.target.checked })} />round up
             </label>
@@ -407,7 +427,7 @@ function AddValueInput({ onAdd }) {
 // the docked panel AND the restored top-bar band render the SAME editor (one
 // source of truth, like the app's single activateCondition path). Owns only its
 // hatch-popover open state; everything else flows through the passed handlers.
-export function ConditionAppearanceEditor({ cond: c, onUpdateCond, onSetCondParam, onAssignAttr, conditionColumns = [], layout = "stack", units = "imperial", rollInfo = null }) {
+export function ConditionAppearanceEditor({ cond: c, onUpdateCond, onSetCondParam, onAssignAttr, conditionColumns = [], layout = "stack", units = "imperial", rollInfo = null, cableInfo = null }) {
   const [hatchOpen, setHatchOpen] = useState(false);
   const activeColor = c.color || "#c96442";
   // Top-bar band ("row") only: the two palettes fold into two swatch buttons
@@ -557,6 +577,9 @@ export function ConditionAppearanceEditor({ cond: c, onUpdateCond, onSetCondPara
           footage from the condition's floor areas; the readout below comes back
           from the canvas via rollInfo. All lengths stored in feet (the lib/units
           contract); seam/wall allowances are inch-native like the engine. */}
+      {/* Division 27 cable setup / TR / route flags — docked layout only, the
+          roll precedent; the editor lives in its own component */}
+      {!isRow && <CableSetupEditor cond={c} onUpdateCond={onUpdateCond} row={cableInfo?.row || null} cableRows={cableInfo?.rows || []} units={units} />}
       {!isRow && !hasRollSetup(c) && (
         <div style={{ display: "flex", alignItems: "center", gap: 6, paddingTop: 6, marginTop: 1, borderTop: "1px solid var(--ink-faint)" }}>
           <select name="condition-roll-optin" value=""
@@ -819,7 +842,7 @@ const NO_HIDDEN = new Set();
 
 function TakeoffsPanel({
   open, width, overlay = false, multiSheet, dockSide, layoutLocked = false, dockHandle, units = "imperial",
-  conditions, activeCond, visRowById, projRowById = new Map(), conditionColumns, shapeLabels = [], templates, palette = [], rollByCond = null,
+  conditions, activeCond, visRowById, projRowById = new Map(), conditionColumns, shapeLabels = [], templates, palette = [], rollByCond = null, cableTakeoff = null,
   transitionSources = [],
   matLib, matLibById, linkedCountById,
   panelPrefs, onPanelPrefs, reassigning, epoch, clearSelectionRef,
@@ -1134,7 +1157,8 @@ function TakeoffsPanel({
             </div>
           );
         })()}
-        {on && <ConditionAppearanceEditor cond={c} onUpdateCond={onUpdateCond} onSetCondParam={onSetCondParam} onAssignAttr={onAssignAttr} conditionColumns={conditionColumns} units={units} rollInfo={rollByCond?.get(c.id) || null} />}
+        {on && <ConditionAppearanceEditor cond={c} onUpdateCond={onUpdateCond} onSetCondParam={onSetCondParam} onAssignAttr={onAssignAttr} conditionColumns={conditionColumns} units={units} rollInfo={rollByCond?.get(c.id) || null}
+          cableInfo={{ row: projRowById.get(c.id) || null, rows: (cableTakeoff?.summary?.rows || []).filter((r) => r.condition_id === c.id) }} />}
         {on && onDeriveTransitions && <TransitionsAction cond={c} sources={transitionSources} draft={transDraft} setDraft={setTransDraft}
           result={transResult} setResult={setTransResult} onDerive={onDeriveTransitions} onLocate2={onLocateTransition} />}
         {matOn && (
@@ -1179,7 +1203,8 @@ function TakeoffsPanel({
               twin={!!c.variant_of} parentTag={(conditions.find((x) => x.id === c.variant_of) || {}).finish_tag || ""}
               dropped={c.materials_dropped || []} parentRows={(conditions.find((x) => x.id === c.variant_of) || {}).materials || []}
               onFollowFamilyRow={onFollowFamilyRow} onRestoreDroppedRow={onRestoreDroppedRow}
-              heightFt={c.height_ft} />
+              heightFt={c.height_ft}
+              cableSetup={hasCableSetup(c)} cableQty={cableTakeoff?.byCond?.get(c.id) || null} />
             {/* Duplicate, inline — deliberately NOT a window.prompt: those freeze a
                 CDP/automation-driven session dead, and this panel is scripted in demos. */}
             {onDuplicateCondition && (twinDraft.id === c.id ? (
@@ -1374,6 +1399,10 @@ function TakeoffsPanel({
                       <option value="linear">linear LF</option>
                       <option value="count">each</option>
                       <option value="seam_lf" title="Figured seam length from the roll layout — 0 until the condition carries a roll setup">seam LF</option>
+                      {/* the cable bases are picked on a cable condition's row; a library
+                          entry promoted from one keeps its basis visible here */}
+                      {lm.basis === "cables" && <option value="cables" title="Per cable — 0 unless the condition carries a cable setup">cable</option>}
+                      {lm.basis === "pulls" && <option value="pulls" title="Per pull — 0 unless the condition carries a cable setup">pull</option>}
                     </select>
                     <label style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "var(--ink-muted)" }} title="Round up to whole units">
                       <input name="library-material-round" type="checkbox" checked={lm.round !== false} onChange={(e) => onUpdateLibMaterial(lm.id, { round: e.target.checked })} />round up

@@ -114,12 +114,30 @@ numbers report.**
    trusting a total. Crop the work region tight—a full-sheet render downsamples too far to
    audit a ring. Solid outlines are human-affirmed, dashed are unreviewed.
 5. **Write the planset.** `export_marked_pdf`, and give the user the file path. (It refuses an encrypted source PDF, naming the sheet: the app exports that one as a disclosed raster; over MCP there is no canvas, so tell the user which sheet and why.) (`export_dxf` when the takeoff is going back into CAD — one sheet per drawing.) `export_report`
-   alongside it for the numbers. Never end a takeoff with numbers alone: a takeoff nobody can
+   alongside it for the numbers. When the numbers go to an estimator or a bidding agent, pass
+   `xlsx: true` and hand over the workbook path from the reply's `xlsx.path` (`<plan> - report.xlsx`
+   beside the plan by default): the same workbook the canvas Report's Excel button downloads, with
+   the Cable summary, Cable runs and Pathway tabs when the takeoff has them, so nobody rebuilds the
+   tabs by hand. Never end a takeoff with numbers alone: a takeoff nobody can
    check is not a takeoff.
 
 Between steps 3 and 4, `list_shapes` is the cheap inventory—ids, sheets, conditions,
 quantities, room labels, review state, and where each finish tag came from (`schedule` or
 `asserted`)—without pulling a whole `export_takeoff` payload.
+
+**Your work is auto-saved; resume it, don't redo it.** From `load_plan` on, every change is
+written to `<plan> - takeoff autosave.json` beside the plan (the `export_takeoff` payload plus an
+`autosave` marker key), so a client that goes away mid-bid doesn't take the takeoff with it.
+`load_plan`'s reply says where (`autosave.path`), and `takeoff_summary` says when it last landed
+(`autosave.saved_at`) or why it didn't (`autosave.error`—then `export_takeoff { path }`
+somewhere writable). When `load_plan` reports `autosave.found`, an earlier session's work for
+this plan is on disk and was **not** loaded: tell the user what it holds (its time and its
+shape and cable-run counts), and call `import_takeoff { path: autosave.found.path }` before
+changing anything if they want to resume. Changing something first doesn't lose it—the old
+file is moved aside and `takeoff_summary`'s `autosave.moved_aside` names where—but the session
+then starts from empty. Auto-save is a safety net, not the finish: steps 1–5 still end every
+takeoff. `OPENTAKEOFF_AUTOSAVE=0` in the server's environment turns it off;
+`OPENTAKEOFF_AUTOSAVE=<path>` writes somewhere else ([`MCP.md`](MCP.md#auto-save)).
 
 ## 4. Withheld is not a failure — it is the answer
 
@@ -177,7 +195,7 @@ rooms share 34 LF of wall would be a wrong number with a machine's confidence be
 
 ## 6. Staged tool exposure
 
-By default every client gets all <!--tool-count-->53<!--/tool-count--> tool schemas on `tools/list`—the flat contract every
+By default every client gets all <!--tool-count-->57<!--/tool-count--> tool schemas on `tools/list`—the flat contract every
 published client already expects.
 
 Fifty-two descriptions is real token weight for a session that may never touch half of them, so the
@@ -251,12 +269,39 @@ identically in both modes.
 ▸ export_marked_pdf  {}
   { "path": "/plans/sample-plan - marked set.pdf", "sheets": 1 }
 
-▸ export_report  { "path": "/plans/sample-report.json" }
-  { "schema": "opentakeoff.report.v1", … }
+▸ export_report  { "path": "/plans/sample-report.json", "xlsx": true }
+  { "schema": "opentakeoff.report.v1", …,
+    "xlsx": { "path": "/plans/sample-plan - report.xlsx", "tabs": ["Conditions", …] } }
 ```
 
-Hand back both paths, the totals, anything `withheld`, and the fact that the scale is
+Hand back the paths (marked set, report, workbook), the totals, anything `withheld`, and the fact that the scale is
 agent-set and awaiting the estimator's confirmation.
+
+### Division 27 cable runs: trace the trunk once, each branch on its own
+
+A route traced as one polyline from the device back to the TR carries the shared tray footage,
+and its branch length cannot be recovered from it. Trace pathway the way it is built:
+
+1. `measure_line` the shared trunk (cable tray, corridor run) **once** under its own condition,
+   then tag it (the first `measure_line` mints the condition):
+   `edit_condition { condition: "TRAY", role: "route", route_kind: "trunk" }`.
+2. `measure_line` **each device's branch** as its own segment, from the device out to the
+   trunk, under a branch condition: `edit_condition { condition: "BRANCH", role: "route",
+   route_kind: "branch" }`.
+3. `link_run { device_shape_ids: [device], route_shape_ids: [branch, trunk…], tr_id }`, segments
+   in order from the device. Every run on that tray names the same trunk segment.
+4. `list_runs` gives each run's `branch_lf`, `trunk_lf` and `other_lf` (untagged segments) beside
+   `route_lf`, and a `pathway` block with each segment counted once.
+5. J-hooks: `edit_materials { condition: "BRANCH", add: [{ name: "J-hook", basis: "linear",
+   per: 5, unit: "EA" }] }`. The row divides the branch condition's own LF (each segment once,
+   ×N applied), so it is never a lump allowance and never multiplied by the runs.
+6. Hand the estimator the workbook: `export_report { xlsx: true }` writes the Cable summary,
+   Cable runs and (once a route condition is tagged) Pathway tabs beside the flooring tabs, and
+   the reply's `xlsx.path` is the file a bid workbook references.
+
+Never derive branch LF by dividing or subtracting a full-route LF: a branch length exists only
+as a traced branch segment. A run whose segments are all untagged is still valid, and so is a
+branch with no trunk segment; `route_kind` adds no warning.
 
 ## 8. Refusals, and the move that answers each one
 
@@ -270,6 +315,28 @@ next."*
 | *Landed in dense linework (hatching or text).* | the seed landed on a text block or heavy hatch | `view_sheet` a crop, pick open floor, re-seed |
 | a ring not fully inside the parent (`cut_out`) | an edge-crossing cut is a boundary correction, not a hole | fix the parent with `edit_shape` instead |
 | `measure_surface` refuses with no height | wall SF = traced LF × the condition's height | `edit_condition { height_ft }`, then retrace |
+| `link_run`: *… is not a measured linear shape* | a route is a traced length, never a guess | `measure_line` the route and pass that shape id |
+| `link_run`: *… vertical_ft is required* | the device condition's cable setup lacks a required value (an access-control door has no starting vertical) | `edit_condition { cable_setup: { vertical_ft } }`, then link again; or, when the drawings state this device's vertical, `link_run { …, vertical_ft }` for that run alone |
+| one device's vertical differs from its condition's (a door contact at the head beside a keypad at 48″, one camera on a tall pole) | the condition's `vertical_ft` applies to every run that states none | `link_run { …, vertical_ft }` for that run: it replaces the condition's for that location only. Don't split the condition just for a vertical. To change an existing run's vertical, `unlink_run` it and `link_run` again with the new value. State a vertical from the drawings or spec; never guess one |
+| `link_run`: *… is not a TR marker* | a run homes to a count marker on a condition flagged `role: "tr"` | `edit_condition { role: "tr" }` on the TR condition, `place_count` the room, `edit_shape { label: "MDF" }` |
+| `link_run`: *device … is already linked* | one pull per location | `unlink_run` the earlier run, or leave it |
+| `link_run`: *device … is held by hold-…* | the device was held with `hold_devices` (no run, by decision) | `unlink_run` the hold id, then link |
+| you decide a device gets no run (routing not drawn, by others) | an unlinked device reads as a miss | `hold_devices { device_shape_ids, reason }` — not a cloud or a note; the reason prints on the report and the marked set |
+| the bid needs parts per cable (jacks, patch cords) or per pull (faceplates, camera mounts) | those parts follow the linked runs, not the device count: a run's `cables_override`, an unlinked device and a hold all change them | `edit_materials` on the device condition with `basis: "cables"` (1 jack per cable → `per: 1`) or `basis: "pulls"` (1 faceplate per location → `per: 1`) — never `basis: "count"` with `per` = 1 ÷ cables per location |
+| an `edit_materials` `computed` line or a report materials line on basis `cables` / `pulls` reads 0 with a `reason` | the condition has no `cable_setup`, or no linked run yet | `edit_condition { cable_setup }` on the right condition, or `link_run` its devices; the row figures itself once runs link |
+| `edit_condition` refuses *… is not a device type* | the six types are wall_outlet, wap, camera, access_door, ceiling_other, custom | access control → `access_door`; paging speakers → `ceiling_other`; anything else → `custom` with every value stated |
+| a `link_run` / `list_runs` run reads `over_length` | per-cable LF exceeds the run's limit: the condition's `cable_setup.max_link_ft` when stated, else 295 ft (the TIA-568 copper permanent-link limit) for copper or no stated medium; the run still counts | check the route; if it stands, tell the estimator it needs a closer TR or a length test and owner notice |
+| a condition's cable is fiber, coax or a copper system with its own limit (CATV, DAS, a fiber backbone) | with no medium stated, every run is checked as copper at 295 ft; fiber and coax have no single limit, so a `medium` alone turns the check OFF | state what the spec says: `edit_condition { cable_setup: { medium: "fiber", max_link_ft: <the spec's limit> } }`. Never infer the medium from `cable_type` or a part number, and never pick a limit yourself; when the spec states none, set `medium` alone and tell the estimator those runs are not length-checked |
+| `edit_condition` refuses *… is not a medium* / *… is not a length limit* | `medium` is `"copper"`, `"fiber"` or `"coax"`; `max_link_ft` is feet above 0; `null` clears either; nothing was written | restate it from the spec; `cable.limit` in the reply names the check each run on the condition now gets |
+| `list_runs` warns of duplicate device positions (`duplicates.same_sheet` / `duplicates.cross_sheet`) | two markers on cable conditions within 1 ft on one sheet, or overlay plans (same page size, 3+ coinciding positions and at least half the smaller set); every marker still counts | tell the estimator; when one sheet shows the devices for reference only, move that set to a non-cable reference condition with `edit_shape { condition }`. Never delete a marker without the estimator |
+| `list_runs` warns a scale *no person has confirmed* | every MCP `set_scale` lands unconfirmed; the cable lengths rest on it | tell the estimator to confirm those sheets' scales in the canvas before pricing |
+| `edit_condition` replies with `cable.minted` | a fresh cable opt-in took the device type's starting values for what the call did not state—*starting values, not verified against spec* | confirm each against the project spec and patch with `edit_condition { cable_setup: { … } }` |
+| the bid buys cable by the box or reel (Cat 6A in 1000 ft boxes, fiber on 2000 ft reels) | boxes belong to the cable type: rounding each condition up overstates | `edit_condition { cable_setup: { package_ft: 1000 } }` on a condition of that `cable_type` (one condition sizes the type), then read the `order` block on `list_runs` / `export_report`: boxes = ceil(order LF / package_ft) on the type's pooled order LF. Never round per condition or compute boxes yourself; state the size from the spec or the estimator, never guess one |
+| an `order` row reads `boxes: null` | no condition of that type states `package_ft`; its conditions state different sizes (`package_conflict`, and a warning names them); or the cable type is blank | state the size, ask the estimator which size is right, or give the condition a `cable_type`. Blank is the answer until then, not 0 |
+| `edit_condition`: *route_kind tags a cable-route condition* | `route_kind` means something only on a `role: "route"` condition | pass `role: "route"` in the same call, or tag the route condition instead |
+| `export_report { xlsx: true }`: *… already exists and is not an OpenTakeoff export* | a file is at the workbook path that this server did not write, or one it wrote that someone has since saved in Excel (prices typed in) | pass `xlsx_path` to write somewhere else; `overwrite: true` only when the user says to replace that file |
+| `list_runs` lists a route under *unlinked* | a linear shape on a `role: "route"` condition that no linked run uses | `link_run` it, or trace it under another condition if it is not a route |
+| a `list_runs` run reads *broken* | a linked shape was deleted, or sits on a sheet this session cannot scale (a stitched composite) — its stored length is kept, it is excluded from totals and listed under unlinked | re-trace and `link_run` again, or hand it to the canvas |
 | an export refuses a path | OpenTakeoff didn't write that file, and overwriting it would destroy someone's work | pass `overwrite: true`, or pick another path |
 | a `sweep_schedule_row` key that won't anchor | a fingerprint is never guessed from text alone; a device drawn to its own size and tagged by a leader is counted BY LABEL instead (`anchor: null`, `counted_by: "label"`), and a key that appears only in notes refuses with that reason | read `label_only` and `view_sheet` each placement before pricing it; for a refused key, `find_text` the tag, `view_sheet` the marker, count by hand |
 
@@ -304,7 +371,7 @@ Follow [Geometry from source to review](GEOMETRY_WORKFLOW.md) when tracing a rea
 ## Geometry review cleanup
 
 Use the [generated tool index](MCP_TOOL_INDEX.md) for the
-<!--tool-count-->53<!--/tool-count--> default tools, their stages and required arguments.
+<!--tool-count-->57<!--/tool-count--> default tools, their stages and required arguments.
 The [geometry workflow](GEOMETRY_WORKFLOW.md) is the source-to-handoff route.
 
 - Shorten a note with `list_annotations` then `edit_annotation`; empty text clears

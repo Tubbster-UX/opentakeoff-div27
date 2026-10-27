@@ -38,11 +38,40 @@ const sheetSummary = {
   detected_scale: z.string().optional().describe("Drawn scale note read off the sheet — a suggestion, never auto-applied"),
 };
 
+// Auto-save (src/autosave.ts): what load_plan says about where the session
+// writes, and what takeoff_summary says about the last write.
+const autosaveFound = z.object({
+  path: z.string(),
+  saved_at: z.string().nullable(),
+  tool: z.string().nullable().describe("The tool call whose change was last saved"),
+  plan: z.string().nullable().describe("The plan that session had loaded (basename)"),
+  shapes: z.number().int(),
+  conditions: z.number().int(),
+  cable_runs: z.number().int().describe("Linked cable runs (holds not counted)"),
+});
+
+const autosaveLoad = z.object({
+  path: z.string().nullable().describe("Where every change is written — null when auto-save is off"),
+  disabled: z.literal(true).optional().describe("OPENTAKEOFF_AUTOSAVE=0 — nothing is written; export_takeoff with a path is the only copy"),
+  found: autosaveFound.optional().describe("An earlier session's autosave already at path. NOT loaded: import_takeoff it to resume; changing anything first moves it aside, never deletes it"),
+  error: z.string().optional().describe("Why auto-save will not write there (a file OpenTakeoff did not write sits at path)"),
+});
+
+export const autosaveStatus = z.object({
+  path: z.string().nullable(),
+  saved_at: z.string().nullable().describe("ISO time of the last successful write; null before the first change"),
+  error: z.string().optional().describe("The last write failed, with why — the work is NOT on disk until a later write succeeds; export_takeoff with a path elsewhere"),
+  pending: z.literal(true).optional().describe("A change is waiting for its write"),
+  disabled: z.literal(true).optional().describe("OPENTAKEOFF_AUTOSAVE=0"),
+  moved_aside: z.string().optional().describe("Where the earlier session's autosave was moved before this session's first write replaced it"),
+});
+
 export const loadPlanOutput = {
   file: z.string().describe("The document just loaded (basename)"),
   files: z.array(z.string()).describe("Every document in the working set, load order (#152 — one entry unless merge was used)"),
   page_count: z.number().int().describe("Total sheets across the working set"),
   sheets: z.array(z.object(sheetSummary)).describe("EVERY sheet in the working set, not just the file loaded by this call"),
+  autosave: autosaveLoad.optional().describe("Auto-save: where this session's work is written as it changes, and any earlier autosave found there"),
   note: z.string(),
 };
 
@@ -406,8 +435,183 @@ export const withdrawConditionEditOutput = {
   proposal_id: z.string(), condition: z.string(), withdrawn: z.literal(true),
 };
 
+// ── Division 27 cable runs (docs/design/CABLE_SETUP.md) ─────────────────────
+const cableSetupShape = z.object({
+  device_type: z.string(), cables_per_location: z.number(), cable_type: z.string(),
+  vertical_ft: z.number().nullable(), loop_device_ft: z.number().nullable(), loop_tr_ft: z.number().nullable(),
+  package_ft: z.number().optional().describe("Feet per box or reel — present once stated"),
+  medium: z.enum(["copper", "fiber", "coax"]).optional().describe("Present when stated: what the cable is (never read from cable_type)"),
+  max_link_ft: z.number().optional().describe("Present when stated: the spec's or datasheet's longest link per cable, feet — every run on the condition is checked against it"),
+}).passthrough();
+// medium / per-condition length limit (item 6): present once any cable
+// condition states a medium or a limit, so every other reply is unchanged
+const runLimitFields = {
+  medium: z.enum(["copper", "fiber", "coax"]).optional().describe("The condition's stated medium (absent = not stated)"),
+  limit_ft: z.number().nullable().optional().describe("The per-cable limit this run was checked against, feet: the condition's max_link_ft, else 295 (TIA-568 copper) for copper or no medium; null = not checked (fiber or coax with no stated limit). Present once any cable condition states a medium or a limit"),
+  limit_source: z.enum(["stated", "tia_568_copper", "none"]).optional().describe("stated = the condition's max_link_ft; tia_568_copper = the 295 ft default; none = fiber or coax with no stated limit, not length-checked"),
+};
+const cableQty = {
+  ea: z.number().describe("Device markers on the condition (×N)"),
+  pulls: z.number().describe("Linked runs — one pull per location (×N)"),
+  cables: z.number().describe("Σ cables across linked runs (×N)"),
+  route_lf: z.number().describe("Σ measured route LF across linked runs (×N) — plan length only, no routing factor"),
+  cable_lf: z.number().describe("Σ location LF = (route + vertical + loops) × cables, ×N, NO waste"),
+  cable_lf_order: z.number().describe("cable_lf × (1 + waste_pct/100) — the order quantity"),
+  unlinked_devices: z.number().describe("Device markers with no linked run and no hold (×N)"),
+  held_devices: z.number().describe("Device markers held by hold_devices — no run by decision, with a reason (×N). EA − pulls = unlinked_devices + held_devices"),
+  pending_runs: z.number().int().describe("Linked runs still pending human review — they COUNT in every figure above, as pending shapes do"),
+  over_length_runs: z.number().int().describe("Linked runs over their length limit per cable (295 ft TIA-568 copper unless the condition states max_link_ft; fiber/coax with no stated limit are not checked) — counted, flagged"),
+};
+export const cableSummaryRow = z.object({
+  condition_id: z.string(), finish_tag: z.string(), device_type: z.string(), cable_type: z.string(),
+  tr_id: z.string(), tr_name: z.string(), multiplier: z.number(), waste_pct: z.number(),
+  ...cableQty,
+  leg_warning: z.boolean().describe("true when a route segment on this row carries rise/drop legs (ignored here — the regular report's LF for that segment's condition is not a cable length)"),
+  withheld: z.string().optional().describe("Why this condition's runs are withheld (a required setup value missing)"),
+  withheld_runs: z.number().int().optional(),
+  ...runLimitFields,
+}).passthrough();
+const cableGroupRow = z.object({ ...cableQty }).passthrough();
+// trunk / branch (route_kind on a route condition): present only once one is tagged
+const routeSplitFields = {
+  branch_lf: z.number().optional().describe("Route LF on segments of a route condition tagged branch — present once any route condition carries route_kind"),
+  trunk_lf: z.number().optional().describe("Route LF on segments of a route condition tagged trunk (a shared trunk counts in full on every run that rides it)"),
+  other_lf: z.number().optional().describe("Route LF on segments of an untagged route condition (or a line on a condition that is not a route). branch_lf + trunk_lf + other_lf = route_lf"),
+};
+const pathwayQty = {
+  segments: z.number().int().describe("Linear shapes on the route condition(s)"),
+  pathway_lf: z.number().describe("Measured pathway LF, each segment counted ONCE however many runs ride it (plan length, unmultiplied)"),
+  used_lf: z.number().describe("LF of segments at least one linked run uses"),
+  unused_lf: z.number().describe("LF of segments no linked run uses (unlinked, or named only by a broken or withheld run)"),
+  linked_runs: z.number().int().describe("Distinct linked runs using at least one segment"),
+  pathway_lf_total: z.number().describe("pathway_lf × the condition's multiplier — the basis a linear materials row on the condition (J-hooks, per = spacing) divides, less any rise/drop legs"),
+};
+// boxes / reels per cable type (package_ft on a cable_setup): present only
+// once a condition states one, so a cable reply without it is unchanged
+export const cableOrderRow = z.object({
+  cable_type: z.string().describe('The free-text cable type the boxes are pooled by ("" = conditions with no cable type)'),
+  order_lf: z.number().describe("The cable type's order LF — the Cable summary's by-cable-type cable_lf_order (waste and ×N in)"),
+  package_ft: z.number().nullable().describe("Feet per box or reel; null when no condition of the type states one, when they disagree, or on the blank type"),
+  boxes: z.number().int().nullable().describe("ceil(order_lf / package_ft) — null (not 0) when not figured"),
+  purchased_lf: z.number().nullable().describe("boxes × package_ft"),
+  leftover_lf: z.number().nullable().describe("purchased_lf − order_lf"),
+  conditions: z.array(z.string()).describe("Every cable condition of this cable type"),
+  package_set_on: z.array(z.string()).describe("The conditions that state a package_ft"),
+  package_conflict: z.array(z.object({ finish_tag: z.string(), package_ft: z.number() })).optional().describe("Present when the type's conditions state different sizes: each one and its size — boxes left blank"),
+  note: z.string().optional().describe("Why boxes are blank (conflicting sizes, or no cable type)"),
+});
+export const cableOrderBlock = z.object({ rows: z.array(cableOrderRow) })
+  .describe("Cable ORDER: boxes / reels per cable type, pooled across its conditions and rounded up once. Present only once a condition's cable_setup states package_ft");
+export const cablePathwayBlock = z.object({
+  rows: z.array(z.object({ condition_id: z.string(), finish_tag: z.string(), route_kind: z.enum(["trunk", "branch", ""]).describe('"" = unspecified'), ...pathwayQty, multiplier: z.number() })).describe("One row per role \"route\" condition"),
+  by_kind: z.array(z.object({ route_kind: z.enum(["trunk", "branch", ""]), ...pathwayQty })),
+  totals: z.object(pathwayQty),
+}).describe("Trunk/branch PATHWAY rollup — what the pathway measures, each segment once (cable LF stays per run). Present only once a route condition carries route_kind");
+const cableRunRow = z.object({
+  run_id: z.string(),
+  status: z.enum(["linked", "withheld", "broken"]).describe("linked = figured and counted; withheld = the condition's setup lacks a required value; broken = a referenced shape is gone, is the wrong kind, or sits on a sheet with no scale answer. Only linked runs count"),
+  condition: z.string(), device_type: z.string(), cable_type: z.string(),
+  tr: z.string().describe("The TR marker's label, or its id when unlabeled"), tr_id: z.string(),
+  device_shape_ids: z.array(z.string()), route_shape_ids: z.array(z.string()).describe("In order"), sheets: z.array(z.string()).describe("The route segments' sheets"),
+  device_sheets: z.array(z.string()).describe("The device marker's sheet"), tr_sheet: z.string().describe("The TR marker's sheet (empty when the TR is gone)"),
+  ...runLimitFields,
+  over_length: z.literal(true).optional().describe("Per-cable LF exceeds the run's limit (limit_ft when present, else 295 ft: TIA-568 copper permanent link, 90 m) — counted; check the route"),
+  scale_unconfirmed: z.literal(true).optional().describe("A route segment sits on a sheet whose agent-set scale no person has confirmed"),
+  route_lf: z.number().describe("Σ segment plan lengths, each at its own sheet's scale — reported on a broken run too, never zeroed"),
+  ...routeSplitFields,
+  vertical_ft: z.number().optional().describe("The vertical this run used: its own vertical_override when set, else the condition's"), loop_device_ft: z.number().optional(), loop_tr_ft: z.number().optional(),
+  vertical_override: z.number().optional().describe("Present when the run states its own vertical (link_run vertical_ft), replacing the condition's vertical_ft for this location only"),
+  cables_override: z.number().int().optional().describe("Present when the run states its own cable count, replacing the condition's cables_per_location"),
+  per_cable_lf: z.number().optional().describe("route + vertical + both loops"),
+  cables: z.number().optional(), location_lf: z.number().optional().describe("per_cable_lf × cables — unmultiplied, no waste"),
+  review: z.enum(["pending", "accepted", "human"]).describe("pending = an agent linked it and no human has accepted; it still counts"),
+  reason: z.string().optional().describe("Present on withheld/broken runs"),
+  notes: z.array(z.string()).optional().describe("Disclosures on a linked run, such as a segment whose legs were ignored"),
+});
+const cableUnlinked = z.object({
+  devices: z.array(z.object({ shape_id: z.string(), condition_id: z.string(), finish_tag: z.string(), sheet_id: z.string(), reason: z.string() }).passthrough()),
+  routes: z.array(z.object({ shape_id: z.string(), condition_id: z.string(), finish_tag: z.string(), sheet_id: z.string(), length_lf: z.number().nullable(), reason: z.string() }).passthrough()).describe("Every linear shape on a role \"route\" condition that no linked run uses"),
+});
+const cableHeld = z.array(z.object({ shape_id: z.string(), condition_id: z.string(), finish_tag: z.string(), sheet_id: z.string(), hold_id: z.string(), reason: z.string() }).passthrough());
+const cableHolds = z.array(z.object({ id: z.string(), reason: z.string(), device_shape_ids: z.array(z.string()), held: z.number().int(), review: z.enum(["pending", "accepted", "human"]), pending: z.boolean() }));
+const cableSummaryBlock = z.object({
+  rows: z.array(cableSummaryRow), by_tr: z.array(cableGroupRow), by_cable_type: z.array(cableGroupRow), totals: cableGroupRow,
+});
+// the duplicate device check (web/src/lib/cableDupes.js) — flags only; no
+// count, run or shape is changed by it
+const dupPairGroup = z.object({
+  condition_a: z.string(), finish_tag_a: z.string(), condition_b: z.string(), finish_tag_b: z.string(),
+  count: z.number().int().describe("Coinciding positions in this condition pair"),
+  pairs: z.array(z.array(z.string())).describe("[shape on sheet_a, shape on sheet_b] per coinciding position"),
+  max_offset: z.number().describe("Largest offset between a pair, as a fraction of the sheet's long edge"),
+}).passthrough();
+export const cableDuplicatesBlock = z.object({
+  same_sheet: z.array(z.object({
+    sheet_id: z.string(), sheet: z.string(), shape_ids: z.array(z.string()), finish_tags: z.array(z.string()),
+    condition_ids: z.array(z.string()), same_condition: z.boolean(),
+    distance: z.number().describe("Largest distance between markers in the cluster, in `basis` units"),
+    basis: z.enum(["ft", "sheet_fraction"]).describe("ft = real feet (the sheet's scale and page size are known); sheet_fraction = a fraction of the sheet's long edge (no scale)"),
+    threshold: z.number(),
+  }).passthrough()).describe("Device markers on cable conditions stacked on one spot of one sheet — one device marked twice?"),
+  cross_sheet: z.array(z.object({
+    sheet_a_id: z.string(), sheet_a: z.string(), sheet_b_id: z.string(), sheet_b: z.string(),
+    positions: z.number().int().describe("Coinciding device positions across the two sheets (pattern groups only)"),
+    groups: z.array(dupPairGroup.extend({ different_conditions: z.boolean().describe("The two sides sit on different cable conditions — two setups figure the same devices") })),
+    below_pattern: z.number().int().optional().describe("Further cable-to-cable coincidences too few to be a pattern"),
+  }).passthrough()).describe("Overlay plans: two sheets of one page size whose cable markers coincide in position often enough to be the same devices drawn twice"),
+  reference: z.array(z.object({ sheet_a_id: z.string(), sheet_a: z.string(), sheet_b_id: z.string(), sheet_b: z.string(), groups: z.array(dupPairGroup.extend({ cable_side: z.enum(["a", "b"]) })), note: z.string() }).passthrough())
+    .describe("Coinciding positions where one side is on a NON-cable condition — not a duplicate for cable purposes (the reference-set fix), listed for the record, never warned"),
+  not_compared: z.array(z.object({ sheet_id: z.string(), sheet: z.string(), reason: z.string() }).passthrough()).describe("Sheets with cable markers this surface could not compare across sheets"),
+  warnings: z.array(z.string()).describe("The human warnings — also in the cable warnings"),
+  count: z.number().int().describe("same_sheet + cross_sheet findings"),
+  thresholds: z.record(z.number()),
+});
+
+export const linkRunOutput = {
+  run_id: z.string().describe("The run's id — unlink_run takes it; it rides export_takeoff's cable_runs"),
+  status: z.literal("linked"),
+  condition: z.string(), device_type: z.string(), cable_type: z.string(), tr: z.string(), sheets: z.array(z.string()),
+  device_sheets: z.array(z.string()), tr_sheet: z.string(),
+  route_lf: z.number(), ...routeSplitFields, vertical_ft: z.number().describe("The vertical used: the vertical_ft you stated, else the condition's"), loop_device_ft: z.number(), loop_tr_ft: z.number(),
+  per_cable_lf: z.number().describe("route + vertical + loop at device + loop at TR"),
+  cables: z.number(), location_lf: z.number().describe("per_cable_lf × cables (no waste, no ×N — export_report's cable block applies both)"),
+  vertical_override: z.number().optional().describe("Present when this call stated vertical_ft: the run's own vertical, replacing the condition's for this location only"),
+  cables_override: z.number().int().optional().describe("Present when this call stated cables_override"),
+  reviewed: z.literal(false),
+  ...runLimitFields,
+  over_length: z.literal(true).optional().describe("Per-cable LF exceeds the run's limit (limit_ft when present, else 295 ft: TIA-568 copper permanent link) — the run counts; check the route"),
+  scale_unconfirmed: z.literal(true).optional().describe("A route segment's sheet scale was set by an agent and no person has confirmed it"),
+  notes: z.array(z.string()).optional(),
+  note: z.string(),
+};
+export const listRunsOutput = {
+  runs: z.array(cableRunRow),
+  unlinked: cableUnlinked.describe("Devices on a cable condition with no linked run and no hold, and route segments no linked run uses — excluded from totals, never assigned a length"),
+  held: cableHeld.describe("Devices held by hold_devices: no run by decision, with the reason — excluded from totals like unlinked devices"),
+  holds: cableHolds.describe("The hold records — unlink_run takes a hold id to release it"),
+  warnings: z.array(z.string()).describe("One per condition whose route segments carry rise/drop legs: that condition's LF in the regular report is not a cable length; the over-length, unconfirmed-scale and hold warnings; and the duplicate device check's warnings"),
+  duplicates: cableDuplicatesBlock.nullable().describe("The duplicate device check: device markers on cable conditions stacked on one spot, and overlay plans whose device positions coincide. Flags only — move one set to a non-cable reference condition (edit_shape { condition }) or remove an extra marker only with the estimator; never delete on this alone"),
+  summary: cableSummaryBlock.nullable(),
+  pathway: cablePathwayBlock.optional(),
+  order: cableOrderBlock.optional(),
+  count: z.number().int(),
+  note: z.string().optional(),
+};
+export const unlinkRunOutput = {
+  unlinked: z.string(), released_hold: z.literal(true).optional().describe("The id was a hold: its devices return to the unlinked list"),
+  run_count: z.number().int().describe("Runs remaining (holds not counted)"), note: z.string(),
+};
+export const holdDevicesOutput = {
+  hold_id: z.string().describe("unlink_run takes it to release the hold; it rides export_takeoff's cable_runs"),
+  reason: z.string(), held: z.number().int().describe("Devices this hold covers"),
+  by_condition: z.array(z.object({ condition: z.string(), devices: z.number().int() })),
+  unlinked_devices: z.number().int().describe("Devices still with no run and no hold"),
+  reviewed: z.literal(false), note: z.string(),
+};
+
 export const takeoffSummaryOutput = {
   conditions: z.array(summaryRow),
+  cable: cableSummaryBlock.extend({ unlinked_devices: z.number().int(), unlinked_routes: z.number().int(), held_devices: z.number().int(), warnings: z.array(z.string()), pathway: cablePathwayBlock.optional(), order: cableOrderBlock.optional(), duplicates: cableDuplicatesBlock.optional().describe("The duplicate device check — present only when it found something (list_runs always carries it)") }).optional().describe("Division 27 cable rollups — present only when a condition carries a cable_setup or a run exists (list_runs has the per-run detail)"),
   totals: z.object({
     total_sf: z.number(),
     total_sf_net: z.number(),
@@ -421,6 +625,7 @@ export const takeoffSummaryOutput = {
   shared_floor_unmeasured: z.array(scopeUnmeasuredRow).optional().describe("Floor shapes the collision check could not measure (unscaled sheet, degenerate ring) — left OUT of shared_floor_sf rather than counted as zero; present only when any"),
   proposals: z.array(proposalRow).optional().describe("The proposal ledger (#365): per batch, how many shapes are still pending, how many the estimator accepted, whether it was withdrawn, and which batch new commits attach to (current). Present only when a proposal exists"),
   proposed_condition_edits: z.array(proposedConditionEditRow).optional().describe("Pending condition-edit diffs (#365) beside the current knobs. The rows above are the CURRENT values — nothing changes until the estimator accepts. Present only when any are pending"),
+  autosave: autosaveStatus.optional().describe("Auto-save: the file and the time of the last write, or the error when the last write failed"),
 };
 
 
@@ -643,7 +848,8 @@ export const undoLastOutput = {
     // undo_last's reply against this enum, so a journal op missing from it
     // fails the undo call itself. Add the op here in the same change.
     op: z.enum(["commit", "scale", "edit", "annotation_text", "delete", "materials", "condition", "approval", "duplicate_condition", "split_condition", "cutout", "cutout_restore", "runcut", "rfi_create", "rfi_resolve", "rfi_delete",
-      "proposal_open", "proposal_revise", "proposal_withdraw", "condition_proposal", "condition_proposal_withdraw", "condition_proposal_accept"]),
+      "proposal_open", "proposal_revise", "proposal_withdraw", "condition_proposal", "condition_proposal_withdraw", "condition_proposal_accept",
+      "run_link", "run_unlink"]),
     tool: z.string().describe("The tool call this step came from"),
     shapes: z.number().int().describe("Shapes affected by reversing this step — 0 for a materials step (it restores a condition's supporting-materials rows, not shapes), for a condition step (it restores the waste/multiplier pair), and for an approval step (it re-seats or removes a verdict mark)"),
   })).describe("Newest first"),
@@ -666,12 +872,26 @@ export const findTextOutput = {
   })),
 };
 
+/** One computed materials line inside a report condition row — the buy list.
+ * conditionTotals (web/src/lib/totals.js) computes qty = basis_qty ÷ per,
+ * rounded UP to whole purchase units unless round is false. */
+const reportMaterialLine = z.object({
+  name: z.string(),
+  unit: z.string().describe("Purchase unit, e.g. 'gal', 'bag'"),
+  per: z.number().describe("Coverage rate — basis units per purchase unit"),
+  basis: z.enum(["area", "linear", "count", "seam_lf", "cables", "pulls"]),
+  round: z.boolean(),
+  basis_qty: z.number().describe("The condition total this row divides (SF, LF, EA, figured seam LF, or linked cables / pulls — multiplier applied, waste not)"),
+  qty: z.number().describe("Computed order quantity"),
+  reason: z.string().optional().describe("Only on a cables / pulls line that reads 0: why (no cable_setup on the condition, or no linked run)"),
+}).passthrough();
+
 /** editMaterials — session.ts's MaterialRow, verbatim. */
 const materialRow = z.object({
   id: z.string(),
   name: z.string(),
   per: z.number().describe("Coverage rate: basis ÷ per = order quantity"),
-  basis: z.enum(["area", "linear", "count", "seam_lf"]).describe("Which of the condition's totals this row's quantity is computed against — 'seam_lf' is the FIGURED roll-layout seam length (weld rod, seam tape), 0 until the condition carries a roll_setup"),
+  basis: z.enum(["area", "linear", "count", "seam_lf", "cables", "pulls"]).describe("Which of the condition's totals this row's quantity is computed against — 'seam_lf' is the FIGURED roll-layout seam length (weld rod, seam tape), 0 until the condition carries a roll_setup; 'cables' / 'pulls' are the FIGURED linked cables / pulls from the cable summary, 0 until the condition carries a cable_setup and a linked run"),
   unit: z.string(),
   round: z.boolean().describe("true = round up to whole purchase units (the default — you buy whole bags/buckets)"),
   note: z.string().optional(),
@@ -688,20 +908,8 @@ export const editMaterialsOutput = {
     patched: z.array(z.string()).describe("Ids whose fields changed"),
   }),
   materials: z.array(materialRow).describe("The condition's full materials array after this write"),
+  computed: z.array(reportMaterialLine).optional().describe("Present only when the condition has a cable_setup or a row on basis cables / pulls: the condition's computed lines (the same conditionTotals math as export_report's buy list) — basis_qty, qty, and reason when a cables/pulls row reads 0"),
 };
-
-/** One computed materials line inside a report condition row — the buy list.
- * conditionTotals (web/src/lib/totals.js) computes qty = basis_qty ÷ per,
- * rounded UP to whole purchase units unless round is false. */
-const reportMaterialLine = z.object({
-  name: z.string(),
-  unit: z.string().describe("Purchase unit, e.g. 'gal', 'bag'"),
-  per: z.number().describe("Coverage rate — basis units per purchase unit"),
-  basis: z.enum(["area", "linear", "count", "seam_lf"]),
-  round: z.boolean(),
-  basis_qty: z.number().describe("The condition total this row divides (SF, LF, EA, or figured seam LF — multiplier applied, waste not)"),
-  qty: z.number().describe("Computed order quantity"),
-}).passthrough();
 
 /** export_report: the canvas Report's own JSON document (totals.js reportJson,
  * schema "opentakeoff.report.v1", additive-only). The authority on the shape
@@ -729,6 +937,18 @@ export const exportReportOutput = {
   display_units: z.string(),
   roll_goods: z.array(z.record(z.unknown())).describe("Roll-goods order rows (#136) — order_lf / rolls / order_qty per roll-goods condition, ×N applied; empty when no condition carries a roll_setup (always the case for a headless session today)"),
   proposed_condition_edits: z.array(proposedConditionEditRow).optional().describe("Pending condition-edit proposals (#365) — the rows above print the CURRENT knobs; each entry here carries the proposed values beside them. Present only when any are pending, so a proposal-free report is byte-identical"),
+  cable: z.object({
+    summary: z.array(cableSummaryRow), by_tr: z.array(cableGroupRow), by_cable_type: z.array(cableGroupRow), totals: cableGroupRow,
+    runs: z.array(z.record(z.unknown())).describe("One row per run, unmultiplied, with a multiplier column and its status / review status. vertical_ft is the vertical used; vertical_override is present when the run states its own (its notes say so, with the condition's value)"),
+    unlinked: cableUnlinked, warnings: z.array(z.string()),
+    duplicates: cableDuplicatesBlock.optional().describe("The duplicate device check — present only when it found something, so a cable report with no finding is unchanged"),
+    pathway: cablePathwayBlock.optional(),
+    order: cableOrderBlock.optional(),
+  }).optional().describe("Division 27 cable schedule (docs/design/CABLE_SETUP.md) — present only when a cable condition or a run exists, so every other report is byte-identical"),
+  xlsx: z.object({
+    path: z.string().describe("Absolute path of the written Excel workbook — hand this to the estimator"),
+    tabs: z.array(z.string()).describe("The workbook's tabs in order: Conditions, By sheet, Materials, Shapes, By floor × room, then Cable summary and Cable runs when a cable condition exists, then Pathway once a route condition is tagged trunk or branch"),
+  }).optional().describe("Present only when xlsx or xlsx_path was passed: where the workbook went. Reply-only — the JSON written to path never carries it"),
 };
 
 /** export_marked_pdf — the tool writes the PDF to disk and replies with where
@@ -780,6 +1000,24 @@ export const editConditionOutput = {
     rolls: z.number(), order_qty: z.number(), order_unit: z.string(),
     oversize: z.boolean().describe("true when a cut exceeds the physical roll length (roll_length_ft binds)"),
   }).passthrough().optional().describe("The figured order (same row export_report's roll_goods carries) — present when the roll-goods condition has floor shapes on scaled sheets"),
+  cable_setup: cableSetupShape.optional().describe("The condition's Division 27 cable setup after this write — present while opted in"),
+  role: z.enum(["tr", "route"]).optional().describe("Present when flagged: \"tr\" = the condition's count markers are telecom rooms (link_run's tr_id targets); \"route\" = its linear shapes are cable routes (unlinked ones are listed by list_runs)"),
+  route_kind: z.enum(["trunk", "branch"]).optional().describe("Present when a route condition is tagged: trunk = shared pathway, branch = device out to the trunk"),
+  pathway: z.record(z.unknown()).optional().describe("A tagged route condition's Pathway row (each segment once) — the same row list_runs.pathway carries"),
+  cable: z.object({
+    problems: z.array(z.string()).describe("Required values still missing from the setup — while any remain, every run on this condition is WITHHELD with this reason (no length is assumed)"),
+    rows: z.array(cableSummaryRow).describe("The condition's Cable summary row(s), one per TR it homes to, ×N and waste applied as in export_report"),
+    order: cableOrderRow.optional().describe("The condition's CABLE TYPE row of the box/reel order (boxes pool across every condition of the type) — present once any condition states package_ft"),
+    minted: z.record(z.number()).optional().describe("On a fresh opt-in or a device-type change: every setup value this call did NOT state and the device type's starting table supplied (cables_per_location, vertical_ft, loop_device_ft, loop_tr_ft). Starting values, not verified against spec — confirm each against the project spec"),
+    note: z.string().optional().describe("Present with minted: the starting-values caveat"),
+    limit: z.object({
+      medium: z.enum(["copper", "fiber", "coax"]).optional(),
+      limit_ft: z.number().nullable().describe("The per-cable limit every run on this condition is checked against, feet; null = not checked"),
+      limit_source: z.enum(["stated", "tia_568_copper", "none"]),
+      note: z.string(),
+      medium_read_as: z.string().optional().describe("Present when the medium was given in another case (\"Fiber\" → \"fiber\")"),
+    }).optional().describe("The length check, present once the setup states a medium or max_link_ft or this call set or cleared one"),
+  }).optional().describe("Present when the condition carries a cable setup"),
 };
 
 export const readSheetTextOutput = {

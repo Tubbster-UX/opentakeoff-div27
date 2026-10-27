@@ -2,6 +2,7 @@
 // compact JSON (format.ts); view_sheet alone replies with an image content
 // item plus a JSON meta text item. Failures are isError results, never thrown
 // protocol errors.
+import { resolve as resolvePath } from "node:path";
 import { z } from "zod";
 import type { McpServer, RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ok, okImage, fail, UserError, type ToolReply } from "./format.ts";
@@ -23,9 +24,10 @@ import {
   exportDxfOutput, getSheetVectorsOutput,
   proposeTakeoffOutput, reviseProposalOutput, withdrawProposalOutput,
   proposeConditionEditOutput, withdrawConditionEditOutput,
-  scopeDuplicatesOutput, scopeMergeOutput,
+  scopeDuplicatesOutput, scopeMergeOutput, linkRunOutput, listRunsOutput, unlinkRunOutput, holdDevicesOutput,
 } from "./outputs.ts";
 import { exportMarkedPdf } from "./marked.ts";
+import { buildReportWorkbook } from "./workbook.ts";
 import { assertWritable, OVERWRITE_DESC } from "./safewrite.ts";
 import { importTakeoff } from "./importing.ts";
 
@@ -68,14 +70,24 @@ export function registerTools(realServer: McpServer, session: Session, opts: { o
   const registered = new Map<string, RegisteredTool>();
   const server = {
     registerTool(name: string, meta: unknown, handler: unknown): RegisteredTool {
-      const tool = (realServer.registerTool as (n: string, m: unknown, h: unknown) => RegisteredTool)(name, meta, handler);
+      // auto-save's safety net (src/autosave.ts): after every successful call,
+      // let it compare the payload with the last write — the journal path
+      // already scheduled real changes; this catches any write that skips the
+      // journal, and costs nothing when nothing changed
+      const h = handler as (...a: unknown[]) => Promise<ToolReply>;
+      const saving = async (...a: unknown[]): Promise<ToolReply> => {
+        const reply = await h(...a);
+        if (!reply.isError) session.autosave?.touch(name, { weak: true });
+        return reply;
+      };
+      const tool = (realServer.registerTool as (n: string, m: unknown, h: unknown) => RegisteredTool)(name, meta, saving);
       registered.set(name, tool);
       return tool;
     },
     sendResourceListChanged: () => realServer.sendResourceListChanged(),
   };
   server.registerTool("load_plan", {
-    description: `Open a plan PDF from disk. Default: replace the whole session (previous documents, scales, conditions, and shapes are cleared). merge: true ADDS the document to the working set instead (#152) — a bid set is plans + schedule + addenda, not one PDF — keeping every scale, condition, and shape; sheet keys carry file names so documents never collide, the sheet graph spans the whole set (resolve_tag can chain a plan tag on one file to a schedule row in another), and the marked set covers every worked sheet. Re-loading an already-merged file is refused — reload = replace, deliberately. Returns file, files, page_count, and one entry per sheet. The loaded sheets also become browsable resources (takeoff://sheets). ${COORDS}`,
+    description: `Open a plan PDF from disk. Default: replace the whole session (previous documents, scales, conditions, and shapes are cleared). merge: true ADDS the document to the working set instead (#152) — a bid set is plans + schedule + addenda, not one PDF — keeping every scale, condition, and shape; sheet keys carry file names so documents never collide, the sheet graph spans the whole set (resolve_tag can chain a plan tag on one file to a schedule row in another), and the marked set covers every worked sheet. Re-loading an already-merged file is refused — reload = replace, deliberately. Returns file, files, page_count, and one entry per sheet. The loaded sheets also become browsable resources (takeoff://sheets). AUTO-SAVE: from here on every change is written to "<plan> - takeoff autosave.json" beside the plan (the export_takeoff payload; OPENTAKEOFF_AUTOSAVE in the server's environment moves or disables it), and the reply's autosave says where. When an earlier session's autosave is already there, the reply names it with its time and counts and does NOT load it — call import_takeoff on that path to resume; changing anything first moves the old file aside instead of losing it. ${COORDS}`,
     inputSchema: {
       path: z.string().describe("Path to a plan PDF on disk"),
       merge: z.boolean().optional().describe("true = ADD this document to the working set, keeping all existing work (merge into an empty session is just a load)"),
@@ -301,10 +313,15 @@ export function registerTools(realServer: McpServer, session: Session, opts: { o
   }, run("derive_transitions", (a) => session.deriveTransitions(a)));
 
   server.registerTool("takeoff_summary", {
-    description: `Per-condition totals (floor/wall/border SF, LF, EA, SY, with and without waste) plus grand totals — the Report's numbers, computed by the same rules. Numbers only: the deliverable that SHOWS the work on the drawings is export_marked_pdf. ${COORDS}`,
+    description: `Per-condition totals (floor/wall/border SF, LF, EA, SY, with and without waste) plus grand totals — the Report's numbers, computed by the same rules. When a condition carries a cable_setup, a cable block rides along (pulls, cables, cable LF net and with waste, unlinked counts, leg warnings, the trunk/branch pathway rollup once a route condition is tagged, and the box/reel order per cable type once a cable_setup states package_ft — list_runs has the per-run detail). autosave names the auto-save file and when it was last written (any pending change is written first), or the error when the last write failed. Numbers only: the deliverable that SHOWS the work on the drawings is export_marked_pdf. ${COORDS}`,
     inputSchema: {},
     outputSchema: takeoffSummaryOutput,
-  }, run("takeoff_summary", () => session.summary()));
+  }, run("takeoff_summary", async () => {
+    // a summary is a natural checkpoint: whatever is pending lands first, so
+    // the saved_at it reports covers everything the totals do
+    await session.autosave?.flush();
+    return session.summary();
+  }));
 
   server.registerTool("export_takeoff", {
     description: `The full "opentakeoff.takeoff_canvas.v1" annotations payload — exactly what the app autosaves, importable by it. Returned inline; pass path to also write it to disk as JSON. ${COORDS}`,
@@ -352,21 +369,30 @@ export function registerTools(realServer: McpServer, session: Session, opts: { o
   }));
 
   server.registerTool("export_report", {
-    description: `The computed Report document — "opentakeoff.report.v1", the same schema the canvas Report's JSON export writes. Everything a pricing consumer needs without re-implementing the app's math: per-condition quantities with waste and multiplier applied (gross and *_net), the computed materials BUY LIST per condition (order quantity = basis ÷ coverage rate, rounded up to whole purchase units) plus the project-wide roll-up summed by (name, unit), per-sheet BASE subtotals, scale provenance per sheet, and annotations. Contrast: export_takeoff is the raw canvas payload (materials as CONFIG rows, no computed quantities) and takeoff_summary strips materials for a compact reply — when the numbers are leaving for pricing, consume this. A report alone is HALF the deliverable: pair it with export_marked_pdf, because a takeoff is reviewed on marked drawings, not on numbers. Returned inline; pass path to also write it to disk as JSON.`,
+    description: `The computed Report document — "opentakeoff.report.v1", the same schema the canvas Report's JSON export writes. Everything a pricing consumer needs without re-implementing the app's math: per-condition quantities with waste and multiplier applied (gross and *_net), the computed materials BUY LIST per condition (order quantity = basis ÷ coverage rate, rounded up to whole purchase units) plus the project-wide roll-up summed by (name, unit), per-sheet BASE subtotals, scale provenance per sheet, and annotations — plus a cable block (the Division 27 cable summary, per-run rows and unlinked list, a pathway rollup with per-run branch/trunk LF once a route condition is tagged trunk or branch, and an order table of boxes / reels per cable type once a cable_setup states package_ft) whenever a cable condition exists. Contrast: export_takeoff is the raw canvas payload (materials as CONFIG rows, no computed quantities) and takeoff_summary strips materials for a compact reply — when the numbers are leaving for pricing, consume this. A report alone is HALF the deliverable: pair it with export_marked_pdf, because a takeoff is reviewed on marked drawings, not on numbers. Returned inline; pass path to also write it to disk as JSON. Pass xlsx: true (or xlsx_path) to also write the Excel workbook the canvas Report's Excel button downloads, built by the same code: tabs Conditions, By sheet, Materials, Shapes, By floor × room, plus Cable summary and Cable runs when a cable condition exists and Pathway once a route condition is tagged trunk or branch, and Cable order once a cable_setup states package_ft. Default workbook path: next to the loaded plan as "<plan> - report.xlsx". Hand the estimator that path — it is what a bid workbook references, so nobody rebuilds the tabs by hand. The reply is the same document plus xlsx: {path, tabs}. Imperial units, like the JSON.`,
     inputSchema: {
       path: z.string().optional().describe("File path to write the document to"),
       project_name: z.string().optional().describe("Label for the document's project_name field (a headless session has no project of its own; omitted → null)"),
-      overwrite: z.boolean().optional().describe(OVERWRITE_DESC),
+      xlsx: z.boolean().optional().describe('Also write the Excel workbook (default path "<plan> - report.xlsx" beside the loaded plan)'),
+      xlsx_path: z.string().optional().describe("Where to write the Excel workbook (implies xlsx: true). An earlier workbook of this server's is replaced; any other file is refused unless overwrite is true"),
+      overwrite: z.boolean().optional().describe(`${OVERWRITE_DESC} Applies to both path and xlsx_path.`),
     },
     outputSchema: exportReportOutput,
-  }, run("export_report", async ({ path: outPath, project_name: projectName, overwrite }) => {
+  }, run("export_report", async ({ path: outPath, project_name: projectName, xlsx, xlsx_path: xlsxPath, overwrite }) => {
     const doc = session.exportReport(projectName);
+    if (xlsx === false && xlsxPath !== undefined) throw new UserError("xlsx: false contradicts xlsx_path — drop one of them.");
+    // every destination is checked before anything is written, so a refusal
+    // leaves both files exactly as they were
+    const book = xlsx === true || xlsxPath !== undefined ? await buildReportWorkbook(session, xlsxPath, overwrite) : null;
     if (outPath) {
+      if (book && resolvePath(outPath) === book.path) throw new UserError(`path and the workbook path are the same file (${book.path}) — give the JSON and the workbook different names.`);
       await assertWritable(outPath, "json", overwrite);
-      const { writeFile } = await import("node:fs/promises");
-      await writeFile(outPath, JSON.stringify(doc));
     }
-    return doc;
+    const { writeFile } = await import("node:fs/promises");
+    if (outPath) await writeFile(outPath, JSON.stringify(doc));
+    if (!book) return doc;
+    await writeFile(book.path, book.bytes);
+    return { ...doc, xlsx: { path: book.path, tabs: book.tabs } };
   }));
 
   server.registerTool("import_takeoff", {
@@ -494,13 +520,13 @@ export function registerTools(realServer: McpServer, session: Session, opts: { o
   }, run("edit_shape", (a) => session.editShape(a.shape_id, { verts: a.verts, condition: a.condition, role: a.role, label: a.label, rise_ft: a.rise_ft, drop_ft: a.drop_ft })));
 
   server.registerTool("edit_materials", {
-    description: `Add, remove, or patch supporting-materials rows on a condition — the coverage-rate lines that turn a measured area/length/count into an order quantity (adhesive at N sf/gal, grout at N lf/bag, …), matching the canvas's per-condition Supporting Materials panel. Each row is {name, per, basis, unit, round, note}: quantity = the condition's basis total (area/linear/count/seam_lf) ÷ per, rounded up to whole purchase units unless round:false. basis "seam_lf" is the one basis that is FIGURED rather than measured: it is the length where two cuts meet on the floor, read off the condition's roll layout (set roll_setup with edit_condition), which is what a heat-weld rod or a carpet seam tape is bought by. A 20-ft-wide room off a 12-ft roll seams once down its length; the same square footage as two 10-ft rooms seams not at all, and no percentage of the area or the perimeter can tell those two jobs apart. Without a roll_setup — or with no committed floor shapes to lay out — a seam_lf row reads 0, which is the honest state rather than a guess. condition names an existing OR NEW finish tag (minted on first touch, same as ${oneClick ? "one_click/" : ""}measure_polygon) — add alone is enough to seed materials on a condition before you've traced anything. remove/patch target existing row ids from this reply or export_takeoff (takeoff_summary strips materials for a compact quantities-only reply); a bad id 404s the WHOLE call before anything is written, and referencing an id on a tag with no condition yet errors rather than silently minting an empty one. No review gate here — materials rows are quantity config, not traced geometry, so this edits directly; undo_last reverses a call in one step (the condition's whole materials array, snapshotted before the write, restored verbatim).`,
+    description: `Add, remove, or patch supporting-materials rows on a condition — the coverage-rate lines that turn a measured area/length/count into an order quantity (adhesive at N sf/gal, grout at N lf/bag, …), matching the canvas's per-condition Supporting Materials panel. Each row is {name, per, basis, unit, round, note}: quantity = the condition's basis total (area/linear/count/seam_lf/cables/pulls) ÷ per, rounded up to whole purchase units unless round:false. basis "seam_lf" is the one basis that is FIGURED rather than measured: it is the length where two cuts meet on the floor, read off the condition's roll layout (set roll_setup with edit_condition), which is what a heat-weld rod or a carpet seam tape is bought by. A 20-ft-wide room off a 12-ft roll seams once down its length; the same square footage as two 10-ft rooms seams not at all, and no percentage of the area or the perimeter can tell those two jobs apart. Without a roll_setup — or with no committed floor shapes to lay out — a seam_lf row reads 0, which is the honest state rather than a guess. basis "cables" and "pulls" are FIGURED the same way, for a Division 27 device condition (one with a cable_setup): the condition's linked cables and linked pulls from the cable summary — ×N applied, each run's cables_override honored, unlinked, held, withheld and broken devices excluded, pending runs counted. Per cable: 1 jack per cable → per 1, basis cables (a patch cord per cable, the same). Per pull: 1 faceplate (or camera mount) per location → per 1, basis pulls. Use these, never basis count with per = 1 ÷ cables_per_location: a count row cannot see a cables_override, an unlinked device or a hold. On a condition with no cable_setup or no linked run they read 0 and the computed line says why (reason). When the condition has a cable_setup or a row on these bases, the reply adds computed: the condition's computed lines (basis_qty, qty, reason), the same numbers export_report's buy list carries. condition names an existing OR NEW finish tag (minted on first touch, same as ${oneClick ? "one_click/" : ""}measure_polygon) — add alone is enough to seed materials on a condition before you've traced anything. remove/patch target existing row ids from this reply or export_takeoff (takeoff_summary strips materials for a compact quantities-only reply); a bad id 404s the WHOLE call before anything is written, and referencing an id on a tag with no condition yet errors rather than silently minting an empty one. No review gate here — materials rows are quantity config, not traced geometry, so this edits directly; undo_last reverses a call in one step (the condition's whole materials array, snapshotted before the write, restored verbatim).`,
     inputSchema: {
       condition: z.string().describe("Finish tag, e.g. 'CPT-1'"),
       add: z.array(z.object({
         name: z.string().min(1),
         per: z.number().min(0).optional().describe("Coverage rate — basis units per purchase unit, e.g. 250 for 1 gal / 250 sf. Default 0 (quantity 0 until set)"),
-        basis: z.enum(["area", "linear", "count", "seam_lf"]).optional().describe("Which of the condition's totals this row divides against — default 'area' (total SF). 'seam_lf' is the figured roll-layout seam length (weld rod, seam tape), 0 until the condition carries a roll_setup"),
+        basis: z.enum(["area", "linear", "count", "seam_lf", "cables", "pulls"]).optional().describe("Which of the condition's totals this row divides against — default 'area' (total SF). 'seam_lf' is the figured roll-layout seam length (weld rod, seam tape), 0 until the condition carries a roll_setup. 'cables' / 'pulls' are the condition's linked cables / pulls from the cable summary (per cable: 1 jack per cable → per 1, basis cables; per pull: 1 faceplate per location → per 1, basis pulls), 0 with a reason until the condition carries a cable_setup and a linked run"),
         unit: z.string().optional().describe("Purchase unit, e.g. 'gal', 'bag', 'roll'"),
         round: z.boolean().optional().describe("Round up to whole purchase units — default true"),
         note: z.string().optional(),
@@ -536,9 +562,59 @@ export function registerTools(realServer: McpServer, session: Session, opts: { o
           price_unit: z.enum(["sy", "sf", "lf"]).optional().describe("Sell unit the order quantity is figured in"),
         }),
       ]).optional().describe("Roll-goods opt-in (#147): presence of a setup is what makes the condition roll goods — seams figured, cuts packed, order footage beside the measured quantities. Same-material partial edits patch the existing setup; null opts out. The reply echoes the figured order (cuts, order_lf, rolls, order_qty) whenever floor shapes exist on scaled sheets, and export_report's roll_goods block carries the same rows"),
+      cable_setup: z.union([
+        z.null().describe("Opt the condition OUT of cable runs"),
+        z.object({
+          device_type: z.string().optional().describe("Required on a fresh opt-in: wall_outlet, wap, camera, access_door, ceiling_other or custom. Access control (card reader, door contacts) is access_door; common aliases (access_control, card_reader, wireless_access_point, cctv, data_outlet, speaker…) are read as the canonical type and the reply says so — anything else is refused with the list. A fresh opt-in or a type change starts from that type's starting values: wall_outlet 23 ft vertical / 10 / 10 loops, wap 13 / 20 / 10, camera 13 / 15 / 10, ceiling_other 13 / 10 / 10, access_door NO vertical (enter it, or its runs stay withheld), custom blank. One vertical per condition: devices with different verticals (door contacts vs a keypad) are separate conditions"),
+          cables_per_location: z.number().int().min(1).optional().describe("Cables per pull — the default a run's cables_override replaces"),
+          cable_type: z.string().optional().describe("Free text (a part number, 'CAT6A') — groups the cable summary"),
+          vertical_ft: z.number().min(0).optional().describe("Vertical per cable, feet. REQUIRED before the condition's runs count; never defaulted for access_door or custom"),
+          loop_device_ft: z.number().min(0).optional().describe("Service loop at the device end, feet"),
+          loop_tr_ft: z.number().min(0).optional().describe("Service loop at the TR end, feet"),
+          package_ft: z.union([z.null(), z.number().positive()]).optional().describe("Feet per box or reel the cable is bought in (1000 for a Cat 6A box; 1000 / 2000 for a fiber reel). Optional and never defaulted; null clears it; kept through a device-type change. Boxes belong to the CABLE TYPE: the order LF (waste and ×N in) of every condition sharing the cable_type is pooled, then rounded up once — boxes = ceil(order LF / package_ft), purchased = boxes × package_ft, leftover = purchased − order — so three 400 LF conditions of one CAT6A are 2 boxes of 1000, not 3. One condition stating it sizes the type; conditions of one type stating different sizes leave that type's boxes blank with a warning naming them; a blank cable_type gets no boxes (name it). The reply's cable.order is the condition's cable-type row; list_runs, takeoff_summary and export_report carry the whole order table"),
+          medium: z.union([z.null(), z.string()]).optional().describe('What the cable IS, stated from the project spec: "copper", "fiber" or "coax" (case forgiven; anything else is refused). null clears it. NEVER infer it from cable_type — absent = unspecified, which is checked as copper. Sets the length check: copper or unspecified → 295 ft per cable (TIA-568 permanent link, 90 m); fiber or coax → NO check (no single limit: it depends on the application and the fiber grade) until max_link_ft states one. Never minted: a fresh opt-in carries no medium'),
+          max_link_ft: z.union([z.null(), z.number()]).optional().describe("The longest link per cable the project spec or the system's datasheet allows, in feet (> 0; anything else is refused). Replaces the medium's default check for every run on this condition — state it for fiber (backbone per the application and grade), coax (CATV, DAS) or a copper system with its own limit. null clears it. Never minted. A run over it still counts and comes back over_length, worded with the stated limit"),
+        }),
+      ]).optional().describe("Division 27 cable opt-in on a COUNT condition (docs/design/CABLE_SETUP.md): presence of a setup makes its markers device locations link_run homes to a TR. Per cable = measured route + vertical_ft + loop_device_ft + loop_tr_ft; waste is the condition's waste_pct (pass it in the same call — the spec's 12% starting waste is a canvas pre-fill, never set silently here). No routing factor exists. Same-type partial edits patch (a type change keeps medium and max_link_ft); null opts out. The reply echoes the setup, its open problems, and the condition's summary rows — on a fresh opt-in or a type change, `cable.minted` names every value that came from the type's starting table rather than this call, flagged \"starting values, not verified against spec\": confirm them against the project spec — and, once the setup states a medium or max_link_ft (or this call set or cleared one), `cable.limit` names the check its runs get (limit_ft, limit_source: stated / tia_568_copper / none)"),
+      role: z.union([z.null(), z.enum(["tr", "route"])]).optional().describe('"tr" flags a count condition as TELECOM ROOMS: its place_count markers become the TR origins link_run\'s tr_id names (label each marker "MDF" / "IDF-1" with edit_shape). "route" flags a linear condition as CABLE ROUTES: every measure_line shape on it that no linked run uses is reported unlinked by list_runs (a line on an unflagged condition — base, a transition — is never assumed to be a route). null clears the flag (and any route_kind with it)'),
+      route_kind: z.union([z.null(), z.enum(["trunk", "branch"])]).optional().describe('Trunk or branch on a CABLE ROUTE condition (role "route" — pass role: "route" in the same call if it is not flagged yet; refused otherwise). "trunk" = shared pathway many runs ride (cable tray, a corridor run): trace it ONCE under this condition. "branch" = one device out to the trunk: trace each device\'s branch as its own segment under a branch condition. Then link_run each device with route_shape_ids [branch, trunk…] in order from the device. list_runs splits each run\'s route_lf into branch_lf / trunk_lf / other_lf (untagged) and adds a pathway block — each segment counted ONCE — that a J-hook materials row reads (edit_materials on the branch condition: basis "linear", per = hook spacing). Absent = unspecified, always valid; null clears it'),
     },
     outputSchema: editConditionOutput,
-  }, run("edit_condition", (a) => session.editCondition(a.condition, { waste_pct: a.waste_pct, multiplier: a.multiplier, height_ft: a.height_ft, roll_setup: a.roll_setup, rise_ft: a.rise_ft, drop_ft: a.drop_ft })));
+  }, run("edit_condition", (a) => session.editCondition(a.condition, { waste_pct: a.waste_pct, multiplier: a.multiplier, height_ft: a.height_ft, roll_setup: a.roll_setup, rise_ft: a.rise_ft, drop_ft: a.drop_ft, cable_setup: a.cable_setup, role: a.role, route_kind: a.route_kind })));
+
+  // ── Division 27 cable runs (docs/design/CABLE_SETUP.md) ──────────────────
+  server.registerTool("link_run", {
+    description: `Link ONE device location to its traced route and the TR it homes to — a Division 27 cable run. Takes shape ids only: the device marker (a place_count / symbol_sweep count shape on a condition carrying a cable_setup), the route segments as measure_line linear shapes IN ORDER (segments may sit on different sheets, each measured at its own scale; trace them under a condition flagged role "route" so list_runs can report the ones left unlinked), and the TR marker (a count shape on a condition flagged role "tr"). Per cable LF = Σ measured route + the vertical (this run's vertical_ft when you state it, else the condition's vertical_ft) + loop_device_ft + loop_tr_ft; cables = cables_override or the condition's cables_per_location; location LF = per cable × cables; waste applies only in export_report's order figure. There is NO routing factor and NO estimated length: an agent cannot submit a length, only shapes that already carry measured geometry. Refuses, minting nothing, when a route id is not a measured linear shape, a route sits on an unscaled sheet (set_scale first), the device condition lacks a required value (vertical_ft on an access_door — set it with edit_condition, or state this run's own vertical_ft; any other missing value still refuses), the TR id is not a TR marker, or the device is already linked or held (one pull per location; unlink_run first). A linked run whose per-cable LF exceeds its limit — the condition's stated cable_setup.max_link_ft, else 295 ft (the TIA-568 copper permanent-link limit) for copper or no stated medium; fiber and coax with no stated limit are not checked — still counts and comes back over_length with a note naming the limit (limit_ft / limit_source ride the reply once any condition states a medium or a limit); a route on a sheet whose scale an agent set and no person confirmed comes back scale_unconfirmed. One traced segment MAY serve several runs (a shared corridor trunk) — a wrong trunk is then wrong for every run on it. vertical_ft is for a device whose vertical differs from its condition's (a door contact at the head beside a keypad at 48", one camera on a tall pole): state it here instead of splitting the condition only for a vertical. Trace a trunk once under a route condition tagged route_kind "trunk" and each device's branch under one tagged "branch", then pass [branch, trunk…] in order: the reply splits route_lf into branch_lf and trunk_lf. To change an existing run's vertical_ft or cables_override, unlink_run it and link_run again with the new value (the canvas Runs panel edits it in place). Lands PENDING human review like every agent shape and counts in totals the same way; lengths resolve from the linked shapes, so a recalibration re-flows the run and a deleted shape breaks it (listed under list_runs unlinked, never dropped). One undo_last step. ${COORDS}`,
+    inputSchema: {
+      device_shape_ids: z.array(z.string()).min(1).describe("The device location — usually ONE count-shape id (list_shapes)"),
+      route_shape_ids: z.array(z.string()).min(1).describe("The route segments, linear shape ids, in order from device to TR"),
+      tr_id: z.string().describe("The TR marker's shape id — a count shape on a condition with role 'tr'"),
+      cables_override: z.number().int().min(1).optional().describe("Cables at this location, replacing the condition's cables_per_location for this run only"),
+      vertical_ft: z.number().min(0).optional().describe("This run's own vertical in feet (0 or more), replacing the condition's vertical_ft for this location only — a STATED allowance from the drawings or spec, never a guess. Omit it to use the condition's. A condition missing only its vertical (access_door) links a run that states one"),
+    },
+    outputSchema: linkRunOutput,
+  }, run("link_run", (a) => session.linkRun({ device_shape_ids: a.device_shape_ids, route_shape_ids: a.route_shape_ids, tr_id: a.tr_id, cables_override: a.cables_override, vertical_ft: a.vertical_ft })));
+
+  server.registerTool("list_runs", {
+    description: `Every cable run resolved against the current shapes — linked ones with route / per-cable / location LF, withheld ones with the setup value still missing, broken ones with what is gone — plus the UNLINKED list (device markers no linked run reaches, route segments no linked run uses; both excluded from totals, never assigned a length) and the summary rollups (per condition × TR, by TR, by cable type, totals; ×N and waste applied; EA beside pulls so the gap shows). HELD devices (hold_devices) are listed apart with their reason — excluded from totals like unlinked ones, but by decision. Warnings name each condition whose route segments carry rise/drop legs (that condition's LF in the regular report includes the legs and is not a cable length — runs read the plan length only), every linked run over its length limit per cable (295 ft, the TIA-568 copper permanent-link limit, unless the condition states cable_setup.max_link_ft; fiber and coax with no stated limit are not checked — once any condition states a medium or a limit each run carries limit_ft and limit_source, and the warning groups the runs by limit), and the sheets whose agent-set scale no person has confirmed. Once a route condition is tagged trunk or branch (edit_condition route_kind), each run also carries branch_lf / trunk_lf / other_lf (summing to route_lf, each segment by its own condition's kind — never a share of a full-route LF), and a pathway block lists every route condition with its segments counted ONCE: pathway LF, LF used and not used by linked runs, linked runs, ×N. Once a cable_setup states package_ft (edit_condition), an order block gives boxes / reels per CABLE TYPE: the type's order LF (waste and ×N in) pooled across its conditions and rounded up once, with purchased and leftover LF; a type with no size, conflicting sizes or no cable type reads blank (null), never 0, and a warning names any conflict. DUPLICATES: device markers on cable conditions stacked within 1 ft on one sheet, and overlay plans (two sheets of one page size whose cable markers coincide in position, 3 or more and at least half the smaller set) — the same devices counted twice. A flag only, nothing changed: confirm with the estimator, then move one sheet's set to a non-cable reference condition with edit_shape { condition }; never delete a marker on this alone. Each run names its device sheet, route sheet(s) and TR sheet. Review status per run: an agent-linked run counts while pending, exactly as a pending agent shape does. An empty list is a result, not an error.`,
+    inputSchema: {},
+    outputSchema: listRunsOutput,
+  }, run("list_runs", () => session.listRuns()));
+
+  server.registerTool("hold_devices", {
+    description: `HOLD device locations that deliberately get no cable run, with the reason — an area whose routing the drawings do not show, devices furnished by others, a future phase. A hold adds NO length and NO pull: held devices stay out of every total exactly as unlinked ones do, but list_runs, export_report and the marked set list them as HELD with your reason instead of "no run links this device", so the gap reads as a decision, not a miss. Use it instead of a cloud or a note when you decide not to link. Takes device marker ids (count shapes on a condition carrying a cable_setup) and a required reason; refuses a device that a run links or another hold names. Lands PENDING human review like a run. unlink_run with the hold_id releases it; one undo_last step. ${COORDS}`,
+    inputSchema: {
+      device_shape_ids: z.array(z.string()).min(1).describe("Device marker ids to hold (list_runs' unlinked.devices names them)"),
+      reason: z.string().min(1).describe("Why these devices get no run — prints on the report and the marked set"),
+    },
+    outputSchema: holdDevicesOutput,
+  }, run("hold_devices", (a) => session.holdDevices({ device_shape_ids: a.device_shape_ids, reason: a.reason })));
+
+  server.registerTool("unlink_run", {
+    description: `Remove a cable run or a hold by id. The device, route and TR shapes stay committed; only the link (or hold) goes, and its device returns to the unlinked list. One undo_last step re-seats it.`,
+    inputSchema: { run_id: z.string().describe("A run id from link_run or list_runs, or a hold id from hold_devices") },
+    outputSchema: unlinkRunOutput,
+  }, run("unlink_run", ({ run_id }) => session.unlinkRun(run_id)));
 
   server.registerTool("propose_condition_edit", {
     description: `PROPOSE a change to a condition instead of making it (#365): a diff — a new finish tag (rename), waste %, ×N multiplier, height_ft, roll_setup — held PENDING until the estimator accepts it from the panel. edit_condition is the wrong power for "I think this condition is wrong": a tag rename or a knob change should be a decision the estimator makes, not one they discover. Until acceptance NOTHING changes — takeoff_summary and export_report keep computing from the current values and carry the diff beside them (proposed_condition_edits), and once accepted the report is byte-for-byte what a direct edit_condition would have produced (the same write path). Only fields that differ from the current value are recorded; a proposal that changes nothing is refused, and a rename onto a tag another condition already carries is refused (two conditions on one tag would make one unreachable). One pending diff per condition — proposing again replaces the earlier one (undo_last restores it). rationale is required: the estimator accepts a reason.`,

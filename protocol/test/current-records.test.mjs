@@ -11,7 +11,8 @@ import { mergeTakeoffImport } from "../../web/src/lib/importTakeoff.js";
 import { conditionTotals } from "../../web/src/lib/totals.js";
 import { buildProjectArchive, parseProjectArchive } from "../../web/src/lib/projectArchive.js";
 import { sanitizeStitches } from "../../web/src/lib/stitches.ts";
-import { validator, assertValid, legacyId, draftId } from "./helpers.mjs";
+import { computeCableTakeoff, mintCableSetup, mintCableRun, mintCableHold } from "../../web/src/lib/cable.js";
+import { validator, assertValid, legacyId, draftId, schemaBase } from "./helpers.mjs";
 
 const ajv = validator();
 const plan = fileURLToPath(new URL("../../demo/sample-plan.pdf", import.meta.url));
@@ -214,4 +215,80 @@ test("wall bands and physically clipped base runs conform without floor deductio
   for (const s of record.shapes) assert.equal(s.origin.reviewed, false);
   session.undoLast(1);
   assert.deepEqual(session.exportPayload(), before);
+});
+
+test("Division 27 cable setup, TR role and cable runs conform as additive records; a cable-free document writes none of them", async () => {
+  const d = browserDocument();
+  d.conditions.push(
+    { id: "condition-tr", finish_tag: "TR", multiplier: 1, waste_pct: 0, materials: [], role: "tr" },
+    { id: "condition-data", finish_tag: "DATA-1", multiplier: 1, waste_pct: 12, materials: [], cable_setup: mintCableSetup("wall_outlet", { cables_per_location: 2, cable_type: "CAT6A" }) },
+  );
+  d.shapes = applyShapeCommand(d.shapes, { type: "add", shapes: [
+    { id: "tr-1", sheet_id: sheet, condition_id: "condition-tr", measure_role: "count", verts_norm: [[0.2, 0.2]], computed: { count: 1 }, label: "MDF", origin: { method: "manual" } },
+    { id: "dev-1", sheet_id: sheet, condition_id: "condition-data", measure_role: "count", verts_norm: [[0.6, 0.6]], computed: { count: 1 }, origin: { method: "manual" } },
+    { id: "rt-1", sheet_id: sheet, condition_id: "condition-1", measure_role: "linear", verts_norm: [[0.2, 0.3], [0.6, 0.3]], computed: { area_sf: 0, perimeter_lf: 87.5 }, origin: { method: "manual" } },
+  ] }).shapes;
+  d.cable_runs = [{ ...mintCableRun({ device_shape_ids: ["dev-1"], route_shape_ids: ["rt-1"], tr_id: "tr-1" }), id: "run-1" }];
+  checkBoth(d);
+  const t = computeCableTakeoff(d.conditions, d.shapes, d.cable_runs);
+  assert.deepEqual({ per: t.resolved.runs[0].per_cable_lf, order: t.summary.totals.cable_lf_order }, { per: 130.5, order: 292.32 });
+  // a run's own vertical (vertical_override, feet) replaces the condition's for that run only
+  const withVertical = { ...d, cable_runs: [{ ...d.cable_runs[0], vertical_override: 9 }] };
+  checkBoth(withVertical);
+  const tv = computeCableTakeoff(withVertical.conditions, withVertical.shapes, withVertical.cable_runs);
+  assert.deepEqual({ v: tv.resolved.runs[0].vertical_ft, per: tv.resolved.runs[0].per_cable_lf, order: tv.summary.totals.cable_lf_order }, { v: 9, per: 116.5, order: 260.96 });
+  const draftCheck = ajv.getSchema(`${schemaBase}v1/takeoff-document.schema.json`);
+  assert.equal(draftCheck({ ...structuredClone(withVertical), schema: draftId, cable_runs: [{ ...withVertical.cable_runs[0], vertical_override: -1 }] }), false, "a negative vertical does not conform");
+  // a HOLD rides the same list: devices deliberately without a run, with the reason
+  const withHold = { ...d, shapes: [...d.shapes, { id: "dev-2", sheet_id: sheet, condition_id: "condition-data", measure_role: "count", verts_norm: [[0.7, 0.6]], computed: { count: 1 }, origin: { method: "manual" } }] };
+  withHold.cable_runs = [...d.cable_runs, { ...mintCableHold({ device_shape_ids: ["dev-2"], reason: "by others" }), id: "hold-1" }];
+  checkBoth(withHold);
+  const th = computeCableTakeoff(withHold.conditions, withHold.shapes, withHold.cable_runs);
+  assert.deepEqual({ pulls: th.summary.totals.pulls, held: th.summary.totals.held_devices }, { pulls: 1, held: 1 });
+  // trunk / branch: route_kind on role "route" conditions, a run listing [branch, trunk]
+  const tb = {
+    ...d,
+    conditions: [...d.conditions,
+      { id: "condition-tray", finish_tag: "TRAY", multiplier: 1, waste_pct: 0, materials: [], role: "route", route_kind: "trunk" },
+      { id: "condition-branch", finish_tag: "BRANCH", multiplier: 1, waste_pct: 0, materials: [{ id: "m-1", name: "J-hook", per: 5, basis: "linear", unit: "EA" }], role: "route", route_kind: "branch" }],
+    shapes: [...d.shapes,
+      { id: "tray-1", sheet_id: sheet, condition_id: "condition-tray", measure_role: "linear", verts_norm: [[0.2, 0.4], [0.6, 0.4]], computed: { area_sf: 0, perimeter_lf: 100 }, origin: { method: "manual" } },
+      { id: "br-1", sheet_id: sheet, condition_id: "condition-branch", measure_role: "linear", verts_norm: [[0.6, 0.4], [0.6, 0.6]], computed: { area_sf: 0, perimeter_lf: 40 }, origin: { method: "manual" } }],
+    cable_runs: [{ ...mintCableRun({ device_shape_ids: ["dev-1"], route_shape_ids: ["br-1", "tray-1"], tr_id: "tr-1" }), id: "run-1" }],
+  };
+  checkBoth(tb);
+  const tt = computeCableTakeoff(tb.conditions, tb.shapes, tb.cable_runs);
+  assert.deepEqual({ route: tt.resolved.runs[0].route_lf, branch: tt.resolved.runs[0].branch_lf, trunk: tt.resolved.runs[0].trunk_lf, pathway: tt.pathway.totals.pathway_lf }, { route: 140, branch: 40, trunk: 100, pathway: 140 });
+  // boxes / reels: package_ft (feet > 0) on a cable setup; boxes pool per cable type
+  const boxed = { ...d, conditions: d.conditions.map((c) => (c.cable_setup ? { ...c, cable_setup: { ...c.cable_setup, package_ft: 1000 } } : c)) };
+  checkBoth(boxed);
+  const tbx = computeCableTakeoff(boxed.conditions, boxed.shapes, boxed.cable_runs);
+  assert.deepEqual(tbx.order.rows.map((r) => [r.cable_type, r.order_lf, r.boxes, r.purchased_lf, r.leftover_lf]), [["CAT6A", 292.32, 1, 1000, 707.68]]);
+  assert.equal(t.order, null, "no package_ft: no order table");
+  for (const bad of [0, -1, "1000"]) {
+    const v = { ...structuredClone(boxed), schema: draftId };
+    v.conditions.find((c) => c.cable_setup).cable_setup.package_ft = bad;
+    assert.equal(draftCheck(v), false, `package_ft ${JSON.stringify(bad)} does not conform`);
+  }
+  // medium and max_link_ft (item 6): optional cable_setup fields; a stated
+  // limit replaces the 295 ft copper check for that condition's runs
+  const fib = { ...d, conditions: d.conditions.map((c) => (c.id === "condition-data" ? { ...c, cable_setup: { ...c.cable_setup, medium: "fiber", max_link_ft: 100 } } : c)) };
+  checkBoth(fib);
+  const tf = computeCableTakeoff(fib.conditions, fib.shapes, fib.cable_runs);
+  assert.deepEqual({ per: tf.resolved.runs[0].per_cable_lf, over: tf.resolved.runs[0].over_length, limit: tf.resolved.runs[0].limit_ft, source: tf.resolved.runs[0].limit_source }, { per: 130.5, over: true, limit: 100, source: "stated" });
+  const withSetup = (patch) => ({ ...structuredClone(fib), schema: draftId, conditions: fib.conditions.map((c) => (c.id === "condition-data" ? { ...c, cable_setup: { ...c.cable_setup, ...patch } } : c)) });
+  assert.equal(draftCheck(withSetup({ medium: "glass" })), false, "a medium outside copper / fiber / coax does not conform");
+  assert.equal(draftCheck(withSetup({ max_link_ft: 0 })), false, "a limit of 0 does not conform");
+  assert.equal(draftCheck(withSetup({ medium: "coax" })), true);
+  // the MCP writer emits none of the keys for a session without cable work
+  const session = new Session();
+  await session.loadPlan(plan);
+  session.setScale(sheet, { use_detected: true });
+  session.placeCount(sheet, [[600, 600]], { condition: "C-1" });
+  const record = session.exportPayload();
+  assert.equal("cable_runs" in record, false);
+  assert.equal("cable_setup" in record.conditions[0], false);
+  assert.equal("role" in record.conditions[0], false);
+  assert.equal("route_kind" in record.conditions[0], false);
+  checkBoth(record);
 });

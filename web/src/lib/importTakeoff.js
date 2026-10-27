@@ -19,6 +19,7 @@
 import { TAKEOFF_SCHEMA as ANN_SCHEMA } from "./takeoffConstants.ts";
 import { sanitizeApprovals } from "./approvals.js";
 import { normalizeAgentReview } from "./reviewState.js";
+import { sanitizeCableRuns } from "./cable.js";
 import { isValidMultiplier } from "./multiplier.js";
 
 /** Parse + gate an import file's text. Throws with copy the message bar shows
@@ -190,6 +191,13 @@ export function mergeTakeoffImport(current, imported, knownFiles = null) {
   // record is dropped here rather than wedging the render loop later.
   const approvalIds = new Set(arr(cur.approvals).map((a) => a?.id).filter(Boolean));
   const addedApprovals = sanitizeApprovals(imported.approvals).filter((a) => !approvalIds.has(a.id));
+  // ── cable runs (Division 27): transport, not minting ──────────────────────
+  // The markup rule again: append unseen ids, skip ones already here. A run
+  // references shapes by id and import never re-mints shape ids, so nothing
+  // is re-pointed; a run whose shapes did not arrive resolves as broken
+  // (listed, never dropped). Same load gate the canvas hydrate runs.
+  const runIds = new Set(arr(cur.cable_runs).map((r) => r?.id).filter(Boolean));
+  const addedRuns = sanitizeCableRuns(imported.cable_runs).filter((r) => !runIds.has(r.id));
 
   // ── scales: the operator's calibration wins per sheet ────────────────────
   const sheets = [...arr(cur.sheets)];
@@ -211,6 +219,7 @@ export function mergeTakeoffImport(current, imported, knownFiles = null) {
     ...(addedProposals.length ? { proposals: [...arr(cur.proposals), ...addedProposals] } : {}),
     ...(addedEdits.length ? { condition_edit_proposals: [...arr(cur.condition_edit_proposals), ...addedEdits] } : {}),
     ...(addedApprovals.length ? { approvals: [...arr(cur.approvals), ...addedApprovals] } : {}),
+    ...(addedRuns.length ? { cable_runs: [...arr(cur.cable_runs), ...addedRuns] } : {}),
     sheets,
   };
   return {

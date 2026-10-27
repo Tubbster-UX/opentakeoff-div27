@@ -295,7 +295,8 @@ Open **Supporting Materials** on a condition. Two free-text fields sit above the
 
 Below that, list what actually goes on the order: adhesive, sealer, polyurethane, thinset, grout, cove-base adhesive. Each line carries:
 
-- a **coverage rate**—*1 unit per N*—and a **basis**: floor SF, linear LF, each, or **seam LF**;
+- a **coverage rate**—*1 unit per N*—and a **basis**: floor SF, linear LF, each, or **seam LF**
+  (on a cable device condition, also **cable** and **pull**—see below);
 - a **round up** flag (on by default—you buy whole buckets and bags);
 - a **preset picker** for adhesive and mortar lines: real trowel-notch and roller spread rates (PSA rollers at 300 SF/gal down to coarse wood notches at 40 SF/gal; mortar trowels from 90 to 30 SF per 50-lb bag). Generic industry-typical values—always verify against the product data sheet;
 - for **grout** lines, an inline **calculator**: enter tile L × W × thickness, joint width (1/32″–1/2″), and bag weight, and the SF/bag rate derives itself, writing its work into the note (`12×24×3/8″ @ 1/8″ · 25 lb`);
@@ -311,6 +312,18 @@ whole length; the same square footage as two separate 10-ft rooms seams not at a
 percentage-of-perimeter rule most estimators fall back on can't tell those two jobs apart.
 Set the condition's roll goods first: without a roll setup, or with nothing traced yet, a seam
 LF line reads **0**, which means *needs a layout* rather than a number you shouldn't trust.
+
+**The cable and pull bases** are figured the same way, from a device condition's linked cable
+runs (Cable runs, below). They appear in the basis picker only on a condition with a cable
+setup. **cable** divides by the condition's linked cables and **pull** by its linked pulls
+(one per location), the numbers in the Cable summary: ×N applied, each run's cable override
+honored, unlinked, held, withheld and broken devices left out, pending runs counted. A jack per
+cable is *1 ea per 1 cable*; a faceplate per location is *1 ea per 1 pull*; a patch cord per
+cable and a camera mount per pull work the same way. Don't key these parts on **each**: a count
+line sees every marker, including the held and unlinked ones, and no rate can follow a run
+whose cable count differs. Beside the basis the line shows how many cables or pulls are linked;
+with no linked run yet it reads **0** and says so, and the Report, CSV and Excel print the
+reason in the line's note.
 
 ### One finish, two areas — condition twins
 
@@ -391,6 +404,167 @@ cut edits on shapes are kept but go inert.
 
 Agents get the same thing headlessly—`roll_setup` is a field on the MCP server's
 `edit_condition`, and the reply echoes the figured order ([§14](#14-ai-settings-and-driving-opentakeoff-from-an-agent)).
+
+### Cable runs — Division 27
+
+A cable takeoff measures each device's route and adds fixed allowances to it. Nothing is
+estimated: horizontal length comes only from route segments you trace.
+
+**Set up the conditions.** In the Takeoffs panel, select a count condition and choose
+**+ cable…** in its properties:
+
+- **A device type** (Wall outlet, WAP, Camera, Access control door, Other ceiling device,
+  Custom) makes it a device condition. The condition's vertical applies to each of its
+  devices unless a run states its own (see the Runs panel below), so devices that share a
+  type but not a vertical (door contacts at the head and a keypad at 48″, say) can stay on
+  one condition. The type fills in its starting vertical and service
+  loops, and the condition's waste becomes 12% if it had none. The project spec governs: edit
+  **Cables/loc**, **Type** (free text such as `CAT6A`, which groups the summary), **Vertical**,
+  **Loop dev** and **Loop TR** to match it. An Access control door has no starting vertical;
+  until you enter one, its runs are withheld and the reason shows in red under the fields,
+  except a run that states its own vertical.
+  **Medium** (Unspecified, Copper, Fiber, Coax) and **Limit** (the longest link per cable the
+  spec or the system's datasheet allows, in ft, or m in metric) set the length check each run
+  gets; see *Flags you should not price past* below. Neither is filled in for you, and the
+  **Type** text never sets the medium.
+- **Telecom room (TR)** makes a count condition's markers the rooms runs home to.
+- **Cable route (linear)** on a linear condition marks its lines as routes. Any route
+  segment that no run uses is listed as unlinked. Its **Kind** is **Trunk** (shared pathway,
+  such as the cable tray), **Branch** (one device out to the trunk) or **Unspecified**;
+  **Cable route: trunk** and **Cable route: branch** in the **+ cable…** menu set both at once.
+
+**Trace the trunk once, each branch on its own.** Put the cable tray or corridor run on a
+Trunk condition and trace it once. Put each device's run from the device out to the tray on a
+Branch condition, one segment per device. When you link, click the device, its branch, then
+the trunk segment(s) toward the TR. Every run that rides the tray lists the same trunk segment,
+so each run's cable still counts the trunk in full, and nothing has to be split by hand. Don't
+trace one line from the device all the way back to the TR: that line holds the trunk footage
+too, and its branch length can't be read back out of it. Once any route condition has a kind,
+the Cable runs sheet adds **Branch LF** and **Trunk LF**, and the Report, CSV and Excel add a
+**Pathway** table with one row per route condition: segments, pathway LF with each segment
+counted once, the LF linked runs use and don't use, linked runs, and ×N. A takeoff with no kind
+set exports exactly as before.
+
+**J-hooks come from a material row on the branch condition.** Add a supporting material to the
+Branch condition with basis **Linear** and **per** set to the hook spacing (5 for one hook every
+5 ft). Its basis is that condition's own LF, each segment counted once and multiplied by ×N, so
+40 ft and 35 ft of branch at 5 ft is 15 hooks, however many cables ride them. That LF is the
+condition's regular LF, so it includes any rise or drop legs set on the condition; the Pathway
+table reads plan length only.
+
+**Place and trace.** Count the devices (Count or Symbol), count each TR, and trace each route
+segment with Linear under the route condition. A route may continue on another sheet; each
+segment is measured at its own sheet's scale.
+
+**Link Run (`W`).** Click the device marker, then its route segments in order from the device
+toward the TR, then the TR marker, and press `⏎`. A readout at the top of the canvas shows the
+measured route and the per-cable length before you commit, and names anything that would
+refuse: a segment on an unscaled sheet, a device condition missing its vertical, a device that
+is already linked. `⌫` takes back the last pick, clicking the newest segment again removes it,
+`Esc` cancels the draft. One segment may serve several runs (a shared corridor trunk). A
+segment on a stitched surface links here, in the canvas, which knows the stitch's scale.
+
+**The Runs panel** (the cable button on the right rail) lists every run by condition with its
+per-cable length × cables, its status, and **Accept** for runs an agent linked; the unlinked
+devices and routes; and each TR with a name field (the name is the marker's label, so it also
+appears as a label bucket in the Report's group-by-label view and the workbook's floor × room
+tab). **⌖** puts any item on screen. Unlinked devices carry an amber dashed ring on the sheet,
+unlinked routes an amber halo, and each TR prints its name.
+
+**A run's own vertical.** **↕** on a run opens two fields: **vertical** (ft, or m in metric)
+and **cables**. A value there replaces the condition's for that location only, such as one
+camera on a tall pole or a keypad among door contacts; blank means the condition's value,
+shown as the placeholder. Press **Set** or `⏎`. The run then reads `run's own: vertical 9 ft
+(condition 23 ft)` under its row, and the Cable runs sheet shows the vertical used, with the
+same words in Reason / notes. A run that states its own vertical counts even when its
+condition has none entered (an Access control door); every other missing value still
+withholds it. A vertical is a value you state from the drawings or spec, never a guess; 0 is
+allowed. Setting and clearing it are on the undo stack. To give a new run its own vertical,
+link it first, then use **↕**. A run on a condition with no vertical can't be linked with
+`W` yet, so enter the condition's vertical, link, and set the run's own.
+
+**Hold devices that get no run.** When you decide some devices get no run, such as an area whose
+routing the drawings don't show or devices furnished by others, tick them in the panel's
+Unlinked list, type the reason, and press **Hold**. Held devices stay out of every total, as
+unlinked ones do, but they move to a **Held** list with your reason, wear a grey dotted ring on
+the sheet instead of the amber one, and print as held in the Report, the exports and the marked
+set. **release** returns them to the unlinked list; holding and releasing are undoable.
+
+**Flags you should not price past.** A run longer than its condition's length limit per cable
+still counts, because the measured length is the truth, but it is flagged in the Runs panel
+(`>295`, or `>1000` against a stated 1000 ft limit) and named in a warning. Check the route; if it
+stands, the run needs a closer TR or a length test and an owner notice. The limit comes from
+the condition's cable setup:
+
+- a **Limit** you enter replaces the default for that condition's runs; the flag reads *exceeds
+  the stated 1000 ft limit for FIBER-1*;
+- with no Limit, **Copper** or an unspecified medium is checked at **295 ft** (the TIA-568 limit
+  for a 4-pair copper permanent link, 90 m), as it always was;
+- with no Limit, **Fiber** and **Coax** are not checked at all. They have no single limit (it
+  depends on the application and the fiber grade, or the cable and the system), so enter the
+  spec's.
+
+The line under the setup fields says which check applies. Once any condition states a medium
+or a limit, the Cable summary's *Runs over 295 ft* column reads *Runs over length limit*, the
+Cable runs sheet gains *Limit ft* and *Limit source* before *Reason / notes*, and the warning
+groups the runs by the limit they were checked against. A takeoff that states neither exports
+exactly as before. A route on a sheet
+whose scale an agent set and no person has confirmed is flagged the same way. Confirm the
+scale before pricing, because every cable length on that sheet rests on it.
+
+**Devices counted twice.** The Runs panel's **Possible duplicates** list and a warning catch
+the same device marked twice. On one sheet, two markers on cable conditions within 1 ft of each
+other (a symbol sweep plus a click) are flagged; on a sheet with no scale the limit is 0.35% of
+the sheet instead, and the warning says so. Across sheets, two sheets of the same page size
+whose device markers sit at the same positions, 3 or more and at least half of the smaller
+set, are flagged as overlay plans: "T3.1 and T4.1 share 14 device positions: CAM-1 on T3.1 ↔
+CAM-1 on T4.1 (14)". That happens when the comms plan draws camera outlets and the security
+plan draws the same cameras. Nothing is changed for you, and every marker still counts. Use ⌖
+to look, then move the reference sheet's markers to a condition with no cable setup, or remove
+a marker clicked twice. Markers already on a non-cable condition are not flagged. The canvas
+compares the sheets you have opened in this session.
+
+Per cable LF = measured route + vertical (the run's own, else the condition's) + both loops.
+Pulls are per location and cables per pull; the condition's waste % applies only to the order
+figure and ×N to the whole row. Linking, unlinking, accepting and a run's own vertical or
+cables are on the undo stack (`⌘Z`); cable setup field edits, like other condition
+properties, are not.
+
+**Parts per cable and per pull.** Jacks, faceplates, patch cords and mounts go in the device
+condition's Supporting Materials on the **cable** or **pull** basis (§4, Supporting materials),
+so they follow the runs: link a run and the jacks go up by its cable count; hold a device and
+its parts drop out of the buy list with it.
+
+The Report shows a **Cable summary** (per condition and TR, subtotaled by TR and by cable type,
+device EA beside pulls, so the gap is exactly the unlinked plus held devices), the **Held**
+list and the **Unlinked** list, where **Show** closes the Report and puts the item on screen.
+CSV, Excel and JSON carry the same tables plus a per-run sheet naming each run's device sheet,
+route sheet(s) and TR sheet.
+
+**Boxes and reels.** Cable is bought in boxes or reels, not by the foot. Enter the box or
+reel length in a device condition's **Box/reel** field (1000 for a Cat 6A box; ft, or m in
+metric). The Report, CSV and Excel then add a **Cable order** table with one row per cable
+type: order LF, box/reel size, boxes, purchased LF and leftover LF. Boxes are bought against
+the order LF (waste and ×N included), and every condition with the same **Type** shares them:
+three conditions of 400 LF of CAT6A are 2 boxes of 1000 ft, not 3. Entering the size on one
+condition of a type sizes the whole type. A blank cell means not figured, never 0: no condition
+of that type has a size, its conditions have different sizes (a warning names them), or the
+condition has no **Type**. The marked-set cover adds a line per sized cable type
+(`Cable order: CAT6A: 36 boxes of 1,000 LF · …`). Leave the field blank and nothing changes.
+
+**The marked set** draws each run's route with a chip reading its run ID, device condition and
+per-cable length (`run-c711ef · DATA-1 · 54.6 LF`). The chip is amber with `>295` (or the
+run's stated limit, such as `>1000`) for an over-length run and red with the status for a withheld or broken one. The same run ID is
+printed beside the device marker, so a device on the comms plan connects to its route on
+the ceiling plan. The chips are placed clear of each other along the route. Unlinked devices
+get an amber ring and held ones a grey ring, and each TR prints its name. The cover adds pulls,
+cables, net and order cable LF under each device condition, says what a route condition is
+(pathway, not a cable quantity), keys the marks, and prints the cable warnings in full. The
+run ID on a chip is the start of the full ID in the Cable runs sheet.
+
+Agents do the same work over MCP (`link_run`, `list_runs`, `unlink_run`, `hold_devices` in
+[`docs/MCP.md`](MCP.md)); their runs arrive pending and count, as their shapes do. Design:
+[`docs/design/CABLE_SETUP.md`](design/CABLE_SETUP.md).
 
 ### Import from schedule
 
@@ -754,7 +928,7 @@ Open **Report** for the whole takeoff on one page: a per-condition table, the su
 - **Measured versus w/Waste.** Waste lives only in the w/Waste column: *SF w/Waste = measured × (1 + waste %)*. The measured quantity is never inflated, so your takeoff and your buy list stay honest about which is which. Waste applies to SF and LF, never EA.
 - **SY** = w/Waste SF ÷ 9.
 - **Multipliers** show as ×N beside the finish tag and multiply every quantity.
-- **Buy list**: each material's quantity = measured basis (floor SF / linear LF / each / figured seam LF) ÷ its coverage rate, **rounded up to whole units**—the number you order, not a theoretical gallon and a half. The combined list sums same-name materials after per-condition rounding.
+- **Buy list**: each material's quantity = measured basis (floor SF / linear LF / each / figured seam LF / linked cables / linked pulls) ÷ its coverage rate, **rounded up to whole units**—the number you order, not a theoretical gallon and a half. The combined list sums same-name materials after per-condition rounding.
 - The footer says it plainly: *Quantities derived from drawings at stated scales; verify in field.*
 
 ### Columns, grouping, templates, theme
@@ -1030,7 +1204,7 @@ What's sent, and only while an agent run you started is going: your goal, the pr
 
 The same engine speaks [MCP](https://modelcontextprotocol.io), one command away:
 `npx -y opentakeoff-mcp` (or the one-click `opentakeoff-mcp.mcpb` bundle for Claude Desktop). **Help → Connect your AI** in the app (also on the opening screen and in the **⋯** menu) has the setup for Claude Desktop, Claude Code, Codex and Cursor with copy buttons, and a first question to ask about the sample plan; [CONNECT.md](CONNECT.md) is the same walk-through. An
-MCP client gets **<!--tool-count-->53<!--/tool-count--> tools** plus browsable sheet resources, over the very same measuring engine,
+MCP client gets **<!--tool-count-->57<!--/tool-count--> tools** plus browsable sheet resources, over the very same measuring engine,
 with the same scale gate and the same provenance receipts:
 
 | Group | Tools |
@@ -1120,6 +1294,7 @@ Every shortcut in the app, verified against the code. Letter keys are suppressed
 | `⇧D` | Deduct rectangle |
 | `H` | Highlighter |
 | `N` | Dimension line—a standalone length label at the sheet's scale (markup, never counted) |
+| `W` | Link Run—click a device, its route segments in order, the TR, then `⏎` (Division 27 cable runs) |
 | `K` | Check a dimension |
 | `V` | Select |
 | `G` | Sheet gallery |

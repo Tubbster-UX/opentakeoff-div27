@@ -52,6 +52,42 @@ the takeoff reaches them—details in
 [`mcp/README.md`](../mcp/README.md#staged-tool-exposure-opt-in). Needs a
 client that honors `tools/list_changed`; leave it unset otherwise.
 
+### Auto-save
+
+The session's takeoff lives in memory, and a stdio server stops when its
+client does. So from `load_plan` on, the server writes the takeoff to
+`<plan> - takeoff autosave.json` beside the plan after every change—the
+same `opentakeoff.takeoff_canvas.v1` payload `export_takeoff` returns, plus
+one top-level `autosave: { saved_at, tool, plan }` key that marks the file as
+an autosave. Both importers ignore that key.
+
+- **When:** after every journaled change, `undo_last`, `import_takeoff`, and
+  a first `set_scale`. A burst of calls is coalesced into one write
+  (0.75 s after the last change, at most 2 s after the first), each write
+  goes to a temp file renamed into place, and the last change is written
+  synchronously when the process exits, whether the client closes stdin or
+  sends SIGINT, SIGTERM or SIGHUP. A crash loses at most about 2 seconds.
+- **Where it says so:** `load_plan`'s reply carries `autosave.path`.
+  `takeoff_summary` carries `autosave: { path, saved_at }`, or `error` when
+  the last write failed; a pending change is written before the summary
+  replies. A failed write never fails the tool call that triggered it.
+- **Resuming:** when `load_plan` finds an earlier autosave at that path, the
+  reply names it, with its time and shape, condition and cable-run counts,
+  and does not load it. Call `import_takeoff` on that path to resume. If the
+  session changes something without importing it, the old file is first
+  renamed beside itself (`… (before <time>).json`, named in
+  `takeoff_summary`'s `autosave.moved_aside`), so it is never lost.
+- **Never clobbers:** a file at the path that OpenTakeoff didn't write as an
+  autosave, including a plain `export_takeoff` file, is left alone and
+  reported in both replies.
+- **Configure it** in the server's environment: `OPENTAKEOFF_AUTOSAVE=0`
+  turns it off; `OPENTAKEOFF_AUTOSAVE=/path/to/file.json` writes that file;
+  a directory path writes the default file name in that directory. In
+  Docker, where plans are mounted read-only, point it at a writable mount.
+
+`export_takeoff`, `export_report` and `export_marked_pdf` are still the
+deliverables; auto-save is the safety net under them.
+
 ## What the agent gets
 
 Fifty-two tools, in the order an agent tends to reach for them:
@@ -175,8 +211,8 @@ Fifty-two tools, in the order an agent tends to reach for them:
   (multi-cut parents rebuild from the pristine snapshot minus survivors—the
   canvas's own delete semantics, ported as the spec)
 - **Revise**—`edit_shape` (all five roles), `edit_materials`,
-  `edit_condition` (waste %, ×N multiplier, `height_ft`, `rise_ft` / `drop_ft` — the vertical legs every linear run adds to its plan length (#441), and the roll-goods
-  `roll_setup` opt-in—the reply echoes the figured order), `delete_shape`,
+  `edit_condition` (waste %, ×N multiplier, `height_ft`, `rise_ft` / `drop_ft` — the vertical legs every linear run adds to its plan length (#441), the roll-goods
+  `roll_setup` opt-in—the reply echoes the figured order—and the Division 27 `cable_setup` opt-in plus the `role: "tr"` / `"route"` flags), `delete_shape`,
   `undo_last`, with `list_shapes` as the mid-session inventory the mutating
   verbs assume you have
 - **Proposals** (#365)—`propose_takeoff` opens a named batch that every
@@ -188,6 +224,53 @@ Fifty-two tools, in the order an agent tends to reach for them:
   estimator's acceptance in the canvas—nothing changes until then, and the
   summary and report carry the diff beside the current values;
   `withdraw_condition_edit` drops it. Design: `design/PROPOSALS.md`
+- **Cable runs** (Division 27, [`design/CABLE_SETUP.md`](design/CABLE_SETUP.md))—`link_run`
+  joins one device marker, its traced route segments in order and the TR marker it homes to;
+  per cable LF = Σ measured route + the vertical and service loops, cables per location from
+  the setup or a per-run override, waste only on the report's order figure. The vertical is the
+  condition's unless the run states its own (`link_run vertical_ft`, feet, 0 or more), which
+  replaces it for that location only, so a device whose vertical differs from its type's stays
+  on its condition; change an existing run's vertical by `unlink_run` and linking again. No
+  routing factor and no estimated length: an agent links shapes that already carry measured
+  geometry, and a route on an unscaled sheet, a device condition missing its vertical (unless
+  the run states one), or an id that is not the right kind of shape refuses with the next move. `list_runs` resolves every
+  run (linked / withheld / broken, with reasons), lists unlinked devices and routes—every line on
+  a `role: "route"` condition no linked run uses (excluded from totals, never assigned a
+  length)—and rolls the summary up per condition × TR, by TR and
+  by cable type; `unlink_run` removes a link, shapes untouched. `hold_devices` records devices
+  that deliberately get no run, with the reason—still out of totals, listed as held instead of
+  unlinked. A run over its length limit per cable is flagged and warned: the condition's
+  `cable_setup.max_link_ft` when stated, else 295 ft (TIA-568 copper) for copper or no stated
+  `medium`; fiber and coax with no stated limit are not checked. State `medium` and the spec's
+  `max_link_ft` with `edit_condition` (never inferred from `cable_type`, never minted; `null`
+  clears either); once any condition states one, each run carries `limit_ft` and
+  `limit_source`, and a route on an
+  agent-set scale no person confirmed is flagged. `list_runs` also carries a `duplicates` block
+  and warnings for the same device counted twice: two markers on cable conditions within 1 ft
+  on one sheet, or overlay plans (two sheets of one page size whose device markers coincide, 3
+  or more and at least half the smaller set). It flags and changes nothing; the fix, a reference
+  condition with no cable setup through `edit_shape { condition }`, is the estimator's call. `takeoff_summary` and
+  `export_report` carry a `cable` block whenever a cable condition exists; agent-linked runs
+  land pending and count exactly as pending agent shapes do. Parts that follow the runs go in
+  `edit_materials` on the device condition with `basis: "cables"` (a jack or patch cord per
+  cable → `per: 1`) or `basis: "pulls"` (a faceplate or mount per location → `per: 1`): the
+  condition's linked cables and pulls, ×N applied, unlinked and held devices excluded. Use
+  them instead of `basis: "count"` with `per` = 1 ÷ cables per location; the reply's `computed`
+  lines and `export_report`'s buy list carry the result. **Trunk and branch:** trace the
+  shared trunk once under a route condition tagged `edit_condition { route_kind: "trunk" }` and
+  each device's branch as its own segment under one tagged `"branch"`, then `link_run` with
+  `[branch, trunk…]` in order from the device. Each run then carries `branch_lf`, `trunk_lf` and
+  `other_lf` (untagged) beside `route_lf`, and `list_runs`, `takeoff_summary.cable` and
+  `export_report.cable` gain a `pathway` block, one row per route condition with each segment
+  counted once. J-hooks are an `edit_materials` row on the branch condition (basis `"linear"`,
+  `per` = spacing), whose basis is that condition's LF counted once. Never derive branch LF by
+  dividing a full-route LF. **Boxes and reels:** `edit_condition { cable_setup: { package_ft:
+  1000 } }` states the feet per box or reel (`null` clears it; nothing is minted). `list_runs`,
+  `takeoff_summary.cable` and `export_report.cable` then gain an `order` block, one row per
+  cable type: the type's order LF (waste and ×N in) pooled across its conditions, `boxes` =
+  ceil(order LF ÷ `package_ft`), `purchased_lf` and `leftover_lf`. Conflicting sizes on one
+  cable type, a type with no size, and the blank cable type read `null` (with a warning for a
+  conflict), never 0
 - **Scope collision** (#366)—`takeoff_summary.shared_floor_sf` is the floor
   claimed by more than one shape across the takeoff (Σ areas − union, once per
   cell), the number that has to read zero before a total means anything;
@@ -235,7 +318,10 @@ Fifty-two tools, in the order an agent tends to reach for them:
   as config rows, importable by the app), `export_report` (the
   computed `opentakeoff.report.v1` Report document—waste-adjusted nets, the
   materials buy list as order quantities, per-sheet subtotals, scale
-  provenance; the contract for pricing consumers), `export_marked_pdf` (**the
+  provenance; the contract for pricing consumers; with `xlsx: true` it also
+  writes the canvas Report's Excel workbook, built by the same code, to
+  `<plan> - report.xlsx` beside the plan or to `xlsx_path`, and the reply adds
+  `xlsx: {path, tabs}`), `export_marked_pdf` (**the
   marked-up planset**—the plan sheets vector-copied with shapes, hatches,
   quantity chips, and annotations burned in, plus a legend cover; the
   deliverable a human reviews, with machine-traced work disclosed as pending
@@ -245,7 +331,9 @@ Fifty-two tools, in the order an agent tends to reach for them:
   directory, because the marked set belongs in the job folder. They will not
   overwrite a file they didn't write, though: a previous export of ours is
   replaced silently (the ordinary re-export loop), and anything else is refused
-  until you pass `overwrite: true`. Data-loss protection, not a sandbox—see
+  until you pass `overwrite: true`. The workbook follows the same rule: one
+  the estimator opened and saved in Excel is no longer ours, so a re-export
+  refuses to replace it. Data-loss protection, not a sandbox—see
   [`SECURITY.md`](../SECURITY.md).
 
 The full reference—including the coordinate contract (image px at render
@@ -359,8 +447,10 @@ verbatim, replies abridged:
 ▸ export_marked_pdf  {}
   { "path": "/plans/sample-plan - marked set.pdf", "sheets": 1, … }
 
-▸ export_report  { "path": "/plans/sample-report.json" }
-  { "schema": "opentakeoff.report.v1", "conditions": [...], … }
+▸ export_report  { "path": "/plans/sample-report.json", "xlsx": true }
+  { "schema": "opentakeoff.report.v1", "conditions": [...], …,
+    "xlsx": { "path": "/plans/sample-plan - report.xlsx",
+              "tabs": ["Conditions", "By sheet", "Materials", "Shapes", "By floor × room"] } }
 ```
 
 A click that misses is a readable answer, not a stack trace—outside the
@@ -398,7 +488,7 @@ New agent measurements, including `measure_polygon` and `measure_line`, explicit
 
 The [generated tool index](MCP_TOOL_INDEX.md) gives each tool's stage and required
 arguments directly from the running server's schemas. The default surface has
-<!--tool-count-->53<!--/tool-count--> tools; gated tools and the staged opener are listed separately.
+<!--tool-count-->57<!--/tool-count--> tools; gated tools and the staged opener are listed separately.
 
 Use `list_annotations` → `edit_annotation {annotation_id, text}` to shorten or clear
 a note. One `undo_last` restores the text. Geometry, dimension length, links and
