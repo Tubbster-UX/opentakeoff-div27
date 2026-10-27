@@ -22,6 +22,19 @@ The fixtures:
   - a hold, an unlinked device and an unlinked route
   - 1000 ft box sizes and cables/pulls materials rows
 
+## Required follow-up: when Div 27 merges onto current upstream
+
+These fixtures were made from `a2fe5c1`, which is built on the fork's old `main` (`18c1f1d`). Upstream OpenTakeoff has since moved to `798ee88`. Merging upstream into the Div 27 branch conflicts in 32 files. Two of them sit next to the cable math, and once reconciled they could shift per-run numbers:
+
+- **`web/src/lib/totals.js`** holds the condition totals, the cables/pulls materials bases, and the ×N and waste roll-ups.
+- **`web/src/lib/takeoffDocument.js`** is the takeoff export writer. Upstream added `estimate_settings`, `bid_proposal` and `split_view`; Div 27 added `cable_runs`.
+
+Once the reconciled Div 27 branch merges, do all of the following before trusting brink-merge on a real bid:
+
+1. Regenerate both fixture pairs from the reconciled engine (commands below), and record its commit in this file.
+2. Run `npm run check`. The rollup-vs-report test, the per-run route LF cross-check, and the BOM-vs-report totals compare brink-merge against the new engine. If a pinned total changes, find out why before updating the test.
+3. Re-run `scripts/es-open-check.mjs` on the new sample output.
+
 ## Regenerate
 
 From the repository root:

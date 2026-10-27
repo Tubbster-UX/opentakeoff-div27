@@ -72,25 +72,31 @@ try {
   await page.waitForTimeout(800);
   await page.screenshot({ path: join(outDir, "01-canvas.png") });
 
-  async function report(label, shot) {
-    await page.getByText("Reports", { exact: true }).first().click();
-    await page.getByText(label, { exact: true }).first().click();
+  // Reports menu -> one report; later reports switch tabs inside the open dialog.
+  async function report(menuLabel, tabLabel, shot) {
+    const dialog = page.locator("div.fixed.inset-0.z-50");
+    if (await dialog.count()) await dialog.getByText(tabLabel, { exact: true }).first().click();
+    else {
+      await page.getByText("Reports", { exact: true }).first().click();
+      await page.getByText(menuLabel, { exact: true }).first().click();
+    }
     await page.waitForTimeout(1500);
     const text = await page.locator("body").innerText();
     await page.screenshot({ path: join(outDir, shot) });
-    await page.keyboard.press("Escape");
-    await page.waitForTimeout(400);
     return text;
   }
-  const pack = await report("Pack List...", "02-pack-list.png");
+  const pack = await report("Pack List...", "Pack List", "02-pack-list.png");
   const models = [...new Set(file.nodes.filter((n) => n.type === "device").map((n) => n.data.model))];
   result.packList = { modelsShown: models.filter((m) => pack.includes(m)), models };
   result.checks.packListModels = result.packList.modelsShown.length === models.length;
 
-  const sched = await report("Cable Schedule...", "03-cable-schedule.png");
+  const sched = await report("Cable Schedule...", "Cable Schedule", "03-cable-schedule.png");
   const lengths = [...new Set(file.edges.map((e) => e.data?.cableLength).filter(Boolean))];
   result.cableSchedule = { lengthsShown: lengths.filter((l) => sched.includes(l)).length, lengths: lengths.length, sample: lengths.slice(0, 5) };
   result.checks.cableLengths = result.cableSchedule.lengthsShown === lengths.length;
+} catch (e) {
+  result.checks.completed = false;
+  result.error = String(e?.message ?? e).split("\n")[0];
 } finally {
   await browser.close();
   stop();
