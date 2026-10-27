@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { Session } from "./src/session.ts";
+import { Autosave, installExitFlush } from "./src/autosave.ts";
 import { registerTools } from "./src/tools.ts";
 import { registerResources } from "./src/resources.ts";
 import { applyStagedTools, STAGED_INSTRUCTIONS } from "./src/staging.ts";
@@ -52,6 +53,12 @@ export function buildServer(
 
 // Connect stdio only when run as the entry point (tests import buildServer and
 // wire an in-memory transport instead).
+// Auto-save (src/autosave.ts) is attached here, at the stdio entry point only:
+// the session's work is written beside the plan as it changes, and the exit
+// hook writes the last change before the process goes. Tests and scripts that
+// build a Session directly never write a file.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await buildServer().connect(new StdioServerTransport());
+  const session = new Session();
+  installExitFlush(new Autosave().attach(session));
+  await buildServer(session).connect(new StdioServerTransport());
 }

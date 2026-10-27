@@ -52,6 +52,42 @@ the takeoff reaches them—details in
 [`mcp/README.md`](../mcp/README.md#staged-tool-exposure-opt-in). Needs a
 client that honors `tools/list_changed`; leave it unset otherwise.
 
+### Auto-save
+
+The session's takeoff lives in memory, and a stdio server stops when its
+client does. So from `load_plan` on, the server writes the takeoff to
+`<plan> - takeoff autosave.json` beside the plan after every change—the
+same `opentakeoff.takeoff_canvas.v1` payload `export_takeoff` returns, plus
+one top-level `autosave: { saved_at, tool, plan }` key that marks the file as
+an autosave. Both importers ignore that key.
+
+- **When:** after every journaled change, `undo_last`, `import_takeoff`, and
+  a first `set_scale`. A burst of calls is coalesced into one write
+  (0.75 s after the last change, at most 2 s after the first), each write
+  goes to a temp file renamed into place, and the last change is written
+  synchronously when the process exits, whether the client closes stdin or
+  sends SIGINT, SIGTERM or SIGHUP. A crash loses at most about 2 seconds.
+- **Where it says so:** `load_plan`'s reply carries `autosave.path`.
+  `takeoff_summary` carries `autosave: { path, saved_at }`, or `error` when
+  the last write failed; a pending change is written before the summary
+  replies. A failed write never fails the tool call that triggered it.
+- **Resuming:** when `load_plan` finds an earlier autosave at that path, the
+  reply names it, with its time and shape, condition and cable-run counts,
+  and does not load it. Call `import_takeoff` on that path to resume. If the
+  session changes something without importing it, the old file is first
+  renamed beside itself (`… (before <time>).json`, named in
+  `takeoff_summary`'s `autosave.moved_aside`), so it is never lost.
+- **Never clobbers:** a file at the path that OpenTakeoff didn't write as an
+  autosave, including a plain `export_takeoff` file, is left alone and
+  reported in both replies.
+- **Configure it** in the server's environment: `OPENTAKEOFF_AUTOSAVE=0`
+  turns it off; `OPENTAKEOFF_AUTOSAVE=/path/to/file.json` writes that file;
+  a directory path writes the default file name in that directory. In
+  Docker, where plans are mounted read-only, point it at a writable mount.
+
+`export_takeoff`, `export_report` and `export_marked_pdf` are still the
+deliverables; auto-save is the safety net under them.
+
 ## What the agent gets
 
 Fifty-two tools, in the order an agent tends to reach for them:

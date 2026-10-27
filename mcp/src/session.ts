@@ -80,6 +80,7 @@ import { gridPxPerFoot, drawGrid, drawShapes, drawMarks, type Ctx2D, type ToCanv
 import { SNAP_CELL, SNAP_TOL, TAKEOFF_SCHEMA, nextHatchId, nextPaletteColor } from "../../web/src/lib/takeoffConstants.ts";
 import { buildTakeoffDocument, sheetEntry } from "../../web/src/lib/takeoffDocument.js";
 import { hasFields, qtyLabels, resolveNote } from "../../web/src/lib/noteFields.ts";
+import type { Autosave, AutosaveLoadInfo } from "./autosave.ts";
 // uid mirrors web/src/lib/provenance.js mintUuid: crypto.randomUUID is a
 // global in Node 20+, with the same non-secure-context fallback the browser
 // build carries so the two sides mint identically-shaped ids.
@@ -758,6 +759,21 @@ const sheetSummary = (s: SheetState): SheetSummary => ({
   ...(s.detected ? { detected_scale: s.detected.label } : {}),
 });
 
+/** load_plan's sentence about auto-save: where it writes, what it found, what
+ * to do about a found file. Never imports anything itself. */
+function autosaveNote(a: AutosaveLoadInfo, merged: boolean): string {
+  if (a.disabled) return "Auto-save is off (OPENTAKEOFF_AUTOSAVE=0): call export_takeoff with a path to keep this work.";
+  if (merged) return `Auto-save still writes to ${a.path}.`;
+  if (a.error) return `Auto-save is NOT writing: ${a.error}`;
+  const f = a.found;
+  if (!f) return `Auto-save: every change is written to ${a.path}.`;
+  const runs = f.cable_runs ? `, ${f.cable_runs} cable run${f.cable_runs === 1 ? "" : "s"}` : "";
+  const from = f.plan ? ` for ${f.plan}` : "";
+  return `An earlier session's AUTO-SAVE${from} is at ${f.path} (saved ${f.saved_at ?? "at an unknown time"}: ${f.shapes} shape${f.shapes === 1 ? "" : "s"}, ${f.conditions} condition${f.conditions === 1 ? "" : "s"}${runs}). `
+    + `It was NOT loaded. To resume that work, call import_takeoff {path: ${JSON.stringify(f.path)}} before changing anything; `
+    + "if you change something without importing it, that file is first moved aside beside itself (takeoff_summary's autosave.moved_aside names it) and this session's work is saved in its place.";
+}
+
 export class Session {
   file: string | null = null;
   /** Absolute path of the PRIMARY (first-loaded) plan — the marked set's
@@ -809,9 +825,23 @@ export class Session {
    * many shapes (detect_rooms), and they journal as a single reversible step. */
   private pendingCommits: string[] = [];
 
+  /** Auto-save (src/autosave.ts): attached by the stdio entry point, null in
+   * tests and scripts that build a Session directly — nothing here writes a
+   * file unless one is attached. */
+  autosave: Autosave | null = null;
+
   private record(entry: JournalPayload): void {
     this.journal.push({ ...entry, seq: ++this.seq });
     if (this.journal.length > UNDO_CAP) this.journal.shift();
+    this.changed(entry.tool);
+  }
+
+  /** The takeoff record changed: let auto-save schedule a write. Every
+   * journaled mutation arrives here through record(); undo_last,
+   * import_takeoff and the unjournaled writes (a first set_scale, annotate,
+   * link_annotation) call it directly. */
+  changed(tool: string): void {
+    this.autosave?.touch(tool);
   }
 
   /** Journal whatever commit() minted during this tool call, as one entry.
@@ -834,6 +864,9 @@ export class Session {
     const base = path.basename(filePath);
     const merging = !!opts.merge && this.docs.size > 0;   // merge into empty = plain first load
     if (!merging) {
+      // the outgoing plan's last change lands in ITS autosave before the
+      // state it describes is cleared
+      await this.autosave?.beforeReplace();
       for (const d of this.docs.values()) await d.doc.destroy().catch(() => {});
       this.docs.clear();
       this.sheets.clear();
@@ -887,14 +920,17 @@ export class Session {
       this.sheets.set(key, state);
       added.push(sheetSummary(state));
     }
+    const note = merging
+      ? `Merged ${base} into the working set (${added.length} sheet${added.length === 1 ? "" : "s"} added) — every prior scale, condition, and shape kept. The sheet graph now spans ${this.docs.size} documents.`
+      : "Replaced the previous session — all prior scales, conditions, and shapes were cleared.";
+    const autosave = this.autosave ? await this.autosave.afterLoad({ merged: merging }) : null;
     return {
       file: base,
       files: this.files,
       page_count: this.sheets.size,
       sheets: [...this.sheets.values()].map(sheetSummary),
-      note: merging
-        ? `Merged ${base} into the working set (${added.length} sheet${added.length === 1 ? "" : "s"} added) — every prior scale, condition, and shape kept. The sheet graph now spans ${this.docs.size} documents.`
-        : "Replaced the previous session — all prior scales, conditions, and shapes were cleared.",
+      ...(autosave ? { autosave } : {}),
+      note: autosave ? `${note} ${autosaveNote(autosave, merging)}` : note,
     };
   }
 
@@ -1425,6 +1461,7 @@ export class Session {
     // scaled reply carries the caveat and the canvas asks the estimator to
     // confirm. Only a human act (canvas scale UI) clears it.
     s.scaleConfirmed = false;
+    this.changed("set_scale");
     return {
       sheet: s.key, upp, ...(label ? { label } : {}), source, confirmed: false,
       // #153 — several DISTINCT scale notes on one sheet means enlarged plans
@@ -3863,6 +3900,7 @@ export class Session {
       ...(unconfirmed.length ? { scale_unconfirmed: unconfirmed } : {}),
       ...(proposals.length ? { proposals } : {}),
       ...(proposedEdits.length ? { proposed_condition_edits: proposedEdits } : {}),
+      ...(this.autosave ? { autosave: this.autosave.status() } : {}),
     };
   }
 
@@ -4758,6 +4796,7 @@ export class Session {
         undone.push({ seq: e.seq, op: e.op, tool: e.tool, shapes: e.removed.length });
       }
     }
+    if (undone.length) this.changed("undo_last");
     return {
       undone: undone.length,
       steps: undone,
@@ -4817,6 +4856,7 @@ export class Session {
       ...(len_ft !== undefined ? { len_ft } : {}),
     };
     this.markups.push(m);
+    this.changed("annotate");
     return {
       id: m.id, sheet: s.key, type: m.type, text: m.text,
       condition: cond?.finish_tag ?? "", condition_id: m.condition_id,
@@ -4917,10 +4957,12 @@ export class Session {
     if (!m) throw new UserError(`no annotation "${id}" — call list_annotations for real ids`);
     if (!condition) {
       m.condition_id = "";
+      this.changed("link_annotation");
       return { id: m.id, condition: "", note: "Detached — now a note about the sheet." };
     }
     const c = this.conditionFor(condition);
     m.condition_id = c.id;
+    this.changed("link_annotation");
     return { id: m.id, condition: c.finish_tag, condition_id: c.id, note: `Attached to ${c.finish_tag}.` };
   }
 

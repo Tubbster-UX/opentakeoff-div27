@@ -24,6 +24,12 @@ open; `open_tool_stage` opens measure, revise or handoff when needed. Opening is
 idempotent and never closes another stage. Wiki resources remain readable in
 both modes; adding knowledge does not add a measurement tool.
 
+Work is auto-saved beside the plan as `<plan> - takeoff autosave.json` after
+every change (`OPENTAKEOFF_AUTOSAVE=0` turns it off, `=<path>` moves it).
+When `load_plan` reports `autosave.found`, an earlier session's work is on
+disk and was not loaded: `import_takeoff` that path to resume.
+`takeoff_summary.autosave` says when the last write landed or why it failed.
+
 ## Coordinates: carry the frame with every point
 
 - Tool coordinates are **full-sheet image pixels at PDF render scale 2.0**:

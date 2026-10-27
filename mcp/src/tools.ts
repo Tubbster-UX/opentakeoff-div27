@@ -68,14 +68,24 @@ export function registerTools(realServer: McpServer, session: Session, opts: { o
   const registered = new Map<string, RegisteredTool>();
   const server = {
     registerTool(name: string, meta: unknown, handler: unknown): RegisteredTool {
-      const tool = (realServer.registerTool as (n: string, m: unknown, h: unknown) => RegisteredTool)(name, meta, handler);
+      // auto-save's safety net (src/autosave.ts): after every successful call,
+      // let it compare the payload with the last write — the journal path
+      // already scheduled real changes; this catches any write that skips the
+      // journal, and costs nothing when nothing changed
+      const h = handler as (...a: unknown[]) => Promise<ToolReply>;
+      const saving = async (...a: unknown[]): Promise<ToolReply> => {
+        const reply = await h(...a);
+        if (!reply.isError) session.autosave?.touch(name, { weak: true });
+        return reply;
+      };
+      const tool = (realServer.registerTool as (n: string, m: unknown, h: unknown) => RegisteredTool)(name, meta, saving);
       registered.set(name, tool);
       return tool;
     },
     sendResourceListChanged: () => realServer.sendResourceListChanged(),
   };
   server.registerTool("load_plan", {
-    description: `Open a plan PDF from disk. Default: replace the whole session (previous documents, scales, conditions, and shapes are cleared). merge: true ADDS the document to the working set instead (#152) — a bid set is plans + schedule + addenda, not one PDF — keeping every scale, condition, and shape; sheet keys carry file names so documents never collide, the sheet graph spans the whole set (resolve_tag can chain a plan tag on one file to a schedule row in another), and the marked set covers every worked sheet. Re-loading an already-merged file is refused — reload = replace, deliberately. Returns file, files, page_count, and one entry per sheet. The loaded sheets also become browsable resources (takeoff://sheets). ${COORDS}`,
+    description: `Open a plan PDF from disk. Default: replace the whole session (previous documents, scales, conditions, and shapes are cleared). merge: true ADDS the document to the working set instead (#152) — a bid set is plans + schedule + addenda, not one PDF — keeping every scale, condition, and shape; sheet keys carry file names so documents never collide, the sheet graph spans the whole set (resolve_tag can chain a plan tag on one file to a schedule row in another), and the marked set covers every worked sheet. Re-loading an already-merged file is refused — reload = replace, deliberately. Returns file, files, page_count, and one entry per sheet. The loaded sheets also become browsable resources (takeoff://sheets). AUTO-SAVE: from here on every change is written to "<plan> - takeoff autosave.json" beside the plan (the export_takeoff payload; OPENTAKEOFF_AUTOSAVE in the server's environment moves or disables it), and the reply's autosave says where. When an earlier session's autosave is already there, the reply names it with its time and counts and does NOT load it — call import_takeoff on that path to resume; changing anything first moves the old file aside instead of losing it. ${COORDS}`,
     inputSchema: {
       path: z.string().describe("Path to a plan PDF on disk"),
       merge: z.boolean().optional().describe("true = ADD this document to the working set, keeping all existing work (merge into an empty session is just a load)"),
@@ -301,10 +311,15 @@ export function registerTools(realServer: McpServer, session: Session, opts: { o
   }, run("derive_transitions", (a) => session.deriveTransitions(a)));
 
   server.registerTool("takeoff_summary", {
-    description: `Per-condition totals (floor/wall/border SF, LF, EA, SY, with and without waste) plus grand totals — the Report's numbers, computed by the same rules. When a condition carries a cable_setup, a cable block rides along (pulls, cables, cable LF net and with waste, unlinked counts, leg warnings — list_runs has the per-run detail). Numbers only: the deliverable that SHOWS the work on the drawings is export_marked_pdf. ${COORDS}`,
+    description: `Per-condition totals (floor/wall/border SF, LF, EA, SY, with and without waste) plus grand totals — the Report's numbers, computed by the same rules. When a condition carries a cable_setup, a cable block rides along (pulls, cables, cable LF net and with waste, unlinked counts, leg warnings — list_runs has the per-run detail). autosave names the auto-save file and when it was last written (any pending change is written first), or the error when the last write failed. Numbers only: the deliverable that SHOWS the work on the drawings is export_marked_pdf. ${COORDS}`,
     inputSchema: {},
     outputSchema: takeoffSummaryOutput,
-  }, run("takeoff_summary", () => session.summary()));
+  }, run("takeoff_summary", async () => {
+    // a summary is a natural checkpoint: whatever is pending lands first, so
+    // the saved_at it reports covers everything the totals do
+    await session.autosave?.flush();
+    return session.summary();
+  }));
 
   server.registerTool("export_takeoff", {
     description: `The full "opentakeoff.takeoff_canvas.v1" annotations payload — exactly what the app autosaves, importable by it. Returned inline; pass path to also write it to disk as JSON. ${COORDS}`,

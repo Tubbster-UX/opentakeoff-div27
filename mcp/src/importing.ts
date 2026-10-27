@@ -120,6 +120,11 @@ export async function importTakeoff(session: Session, filePath: string) {
   // half that moves totals
   const addedIds = session.shapes.filter((s) => !prevShapeIds.has(s.id)).map((s) => s.id);
   if (addedIds.length) session.journalCommit("import_takeoff", addedIds);
+  // auto-save: importing the autosave load_plan found resumes it (it is then
+  // replaced in place, not moved aside), and any import changes the record —
+  // conditions, scales and annotations included, which the journal skips
+  session.autosave?.noteImport(filePath);
+  session.changed("import_takeoff");
 
   return {
     file: path.basename(filePath),

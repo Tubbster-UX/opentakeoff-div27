@@ -364,3 +364,77 @@ PLAYWRIGHT_MODULE=/path/to/playwright-core/index.mjs BROWSER_PATH=/path/to/chrom
   node scripts/verify-cable-runs.mjs /tmp/cable-fixture.json /tmp/cable-ui/results.json
 node --import tsx scripts/make-cable-marked-sample.mts /tmp/cable-marked-sample.pdf
 ```
+
+## 14. Follow-ups after Phase 3 (Oct 27, 2026)
+
+### 14.1 Auto-save
+
+**Why.** The user's Claude Code session ended, and the stdio server stopped with it. A whole
+bid's takeoff (81 linked cable runs) lived only in memory, and nothing had called
+`export_takeoff`. Nothing on the MCP side persisted work.
+
+**What.** From `load_plan` on, the session writes `<plan dir>/<plan> - takeoff autosave.json`
+(the `export_marked_pdf` naming rule). The file is exactly `exportPayload()` with one extra
+key, `autosave: { saved_at, tool, plan }`, placed second, right after `schema`, so a 512-byte
+head identifies it. Both importers read fields by name and ignore the key, and
+`export_takeoff` never carries it. No new tool: the count stays 57.
+
+- **Triggers.** `Session.record()` (every journaled verb), `undo_last`, `import_takeoff`, and
+  the writes the journal skips (a first `set_scale`, `annotate`, `link_annotation`). As a
+  safety net, the tool registry also schedules a check after every successful call. A write
+  only happens when the payload's bytes differ from the last write, so reads never write.
+  `load_plan` sets the empty session as the baseline, so loading never writes.
+- **Timing.** Trailing debounce 0.75 s, capped at 2 s after the first unsaved change. Timers
+  are `unref`'d, and `installExitFlush` (wired only in `server.ts`'s entry point) writes
+  synchronously on `exit`, SIGINT, SIGTERM and SIGHUP. A non-merge `load_plan` writes the
+  outgoing plan's file first, and `takeoff_summary` flushes before it replies.
+- **Atomic.** A temp file in the same directory, then rename.
+- **Never fails a call.** A failed write is stored, logged once to stderr and reported as
+  `takeoff_summary.autosave.error`. The next call, summary or plan switch tries again.
+- **Never clobbers.** A file at the path without the schema-then-marker head (including a plain
+  `export_takeoff` file) is never written over. `load_plan` and `takeoff_summary` both report it.
+- **Resume, never silently.** When `load_plan` finds an autosave there, the reply carries
+  `autosave.found` (time, tool, plan, shape, condition and linked-run counts) and a note telling
+  the agent to `import_takeoff` it. Importing that path resumes it in place. If the session
+  changes anything first, the found file is renamed to `… (before <time>).json` before the
+  first write (named in `autosave.moved_aside`), so a session that ignores the notice cannot
+  destroy the earlier bid.
+- **Environment.** `OPENTAKEOFF_AUTOSAVE=0` (also `off`, `false`, `no`) turns it off;
+  `=<file>` writes that file; `=<directory>` writes the default name there. A `Session` built
+  without an attached `Autosave` (every test and script) writes nothing and replies exactly as
+  before. The eval bench sets `OPENTAKEOFF_AUTOSAVE=0` so it never writes beside the repo's
+  plans.
+
+| File | Change |
+|---|---|
+| `mcp/src/autosave.ts` (new) | `Autosave` (debounce, compare, atomic write, foreign-file refusal, found-file move-aside, `flushSync`), `installExitFlush`, `autosaveModeFromEnv`, `defaultAutosavePath` |
+| `mcp/src/session.ts` | `autosave` field, `changed()` from `record()` / `undoLast` / unjournaled writes, `load_plan` reply `autosave` and note, `summary().autosave` |
+| `mcp/src/importing.ts` | `noteImport` + `changed("import_takeoff")` |
+| `mcp/src/tools.ts` | after-call check in the registry facade; `takeoff_summary` flushes first; `load_plan` and `takeoff_summary` descriptions |
+| `mcp/src/outputs.ts` | optional `autosave` on `load_plan` and `takeoff_summary` |
+| `mcp/server.ts` | attach `Autosave` and the exit hook at the stdio entry point |
+| `mcp/test/autosave.test.ts` (new) | 15 tests, listed below |
+| Docs | `docs/MCP.md` (Auto-save), `mcp/README.md` (Auto-save, `load_plan` and `takeoff_summary` rows), `docs/AGENT_GUIDE.md` §3, `docs/CONNECT.md`, `docs/wiki/mcp.md` (+ regenerated `wiki.generated.ts`), `protocol/INVENTORY.md` (`autosave` row), `CHANGELOG.md` |
+
+The tests cover: a write after a mutation (head, marker, the body byte-equal to
+`exportPayload()`, no temp file left, the summary's `{path, saved_at}`); 30 calls in one burst
+coalesced into 1 write, with reads writing nothing; the 2 s cap under a continuous burst;
+`undo_last`, a conditions-only `import_takeoff` and the summary flush; `OPENTAKEOFF_AUTOSAVE=0`;
+an explicit file and a directory; a foreign file and a markerless export left untouched and
+reported, with the tool call still succeeding; a failed write reported and then cleared; a
+round trip through `import_takeoff` (byte-equal export) and the app's
+`parseTakeoffImport` / `mergeTakeoffImport`; `load_plan` finding an earlier autosave, resuming
+by import, and moving it aside when ignored; `flushSync` and the plan-switch flush; merge
+keeping the primary path; a bare `Session` writing nothing; and the real stdio server writing
+the last change, inside the debounce window, when stdin closes and on SIGTERM.
+
+#### Check record (this container: Node 22, root)
+
+| Check | Result |
+|---|---|
+| `mcp/test/autosave.test.ts` | 15 of 15 pass |
+| `mcp` all test files (as CI runs them) | 314 tests: 313 pass, 1 fail (`safewrite` "unreadable file fails CLOSED", root, as in §10) |
+| `mcp` typecheck, `check:tool-count` (57 / 59 / 11), `check:wiki`, `check:protocol-resources`, build, `smoke:dist` | pass |
+| `web` typecheck, lint | pass (no web code changed) |
+| `protocol` check, `node scripts/check-doc-links.mjs` | pass |
+| Built `dist/server.js` over real stdio: `load_plan`, one `place_count`, close stdin | the server exited in 46 ms, inside the debounce, and the file held the count, `tool: "place_count"` |

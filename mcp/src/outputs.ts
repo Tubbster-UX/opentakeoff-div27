@@ -38,11 +38,40 @@ const sheetSummary = {
   detected_scale: z.string().optional().describe("Drawn scale note read off the sheet — a suggestion, never auto-applied"),
 };
 
+// Auto-save (src/autosave.ts): what load_plan says about where the session
+// writes, and what takeoff_summary says about the last write.
+const autosaveFound = z.object({
+  path: z.string(),
+  saved_at: z.string().nullable(),
+  tool: z.string().nullable().describe("The tool call whose change was last saved"),
+  plan: z.string().nullable().describe("The plan that session had loaded (basename)"),
+  shapes: z.number().int(),
+  conditions: z.number().int(),
+  cable_runs: z.number().int().describe("Linked cable runs (holds not counted)"),
+});
+
+const autosaveLoad = z.object({
+  path: z.string().nullable().describe("Where every change is written — null when auto-save is off"),
+  disabled: z.literal(true).optional().describe("OPENTAKEOFF_AUTOSAVE=0 — nothing is written; export_takeoff with a path is the only copy"),
+  found: autosaveFound.optional().describe("An earlier session's autosave already at path. NOT loaded: import_takeoff it to resume; changing anything first moves it aside, never deletes it"),
+  error: z.string().optional().describe("Why auto-save will not write there (a file OpenTakeoff did not write sits at path)"),
+});
+
+export const autosaveStatus = z.object({
+  path: z.string().nullable(),
+  saved_at: z.string().nullable().describe("ISO time of the last successful write; null before the first change"),
+  error: z.string().optional().describe("The last write failed, with why — the work is NOT on disk until a later write succeeds; export_takeoff with a path elsewhere"),
+  pending: z.literal(true).optional().describe("A change is waiting for its write"),
+  disabled: z.literal(true).optional().describe("OPENTAKEOFF_AUTOSAVE=0"),
+  moved_aside: z.string().optional().describe("Where the earlier session's autosave was moved before this session's first write replaced it"),
+});
+
 export const loadPlanOutput = {
   file: z.string().describe("The document just loaded (basename)"),
   files: z.array(z.string()).describe("Every document in the working set, load order (#152 — one entry unless merge was used)"),
   page_count: z.number().int().describe("Total sheets across the working set"),
   sheets: z.array(z.object(sheetSummary)).describe("EVERY sheet in the working set, not just the file loaded by this call"),
+  autosave: autosaveLoad.optional().describe("Auto-save: where this session's work is written as it changes, and any earlier autosave found there"),
   note: z.string(),
 };
 
@@ -511,6 +540,7 @@ export const takeoffSummaryOutput = {
   shared_floor_unmeasured: z.array(scopeUnmeasuredRow).optional().describe("Floor shapes the collision check could not measure (unscaled sheet, degenerate ring) — left OUT of shared_floor_sf rather than counted as zero; present only when any"),
   proposals: z.array(proposalRow).optional().describe("The proposal ledger (#365): per batch, how many shapes are still pending, how many the estimator accepted, whether it was withdrawn, and which batch new commits attach to (current). Present only when a proposal exists"),
   proposed_condition_edits: z.array(proposedConditionEditRow).optional().describe("Pending condition-edit diffs (#365) beside the current knobs. The rows above are the CURRENT values — nothing changes until the estimator accepts. Present only when any are pending"),
+  autosave: autosaveStatus.optional().describe("Auto-save: the file and the time of the last write, or the error when the last write failed"),
 };
 
 
