@@ -114,7 +114,11 @@ numbers report.**
    trusting a total. Crop the work region tight—a full-sheet render downsamples too far to
    audit a ring. Solid outlines are human-affirmed, dashed are unreviewed.
 5. **Write the planset.** `export_marked_pdf`, and give the user the file path. (It refuses an encrypted source PDF, naming the sheet: the app exports that one as a disclosed raster; over MCP there is no canvas, so tell the user which sheet and why.) (`export_dxf` when the takeoff is going back into CAD — one sheet per drawing.) `export_report`
-   alongside it for the numbers. Never end a takeoff with numbers alone: a takeoff nobody can
+   alongside it for the numbers. When the numbers go to an estimator or a bidding agent, pass
+   `xlsx: true` and hand over the workbook path from the reply's `xlsx.path` (`<plan> - report.xlsx`
+   beside the plan by default): the same workbook the canvas Report's Excel button downloads, with
+   the Cable summary, Cable runs and Pathway tabs when the takeoff has them, so nobody rebuilds the
+   tabs by hand. Never end a takeoff with numbers alone: a takeoff nobody can
    check is not a takeoff.
 
 Between steps 3 and 4, `list_shapes` is the cheap inventory—ids, sheets, conditions,
@@ -265,11 +269,12 @@ identically in both modes.
 ▸ export_marked_pdf  {}
   { "path": "/plans/sample-plan - marked set.pdf", "sheets": 1 }
 
-▸ export_report  { "path": "/plans/sample-report.json" }
-  { "schema": "opentakeoff.report.v1", … }
+▸ export_report  { "path": "/plans/sample-report.json", "xlsx": true }
+  { "schema": "opentakeoff.report.v1", …,
+    "xlsx": { "path": "/plans/sample-plan - report.xlsx", "tabs": ["Conditions", …] } }
 ```
 
-Hand back both paths, the totals, anything `withheld`, and the fact that the scale is
+Hand back the paths (marked set, report, workbook), the totals, anything `withheld`, and the fact that the scale is
 agent-set and awaiting the estimator's confirmation.
 
 ### Division 27 cable runs: trace the trunk once, each branch on its own
@@ -290,6 +295,9 @@ and its branch length cannot be recovered from it. Trace pathway the way it is b
 5. J-hooks: `edit_materials { condition: "BRANCH", add: [{ name: "J-hook", basis: "linear",
    per: 5, unit: "EA" }] }`. The row divides the branch condition's own LF (each segment once,
    ×N applied), so it is never a lump allowance and never multiplied by the runs.
+6. Hand the estimator the workbook: `export_report { xlsx: true }` writes the Cable summary,
+   Cable runs and (once a route condition is tagged) Pathway tabs beside the flooring tabs, and
+   the reply's `xlsx.path` is the file a bid workbook references.
 
 Never derive branch LF by dividing or subtracting a full-route LF: a branch length exists only
 as a traced branch segment. A run whose segments are all untagged is still valid, and so is a
@@ -322,6 +330,7 @@ next."*
 | `list_runs` warns a scale *no person has confirmed* | every MCP `set_scale` lands unconfirmed; the cable lengths rest on it | tell the estimator to confirm those sheets' scales in the canvas before pricing |
 | `edit_condition` replies with `cable.minted` | a fresh cable opt-in took the device type's starting values for what the call did not state—*starting values, not verified against spec* | confirm each against the project spec and patch with `edit_condition { cable_setup: { … } }` |
 | `edit_condition`: *route_kind tags a cable-route condition* | `route_kind` means something only on a `role: "route"` condition | pass `role: "route"` in the same call, or tag the route condition instead |
+| `export_report { xlsx: true }`: *… already exists and is not an OpenTakeoff export* | a file is at the workbook path that this server did not write, or one it wrote that someone has since saved in Excel (prices typed in) | pass `xlsx_path` to write somewhere else; `overwrite: true` only when the user says to replace that file |
 | `list_runs` lists a route under *unlinked* | a linear shape on a `role: "route"` condition that no linked run uses | `link_run` it, or trace it under another condition if it is not a route |
 | a `list_runs` run reads *broken* | a linked shape was deleted, or sits on a sheet this session cannot scale (a stitched composite) — its stored length is kept, it is excluded from totals and listed under unlinked | re-trace and `link_run` again, or hand it to the canvas |
 | an export refuses a path | OpenTakeoff didn't write that file, and overwriting it would destroy someone's work | pass `overwrite: true`, or pick another path |

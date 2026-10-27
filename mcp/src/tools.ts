@@ -2,6 +2,7 @@
 // compact JSON (format.ts); view_sheet alone replies with an image content
 // item plus a JSON meta text item. Failures are isError results, never thrown
 // protocol errors.
+import { resolve as resolvePath } from "node:path";
 import { z } from "zod";
 import type { McpServer, RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ok, okImage, fail, UserError, type ToolReply } from "./format.ts";
@@ -26,6 +27,7 @@ import {
   scopeDuplicatesOutput, scopeMergeOutput, linkRunOutput, listRunsOutput, unlinkRunOutput, holdDevicesOutput,
 } from "./outputs.ts";
 import { exportMarkedPdf } from "./marked.ts";
+import { buildReportWorkbook } from "./workbook.ts";
 import { assertWritable, OVERWRITE_DESC } from "./safewrite.ts";
 import { importTakeoff } from "./importing.ts";
 
@@ -367,21 +369,30 @@ export function registerTools(realServer: McpServer, session: Session, opts: { o
   }));
 
   server.registerTool("export_report", {
-    description: `The computed Report document — "opentakeoff.report.v1", the same schema the canvas Report's JSON export writes. Everything a pricing consumer needs without re-implementing the app's math: per-condition quantities with waste and multiplier applied (gross and *_net), the computed materials BUY LIST per condition (order quantity = basis ÷ coverage rate, rounded up to whole purchase units) plus the project-wide roll-up summed by (name, unit), per-sheet BASE subtotals, scale provenance per sheet, and annotations — plus a cable block (the Division 27 cable summary, per-run rows and unlinked list, and a pathway rollup with per-run branch/trunk LF once a route condition is tagged trunk or branch) whenever a cable condition exists. Contrast: export_takeoff is the raw canvas payload (materials as CONFIG rows, no computed quantities) and takeoff_summary strips materials for a compact reply — when the numbers are leaving for pricing, consume this. A report alone is HALF the deliverable: pair it with export_marked_pdf, because a takeoff is reviewed on marked drawings, not on numbers. Returned inline; pass path to also write it to disk as JSON.`,
+    description: `The computed Report document — "opentakeoff.report.v1", the same schema the canvas Report's JSON export writes. Everything a pricing consumer needs without re-implementing the app's math: per-condition quantities with waste and multiplier applied (gross and *_net), the computed materials BUY LIST per condition (order quantity = basis ÷ coverage rate, rounded up to whole purchase units) plus the project-wide roll-up summed by (name, unit), per-sheet BASE subtotals, scale provenance per sheet, and annotations — plus a cable block (the Division 27 cable summary, per-run rows and unlinked list, and a pathway rollup with per-run branch/trunk LF once a route condition is tagged trunk or branch) whenever a cable condition exists. Contrast: export_takeoff is the raw canvas payload (materials as CONFIG rows, no computed quantities) and takeoff_summary strips materials for a compact reply — when the numbers are leaving for pricing, consume this. A report alone is HALF the deliverable: pair it with export_marked_pdf, because a takeoff is reviewed on marked drawings, not on numbers. Returned inline; pass path to also write it to disk as JSON. Pass xlsx: true (or xlsx_path) to also write the Excel workbook the canvas Report's Excel button downloads, built by the same code: tabs Conditions, By sheet, Materials, Shapes, By floor × room, plus Cable summary and Cable runs when a cable condition exists and Pathway once a route condition is tagged trunk or branch. Default workbook path: next to the loaded plan as "<plan> - report.xlsx". Hand the estimator that path — it is what a bid workbook references, so nobody rebuilds the tabs by hand. The reply is the same document plus xlsx: {path, tabs}. Imperial units, like the JSON.`,
     inputSchema: {
       path: z.string().optional().describe("File path to write the document to"),
       project_name: z.string().optional().describe("Label for the document's project_name field (a headless session has no project of its own; omitted → null)"),
-      overwrite: z.boolean().optional().describe(OVERWRITE_DESC),
+      xlsx: z.boolean().optional().describe('Also write the Excel workbook (default path "<plan> - report.xlsx" beside the loaded plan)'),
+      xlsx_path: z.string().optional().describe("Where to write the Excel workbook (implies xlsx: true). An earlier workbook of this server's is replaced; any other file is refused unless overwrite is true"),
+      overwrite: z.boolean().optional().describe(`${OVERWRITE_DESC} Applies to both path and xlsx_path.`),
     },
     outputSchema: exportReportOutput,
-  }, run("export_report", async ({ path: outPath, project_name: projectName, overwrite }) => {
+  }, run("export_report", async ({ path: outPath, project_name: projectName, xlsx, xlsx_path: xlsxPath, overwrite }) => {
     const doc = session.exportReport(projectName);
+    if (xlsx === false && xlsxPath !== undefined) throw new UserError("xlsx: false contradicts xlsx_path — drop one of them.");
+    // every destination is checked before anything is written, so a refusal
+    // leaves both files exactly as they were
+    const book = xlsx === true || xlsxPath !== undefined ? await buildReportWorkbook(session, xlsxPath, overwrite) : null;
     if (outPath) {
+      if (book && resolvePath(outPath) === book.path) throw new UserError(`path and the workbook path are the same file (${book.path}) — give the JSON and the workbook different names.`);
       await assertWritable(outPath, "json", overwrite);
-      const { writeFile } = await import("node:fs/promises");
-      await writeFile(outPath, JSON.stringify(doc));
     }
-    return doc;
+    const { writeFile } = await import("node:fs/promises");
+    if (outPath) await writeFile(outPath, JSON.stringify(doc));
+    if (!book) return doc;
+    await writeFile(book.path, book.bytes);
+    return { ...doc, xlsx: { path: book.path, tabs: book.tabs } };
   }));
 
   server.registerTool("import_takeoff", {

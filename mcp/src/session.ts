@@ -66,7 +66,11 @@ import { sanitizeApprovals as sanitizeApprovalsJs, applyApprovalCommand as apply
 // the RFI register's pure half (web/src/lib/rfi.js): the panel's numbering and
 // its tombstone rule, one implementation for both surfaces
 import { nextRfiNumber, liveRfis } from "../../web/src/lib/rfi.js";
-import { conditionTotals, grandTotals, sheetTotals, reportJson } from "../../web/src/lib/totals.js";
+import { conditionTotals, grandTotals, sheetTotals, reportJson, sheetLabelGroupedRows } from "../../web/src/lib/totals.js";
+// the workbook's inputs (export_report xlsx): the canvas Report's own column
+// profiles and per-shape detail, so its Conditions and Shapes tabs match
+import { CSV_PROFILE, visibleCols, specColProfile, laborColProfile, rollColProfile, cableColProfile, floorPerimeterLf } from "../../web/src/lib/reportColumns.js";
+import { shapesDetail } from "../../web/src/lib/shapesExport.js";
 import { hasRollSetup, mintRollSetup, computeRollTakeoff, rollReportRows, seamLfByShape } from "../../web/src/lib/rollTakeoff.js";
 // Division 27 cable runs (docs/design/CABLE_SETUP.md) — the ONE pure cable
 // library, shared with the canvas: setup defaults and validation, run
@@ -5395,17 +5399,7 @@ export class Session {
    * materials as CONFIG rows and takeoff_summary strips them; only this
    * document carries the computed order quantities. */
   exportReport(projectName = "") {
-    if (!this.docs.size) throw new UserError("No plan loaded — call load_plan first.");
-    // roll goods (#147): the same pure seam the canvas report uses — figured
-    // here so the report.v1 block fills the moment a condition carries a setup.
-    // It runs BEFORE the rows because a materials row with basis "seam_lf"
-    // divides against the layout's figured seams, not against an area.
-    const { dimsFor, uppFor } = this.rollInputs();
-    const { byCond } = computeRollTakeoff(this.conditions, this.shapes, dimsFor, uppFor) as { byCond: Map<string, unknown> };
-    // cable (Division 27): a "cables" / "pulls" materials row divides the
-    // linked cables and pulls the same cable takeoff reports below
-    const cableT = this.cableTakeoff();
-    const rows = (conditionTotals(this.conditions, this.shapes, { seamByShape: seamLfByShape(byCond), cableByShape: cableQtyByShape(cableT) }) as Record<string, unknown>[]).filter((r) => (r.shape_count as number) > 0);
+    const { byCond, cableT, rows } = this.reportBase();
     return reportJson({
       projectName,
       rows,
@@ -5419,8 +5413,64 @@ export class Session {
       // any exist, so the document is byte-identical otherwise
       proposedConditionEdits: this.proposedConditionEdits(),
       // cable (Division 27): present only when a cable takeoff exists
-      cable: cableBlock(cableT, (k: string) => this.sheets.get(k)?.sheetNumber || k),
+      cable: cableBlock(cableT, this.reportSheetLabel),
     });
+  }
+
+  /** What every report surface computes first — the JSON above and the
+   * workbook below share it, so their rows cannot drift apart. */
+  private reportBase() {
+    if (!this.docs.size) throw new UserError("No plan loaded — call load_plan first.");
+    // roll goods (#147): the same pure seam the canvas report uses — figured
+    // here so the report.v1 block fills the moment a condition carries a setup.
+    // It runs BEFORE the rows because a materials row with basis "seam_lf"
+    // divides against the layout's figured seams, not against an area.
+    const { dimsFor, uppFor } = this.rollInputs();
+    const { byCond } = computeRollTakeoff(this.conditions, this.shapes, dimsFor, uppFor) as { byCond: Map<string, unknown> };
+    // cable (Division 27): a "cables" / "pulls" materials row divides the
+    // linked cables and pulls the same cable takeoff reports below
+    const cableT = this.cableTakeoff();
+    const seamCtx = { seamByShape: seamLfByShape(byCond), cableByShape: cableQtyByShape(cableT) };
+    const rows = (conditionTotals(this.conditions, this.shapes, seamCtx) as Record<string, unknown>[]).filter((r) => (r.shape_count as number) > 0);
+    return { byCond, cableT, seamCtx, rows };
+  }
+
+  /** The report's sheet label: the sheet number read off the title block,
+   * else the sheet key (the cable block's label since Phase 1). */
+  private reportSheetLabel = (k: string): string => this.sheets.get(k)?.sheetNumber || k;
+
+  /** The inputs the canvas Report's Excel export hands web/src/lib/xlsx.js
+   * reportWorkbook (ReportPanel.jsx exportXlsx), assembled from this session
+   * the way exportReport assembles the JSON: the same rows, the BASE per-sheet
+   * subtotals, shapesDetail, the floor × room cross-section, and the cable
+   * takeoff. The Conditions tab's columns are the CSV profile at its default
+   * visibility (a headless session has no column picker), plus the spec,
+   * labor, roll and cable columns exactly when the canvas would add them.
+   * Imperial, like export_report: the session has no display-units setting. */
+  reportWorkbookArgs() {
+    const { byCond, cableT, seamCtx, rows } = this.reportBase();
+    const conds = this.conditions;
+    const cableByCond = cableT?.byCond;
+    const cols = visibleCols([...CSV_PROFILE, ...specColProfile(conds), ...laborColProfile(conds), ...rollColProfile(byCond), ...cableColProfile(cableByCond)], {});
+    const ctx = {
+      perimByCond: floorPerimeterLf(this.shapes),
+      attrsByCond: new Map(conds.map((c) => [c.id, (c as { attrs?: unknown }).attrs])),
+      specByCond: new Map(conds.map((c) => [c.id, (c as { spec?: unknown }).spec])),
+      laborByCond: new Map(conds.map((c) => [c.id, { laborType: (c as { laborType?: unknown }).laborType, subfloorType: (c as { subfloorType?: unknown }).subfloorType }])),
+      rollByCond: byCond,
+      cableByCond,
+    };
+    return {
+      rows,
+      bySheet: sheetTotals(conds, this.shapes),
+      shapeRows: shapesDetail(conds, this.shapes, this.reportSheetLabel),
+      cols,
+      ctx,
+      sheetLabel: this.reportSheetLabel,
+      units: "imperial" as const,
+      byFloorRoom: sheetLabelGroupedRows(conds, this.shapes, [], seamCtx),
+      cable: cableT,
+    };
   }
 
   /** The cable takeoff the marked set's cover tallies (pulls, pending, unlinked). */

@@ -914,6 +914,10 @@ export const exportReportOutput = {
     duplicates: cableDuplicatesBlock.optional().describe("The duplicate device check — present only when it found something, so a cable report with no finding is unchanged"),
     pathway: cablePathwayBlock.optional(),
   }).optional().describe("Division 27 cable schedule (docs/design/CABLE_SETUP.md) — present only when a cable condition or a run exists, so every other report is byte-identical"),
+  xlsx: z.object({
+    path: z.string().describe("Absolute path of the written Excel workbook — hand this to the estimator"),
+    tabs: z.array(z.string()).describe("The workbook's tabs in order: Conditions, By sheet, Materials, Shapes, By floor × room, then Cable summary and Cable runs when a cable condition exists, then Pathway once a route condition is tagged trunk or branch"),
+  }).optional().describe("Present only when xlsx or xlsx_path was passed: where the workbook went. Reply-only — the JSON written to path never carries it"),
 };
 
 /** export_marked_pdf — the tool writes the PDF to disk and replies with where

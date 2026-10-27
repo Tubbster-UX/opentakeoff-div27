@@ -101,14 +101,30 @@ const STYLES_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
 // ---------------------------------------------------------------------------
 // Workbook assembly
 
+// The authorship stamp (opt-in): docProps/core.xml dc:creator plus
+// docProps/app.xml Application. The MCP server stamps "OpenTakeoff" so its
+// overwrite guard (mcp/src/safewrite.ts) can recognize a workbook it wrote.
+// Excel and LibreOffice rewrite Application (and add lastModifiedBy) when
+// they save, which is what tells a workbook the estimator edited apart from
+// ours. With no producer the package is the canvas download it always was.
+const coreXml = (producer) => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+  '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">' +
+  `<dc:creator>${escXml(producer)}</dc:creator></cp:coreProperties>`;
+const appXml = (producer) => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+  '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">' +
+  `<Application>${escXml(producer)}</Application></Properties>`;
+
 /**
  * Zip sheet definitions into an .xlsx byte array.
  * @param {Array<{name: string, rows: any[][]}>} sheets one entry per tab, in order
+ * @param {{producer?: string}} [opts] producer: stamp docProps (dc:creator and
+ *   Application) with this name. Omitted (the canvas): no docProps parts.
  * @returns {Promise<Uint8Array>} download with MIME
  *   application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
  */
-export async function buildXlsx(sheets) {
+export async function buildXlsx(sheets, opts = {}) {
   const { zipSync, strToU8 } = await import("fflate"); // lazy — same pattern as ingest.js
+  const producer = opts.producer ? String(opts.producer) : "";
   const used = new Set();
   const names = sheets.map((s) => sanitizeSheetName(s.name, used));
 
@@ -119,11 +135,15 @@ export async function buildXlsx(sheets) {
     '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
     '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>',
     ...sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`),
+    ...(producer ? ['<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>',
+      '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>'] : []),
     "</Types>"].join("");
 
   const rootRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
     '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+    (producer ? '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
+      '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>' : "") +
     "</Relationships>";
 
   const workbook = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
@@ -145,7 +165,39 @@ export async function buildXlsx(sheets) {
     "xl/styles.xml": strToU8(STYLES_XML),
   };
   sheets.forEach((s, i) => { files[`xl/worksheets/sheet${i + 1}.xml`] = strToU8(sheetXml(s.rows)); });
+  if (producer) {
+    files["docProps/core.xml"] = strToU8(coreXml(producer));
+    files["docProps/app.xml"] = strToU8(appXml(producer));
+  }
   return zipSync(files);
+}
+
+/**
+ * Read a workbook's authorship stamp back: dc:creator and cp:lastModifiedBy
+ * from docProps/core.xml, Application from docProps/app.xml. Null when the
+ * bytes are not a zip; a field the package does not carry reads null. Only
+ * the two docProps parts are inflated.
+ * @param {Uint8Array} bytes
+ * @returns {Promise<{creator: string|null, lastModifiedBy: string|null, application: string|null}|null>}
+ */
+export async function xlsxProvenance(bytes) {
+  const { unzipSync, strFromU8 } = await import("fflate");
+  let parts;
+  try {
+    parts = unzipSync(bytes, { filter: (f) => f.name === "docProps/core.xml" || f.name === "docProps/app.xml" });
+  } catch {
+    return null;
+  }
+  const field = (part, re) => {
+    if (!parts[part]) return null;
+    const m = re.exec(strFromU8(parts[part]));
+    return m ? m[1].trim() : null;
+  };
+  return {
+    creator: field("docProps/core.xml", /<dc:creator>([^<]*)<\/dc:creator>/),
+    lastModifiedBy: field("docProps/core.xml", /<cp:lastModifiedBy>([^<]*)<\/cp:lastModifiedBy>/),
+    application: field("docProps/app.xml", /<Application>([^<]*)<\/Application>/),
+  };
 }
 
 // ---------------------------------------------------------------------------

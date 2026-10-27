@@ -307,7 +307,10 @@ Fifty-two tools, in the order an agent tends to reach for them:
   as config rows, importable by the app), `export_report` (the
   computed `opentakeoff.report.v1` Report document—waste-adjusted nets, the
   materials buy list as order quantities, per-sheet subtotals, scale
-  provenance; the contract for pricing consumers), `export_marked_pdf` (**the
+  provenance; the contract for pricing consumers; with `xlsx: true` it also
+  writes the canvas Report's Excel workbook, built by the same code, to
+  `<plan> - report.xlsx` beside the plan or to `xlsx_path`, and the reply adds
+  `xlsx: {path, tabs}`), `export_marked_pdf` (**the
   marked-up planset**—the plan sheets vector-copied with shapes, hatches,
   quantity chips, and annotations burned in, plus a legend cover; the
   deliverable a human reviews, with machine-traced work disclosed as pending
@@ -317,7 +320,9 @@ Fifty-two tools, in the order an agent tends to reach for them:
   directory, because the marked set belongs in the job folder. They will not
   overwrite a file they didn't write, though: a previous export of ours is
   replaced silently (the ordinary re-export loop), and anything else is refused
-  until you pass `overwrite: true`. Data-loss protection, not a sandbox—see
+  until you pass `overwrite: true`. The workbook follows the same rule: one
+  the estimator opened and saved in Excel is no longer ours, so a re-export
+  refuses to replace it. Data-loss protection, not a sandbox—see
   [`SECURITY.md`](../SECURITY.md).
 
 The full reference—including the coordinate contract (image px at render
@@ -431,8 +436,10 @@ verbatim, replies abridged:
 ▸ export_marked_pdf  {}
   { "path": "/plans/sample-plan - marked set.pdf", "sheets": 1, … }
 
-▸ export_report  { "path": "/plans/sample-report.json" }
-  { "schema": "opentakeoff.report.v1", "conditions": [...], … }
+▸ export_report  { "path": "/plans/sample-report.json", "xlsx": true }
+  { "schema": "opentakeoff.report.v1", "conditions": [...], …,
+    "xlsx": { "path": "/plans/sample-plan - report.xlsx",
+              "tabs": ["Conditions", "By sheet", "Materials", "Shapes", "By floor × room"] } }
 ```
 
 A click that misses is a readable answer, not a stack trace—outside the
