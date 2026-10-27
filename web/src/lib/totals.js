@@ -27,7 +27,7 @@ import { attrValue } from "./conditionColumns.js";
 import { shapeLabelValue } from "./shapeLabels.js";
 import { compareSheetKeys } from "./sheetKey"; // NOT ./sheets — that module imports pdfjs-dist
 import { hasFields, qtyLabels, resolveNote } from "./noteFields.ts";
-import { cableTables } from "./cable.js";
+import { cableTables, isCableMaterialBasis, cableMaterialReason } from "./cable.js";
 
 // Re-export so existing consumers (markedset, snapshotDiff, ReportPanel, tests)
 // keep importing round2 from here; num.js is the single definition.
@@ -57,16 +57,22 @@ function accumulateRole(acc, s) {
 }
 
 /**
- * @param {{seamByShape?: Map<any, number>}|null} [ctx] the figured roll-layout
- *   seam length per SHAPE (lib/rollTakeoff.js seamLfByShape) — what a
- *   materials row with basis "seam_lf" divides against. Omitted (every caller
- *   that has no roll context) those rows read 0, which is the honest answer:
- *   a weld rod has no quantity until the layout that produces the seams is
- *   figured. Per shape, not per condition, so this function keeps slicing
- *   correctly when it is handed one sheet's or one room's shapes.
+ * @param {{seamByShape?: Map<any, number>, cableByShape?: Map<any, {pulls: number, cables: number}>}|null} [ctx]
+ *   seamByShape: the figured roll-layout seam length per SHAPE
+ *   (lib/rollTakeoff.js seamLfByShape) — what a materials row with basis
+ *   "seam_lf" divides against. Omitted (every caller that has no roll
+ *   context) those rows read 0, which is the honest answer: a weld rod has no
+ *   quantity until the layout that produces the seams is figured. Per shape,
+ *   not per condition, so this function keeps slicing correctly when it is
+ *   handed one sheet's or one room's shapes.
+ *   cableByShape: the figured linked pulls and cables per device SHAPE
+ *   (lib/cable.js cableQtyByShape) — what a row with basis "cables" (a jack
+ *   per cable) or "pulls" (a faceplate per pull) divides against. Same rule:
+ *   omitted or empty, those rows read 0, and each says why in `reason`.
  */
 export function conditionTotals(conditions, shapes, ctx = null) {
   const seamByShape = ctx?.seamByShape instanceof Map ? ctx.seamByShape : null;
+  const cableByShape = ctx?.cableByShape instanceof Map ? ctx.cableByShape : null;
   return conditions.map((c) => {
     const mult = c.multiplier || 1;
     const waste = Math.max(0, Number(c.waste_pct) || 0);
@@ -79,18 +85,31 @@ export function conditionTotals(conditions, shapes, ctx = null) {
     // pre-figured per shape and are summed here, then multiplied like every
     // other quantity: N identical units are N cuttings of the same layout.
     let seam = seamByShape ? cs.reduce((n, s) => n + (seamByShape.get(s.id) || 0), 0) : 0;
-    floor *= mult; wall *= mult; border *= mult; lf *= mult; ea *= mult; seam *= mult;
+    // Cables and pulls are figured from the linked cable runs the same way
+    // (lib/cable.js cableQtyByShape — linked only, cables_override applied),
+    // per device shape, then ×N like everything else. Summed only when a row
+    // asks for them, so a takeoff with no such row pays nothing.
+    let cables = 0, pulls = 0;
+    if (cableByShape && (c.materials || []).some((m) => m && isCableMaterialBasis(m.basis))) {
+      for (const s of cs) { const q = cableByShape.get(s.id); if (q) { cables += q.cables || 0; pulls += q.pulls || 0; } }
+    }
+    floor *= mult; wall *= mult; border *= mult; lf *= mult; ea *= mult; seam *= mult; cables *= mult; pulls *= mult;
     const total = floor + wall + border;
     // supporting materials: deterministic quantity = basis ÷ coverage, rounded up
     // to whole units (you buy whole buckets/bags). basis = this condition's measured
-    // area (SF), linear (LF), count (EA), or figured seam length (LF — weld rod,
-    // seam tape). Coverage comes off the product data sheet.
+    // area (SF), linear (LF), count (EA), figured seam length (LF — weld rod,
+    // seam tape), or the figured linked cables / pulls (a jack per cable, a
+    // faceplate per pull). Coverage comes off the product data sheet.
     const materials = (c.materials || []).filter((m) => m && m.name).map((m) => {
       const per = Math.max(0, Number(m.per) || 0);
-      const basisVal = m.basis === "linear" ? lf : m.basis === "count" ? ea : m.basis === "seam_lf" ? seam : total;
+      const basisVal = m.basis === "linear" ? lf : m.basis === "count" ? ea : m.basis === "seam_lf" ? seam
+        : m.basis === "cables" ? cables : m.basis === "pulls" ? pulls : total;
       let qty = per > 0 ? basisVal / per : 0;
       qty = m.round === false ? round2(qty) : Math.ceil(qty - 1e-9);
-      return { name: m.name, unit: m.unit || "", per, basis: m.basis || "area", round: m.round !== false, note: m.note || "", basis_qty: round2(basisVal), qty };
+      // a cables/pulls row that reads 0 says why (no cable setup, no linked
+      // run) — present only on such a row, so every other line is unchanged
+      const reason = isCableMaterialBasis(m.basis) ? cableMaterialReason(c, basisVal, !!cableByShape) : null;
+      return { name: m.name, unit: m.unit || "", per, basis: m.basis || "area", round: m.round !== false, note: m.note || "", basis_qty: round2(basisVal), qty, ...(reason ? { reason } : {}) };
     });
     return {
       id: c.id, finish_tag: c.finish_tag, color: c.color, fill: c.fill, hatch: c.hatch,
@@ -175,7 +194,7 @@ export function sheetTotals(conditions, shapes) {
 //     by-sheet section's red-paren style.
 //   - Empty groups dropped: orphan shapes (dead condition_id) can make a
 //     sheet all-orphan, mirroring the sheetTotals guard.
-/** @param {{seamByShape?: Map<any, number>}|null} [ctx] passed straight to conditionTotals */
+/** @param {{seamByShape?: Map<any, number>, cableByShape?: Map<any, {pulls: number, cables: number}>}|null} [ctx] passed straight to conditionTotals */
 export function sheetGroupedRows(conditions, shapes, ctx = null) {
   const bySheet = new Map();        // sheet_id → that sheet's shapes
   for (const s of shapes) {
@@ -210,7 +229,7 @@ export function sheetGroupedRows(conditions, shapes, ctx = null) {
 // Empty buckets dropped.
 /**
  * @param {string[]} [shapeLabels] the project's label vocabulary, for ordering
- * @param {{seamByShape?: Map<any, number>}|null} [ctx] passed straight to conditionTotals
+ * @param {{seamByShape?: Map<any, number>, cableByShape?: Map<any, {pulls: number, cables: number}>}|null} [ctx] passed straight to conditionTotals
  */
 export function labelGroupedRows(conditions, shapes, shapeLabels = [], ctx = null) {
   const byLabel = new Map();        // label value → that bucket's shapes ("" key = Unlabeled)
@@ -243,7 +262,7 @@ export function labelGroupedRows(conditions, shapes, shapeLabels = [], ctx = nul
 // (value null so the header renders italic, the Unlabeled convention). Same
 // per-slice materials caveat as the other groupers: display, never a buy list.
 /**
- * @param {{seamByShape?: Map<any, number>}|null} [ctx] passed straight to conditionTotals
+ * @param {{seamByShape?: Map<any, number>, cableByShape?: Map<any, {pulls: number, cables: number}>}|null} [ctx] passed straight to conditionTotals
  */
 export function authorGroupedRows(conditions, shapes, ctx = null) {
   const byAuthor = new Map();     // author → that bucket's shapes ("" = Unattributed)
@@ -288,7 +307,7 @@ export function authorGroupedRows(conditions, shapes, ctx = null) {
 // sheet left with no groups drops with them.
 /**
  * @param {string[]} [shapeLabels] the project's label vocabulary, for ordering
- * @param {{seamByShape?: Map<any, number>}|null} [ctx] passed straight to conditionTotals
+ * @param {{seamByShape?: Map<any, number>, cableByShape?: Map<any, {pulls: number, cables: number}>}|null} [ctx] passed straight to conditionTotals
  */
 export function sheetLabelGroupedRows(conditions, shapes, shapeLabels = [], ctx = null) {
   const bySheet = new Map();
@@ -344,6 +363,19 @@ export function verticalWallSf(shapes, conditionId, heightFt, multiplier = 1) {
     .reduce((n, s) => n + (s.computed?.perimeter_lf || 0), 0);
   return round2(perim * h * (multiplier || 1));
 }
+
+// The unit a materials row's coverage rate is stated in ("1 bag / 40 LF",
+// "1 ea / 1 cable"). Shared by the CSV and the workbook's Materials tab.
+export function materialBasisLabel(b, per = 2) {
+  if (b === "cables") return per === 1 ? "cable" : "cables";
+  if (b === "pulls") return per === 1 ? "pull" : "pulls";
+  return b === "linear" ? "LF" : b === "count" ? "EA" : b === "seam_lf" ? "seam LF" : "SF";
+}
+/** The Coverage cell for one computed materials line. */
+export const materialCoverage = (m) => `1 ${m.unit || "unit"} / ${m.per} ${materialBasisLabel(m.basis, m.per)}`;
+/** The Note cell: the row's own note, then why a cables/pulls row reads 0
+ *  (conditionTotals' `reason`, present only on such a row). */
+export const materialNote = (m) => [m.note || "", m.reason || ""].filter(Boolean).join("; ");
 
 // Combined buy list: same-named materials summed across all conditions (each
 // condition is rounded first, then summed — you order per condition).
@@ -426,9 +458,8 @@ export function totalsToCsv(rows, projectName = "", bySheet = null, sheetLabel =
   // supporting materials — per condition, then a combined buy list. Coverage
   // rates deliberately stay as entered (SF/LF-based) in metric mode — the
   // upstream metric contract; the report panel carries the footnote.
-  const basisLabel = (b) => (b === "linear" ? "LF" : b === "count" ? "EA" : b === "seam_lf" ? "seam LF" : "SF");
   const perCond = [];
-  for (const r of rows) for (const m of (r.materials || [])) perCond.push([r.finish_tag, m.name, m.qty, m.unit, `1 ${m.unit || "unit"} / ${m.per} ${basisLabel(m.basis)}`, m.note || ""]);
+  for (const r of rows) for (const m of (r.materials || [])) perCond.push([r.finish_tag, m.name, m.qty, m.unit, materialCoverage(m), materialNote(m)]);
   if (perCond.length) {
     lines.push("");
     lines.push(["Finish", "Material", "Qty", "Unit", "Coverage", "Note"].map(esc).join(","));

@@ -787,12 +787,26 @@ export const findTextOutput = {
   })),
 };
 
+/** One computed materials line inside a report condition row — the buy list.
+ * conditionTotals (web/src/lib/totals.js) computes qty = basis_qty ÷ per,
+ * rounded UP to whole purchase units unless round is false. */
+const reportMaterialLine = z.object({
+  name: z.string(),
+  unit: z.string().describe("Purchase unit, e.g. 'gal', 'bag'"),
+  per: z.number().describe("Coverage rate — basis units per purchase unit"),
+  basis: z.enum(["area", "linear", "count", "seam_lf", "cables", "pulls"]),
+  round: z.boolean(),
+  basis_qty: z.number().describe("The condition total this row divides (SF, LF, EA, figured seam LF, or linked cables / pulls — multiplier applied, waste not)"),
+  qty: z.number().describe("Computed order quantity"),
+  reason: z.string().optional().describe("Only on a cables / pulls line that reads 0: why (no cable_setup on the condition, or no linked run)"),
+}).passthrough();
+
 /** editMaterials — session.ts's MaterialRow, verbatim. */
 const materialRow = z.object({
   id: z.string(),
   name: z.string(),
   per: z.number().describe("Coverage rate: basis ÷ per = order quantity"),
-  basis: z.enum(["area", "linear", "count", "seam_lf"]).describe("Which of the condition's totals this row's quantity is computed against — 'seam_lf' is the FIGURED roll-layout seam length (weld rod, seam tape), 0 until the condition carries a roll_setup"),
+  basis: z.enum(["area", "linear", "count", "seam_lf", "cables", "pulls"]).describe("Which of the condition's totals this row's quantity is computed against — 'seam_lf' is the FIGURED roll-layout seam length (weld rod, seam tape), 0 until the condition carries a roll_setup; 'cables' / 'pulls' are the FIGURED linked cables / pulls from the cable summary, 0 until the condition carries a cable_setup and a linked run"),
   unit: z.string(),
   round: z.boolean().describe("true = round up to whole purchase units (the default — you buy whole bags/buckets)"),
   note: z.string().optional(),
@@ -809,20 +823,8 @@ export const editMaterialsOutput = {
     patched: z.array(z.string()).describe("Ids whose fields changed"),
   }),
   materials: z.array(materialRow).describe("The condition's full materials array after this write"),
+  computed: z.array(reportMaterialLine).optional().describe("Present only when the condition has a cable_setup or a row on basis cables / pulls: the condition's computed lines (the same conditionTotals math as export_report's buy list) — basis_qty, qty, and reason when a cables/pulls row reads 0"),
 };
-
-/** One computed materials line inside a report condition row — the buy list.
- * conditionTotals (web/src/lib/totals.js) computes qty = basis_qty ÷ per,
- * rounded UP to whole purchase units unless round is false. */
-const reportMaterialLine = z.object({
-  name: z.string(),
-  unit: z.string().describe("Purchase unit, e.g. 'gal', 'bag'"),
-  per: z.number().describe("Coverage rate — basis units per purchase unit"),
-  basis: z.enum(["area", "linear", "count", "seam_lf"]),
-  round: z.boolean(),
-  basis_qty: z.number().describe("The condition total this row divides (SF, LF, EA, or figured seam LF — multiplier applied, waste not)"),
-  qty: z.number().describe("Computed order quantity"),
-}).passthrough();
 
 /** export_report: the canvas Report's own JSON document (totals.js reportJson,
  * schema "opentakeoff.report.v1", additive-only). The authority on the shape

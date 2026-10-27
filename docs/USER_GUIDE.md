@@ -295,7 +295,8 @@ Open **Supporting Materials** on a condition. Two free-text fields sit above the
 
 Below that, list what actually goes on the order: adhesive, sealer, polyurethane, thinset, grout, cove-base adhesive. Each line carries:
 
-- a **coverage rate**—*1 unit per N*—and a **basis**: floor SF, linear LF, each, or **seam LF**;
+- a **coverage rate**—*1 unit per N*—and a **basis**: floor SF, linear LF, each, or **seam LF**
+  (on a cable device condition, also **cable** and **pull**—see below);
 - a **round up** flag (on by default—you buy whole buckets and bags);
 - a **preset picker** for adhesive and mortar lines: real trowel-notch and roller spread rates (PSA rollers at 300 SF/gal down to coarse wood notches at 40 SF/gal; mortar trowels from 90 to 30 SF per 50-lb bag). Generic industry-typical values—always verify against the product data sheet;
 - for **grout** lines, an inline **calculator**: enter tile L × W × thickness, joint width (1/32″–1/2″), and bag weight, and the SF/bag rate derives itself, writing its work into the note (`12×24×3/8″ @ 1/8″ · 25 lb`);
@@ -311,6 +312,18 @@ whole length; the same square footage as two separate 10-ft rooms seams not at a
 percentage-of-perimeter rule most estimators fall back on can't tell those two jobs apart.
 Set the condition's roll goods first: without a roll setup, or with nothing traced yet, a seam
 LF line reads **0**, which means *needs a layout* rather than a number you shouldn't trust.
+
+**The cable and pull bases** are figured the same way, from a device condition's linked cable
+runs (Cable runs, below). They appear in the basis picker only on a condition with a cable
+setup. **cable** divides by the condition's linked cables and **pull** by its linked pulls
+(one per location), the numbers in the Cable summary: ×N applied, each run's cable override
+honored, unlinked, held, withheld and broken devices left out, pending runs counted. A jack per
+cable is *1 ea per 1 cable*; a faceplate per location is *1 ea per 1 pull*; a patch cord per
+cable and a camera mount per pull work the same way. Don't key these parts on **each**: a count
+line sees every marker, including the held and unlinked ones, and no rate can follow a run
+whose cable count differs. Beside the basis the line shows how many cables or pulls are linked;
+with no linked run yet it reads **0** and says so, and the Report, CSV and Excel print the
+reason in the line's note.
 
 ### One finish, two areas — condition twins
 
@@ -461,6 +474,11 @@ Per cable LF = measured route + vertical + both loops. Pulls are per location an
 pull; the condition's waste % applies only to the order figure and ×N to the whole row.
 Linking, unlinking and accepting are on the undo stack (`⌘Z`); cable setup field edits, like
 other condition properties, are not.
+
+**Parts per cable and per pull.** Jacks, faceplates, patch cords and mounts go in the device
+condition's Supporting Materials on the **cable** or **pull** basis (§4, Supporting materials),
+so they follow the runs: link a run and the jacks go up by its cable count; hold a device and
+its parts drop out of the buy list with it.
 
 The Report shows a **Cable summary** (per condition and TR, subtotaled by TR and by cable type,
 device EA beside pulls, so the gap is exactly the unlinked plus held devices), the **Held**
@@ -844,7 +862,7 @@ Open **Report** for the whole takeoff on one page: a per-condition table, the su
 - **Measured versus w/Waste.** Waste lives only in the w/Waste column: *SF w/Waste = measured × (1 + waste %)*. The measured quantity is never inflated, so your takeoff and your buy list stay honest about which is which. Waste applies to SF and LF, never EA.
 - **SY** = w/Waste SF ÷ 9.
 - **Multipliers** show as ×N beside the finish tag and multiply every quantity.
-- **Buy list**: each material's quantity = measured basis (floor SF / linear LF / each / figured seam LF) ÷ its coverage rate, **rounded up to whole units**—the number you order, not a theoretical gallon and a half. The combined list sums same-name materials after per-condition rounding.
+- **Buy list**: each material's quantity = measured basis (floor SF / linear LF / each / figured seam LF / linked cables / linked pulls) ÷ its coverage rate, **rounded up to whole units**—the number you order, not a theoretical gallon and a half. The combined list sums same-name materials after per-condition rounding.
 - The footer says it plainly: *Quantities derived from drawings at stated scales; verify in field.*
 
 ### Columns, grouping, templates, theme

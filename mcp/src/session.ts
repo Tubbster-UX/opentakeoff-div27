@@ -72,7 +72,7 @@ import { hasRollSetup, mintRollSetup, computeRollTakeoff, rollReportRows, seamLf
 // library, shared with the canvas: setup defaults and validation, run
 // resolution, the summary rollups and the refusal texts all live there.
 import { hasDuplicateFindings } from "../../web/src/lib/cableDupes.js";
-import { hasCableSetup, mintCableSetup, isDeviceType, normalizeDeviceType, DEVICE_TYPES, DEVICE_TYPE_ALIASES, mintCableRun, mintCableHold, holdRefusal, isCableHold, computeCableTakeoff, cableReportBlock, linkRunRefusal, cableSetupProblems as cableSetupProblemsJs } from "../../web/src/lib/cable.js";
+import { hasCableSetup, mintCableSetup, isDeviceType, normalizeDeviceType, DEVICE_TYPES, DEVICE_TYPE_ALIASES, mintCableRun, mintCableHold, holdRefusal, isCableHold, computeCableTakeoff, cableReportBlock, linkRunRefusal, cableQtyByShape, isCableMaterialBasis, cableSetupProblems as cableSetupProblemsJs } from "../../web/src/lib/cable.js";
 import { gridPxPerFoot, drawGrid, drawShapes, drawMarks, type Ctx2D, type ToCanvas, type ViewMarks } from "./view.ts";
 
 // Conditions and snap behavior minted here are identical to the browser's
@@ -150,7 +150,8 @@ export type MeasureRole = "floor_area" | "deduct" | "linear" | "surface_area" | 
 /** Supporting-materials row (field-identical to the canvas's addMaterial —
  * web/src/pages/TakeoffCanvas.jsx). Quantity is deterministic: basis ÷ per,
  * rounded up to whole purchase units unless round:false (totals.js). basis
- * "area" reads the condition's total SF, "linear" its LF, "count" its EA. */
+ * "area" reads the condition's total SF, "linear" its LF, "count" its EA;
+ * "cables" and "pulls" its linked cables and pulls (Division 27). */
 export interface MaterialRow {
   id: string;
   name: string;
@@ -159,8 +160,13 @@ export interface MaterialRow {
    * FIGURED roll-layout seam length (weld rod, seam tape — where two cuts meet
    * on the floor), not a share of the perimeter: it reads 0 until the
    * condition carries a roll_setup and has committed floor shapes to lay out,
-   * which is the honest answer rather than a guess. */
-  basis: "area" | "linear" | "count" | "seam_lf";
+   * which is the honest answer rather than a guess. "cables" / "pulls" are
+   * FIGURED the same way, from the linked cable runs (lib/cable.js
+   * cableQtyByShape: ×N applied, cables_override honored; unlinked, held,
+   * withheld and broken excluded, pending counted) — a jack per cable, a
+   * faceplate per pull. They read 0, with a reason, on a condition with no
+   * cable_setup or no linked run. */
+  basis: "area" | "linear" | "count" | "seam_lf" | "cables" | "pulls";
   unit: string;
   round: boolean;
   note?: string;
@@ -3845,7 +3851,8 @@ export class Session {
   }
 
   summary() {
-    const rows = conditionTotals(this.conditions, this.shapes, this.seamCtx()) as Record<string, unknown>[];
+    const cableT = this.cableTakeoff();
+    const rows = conditionTotals(this.conditions, this.shapes, this.materialsCtx(cableT)) as Record<string, unknown>[];
     // strip presentation fields for a compact agent-facing reply
     const lean = rows.map(({ color, fill, hatch, materials, ...rest }) => rest);
     // Scale gate: name every sheet whose scale is agent-set and unconfirmed —
@@ -3861,7 +3868,6 @@ export class Session {
     const scope = this.scopeCollisions();
     // cable (Division 27): the summary rollups ride only when a cable
     // condition or a run exists — a flooring session's reply is unchanged
-    const cableT = this.cableTakeoff();
     return {
       conditions: lean, totals: grandTotals(rows),
       ...(cableT ? { cable: { rows: cableT.summary.rows, by_tr: cableT.summary.by_tr, by_cable_type: cableT.summary.by_cable_type, totals: cableT.summary.totals, unlinked_devices: cableT.resolved.unlinked.devices.length, unlinked_routes: cableT.resolved.unlinked.routes.length, held_devices: cableT.resolved.held.length, warnings: cableT.summary.warnings, ...(hasDuplicateFindings(cableT.duplicates) ? { duplicates: cableT.duplicates } : {}) } } : {}),
@@ -4189,10 +4195,20 @@ export class Session {
                   ...(primary.dropped_before ? { dropped_before: primary.dropped_before } : {}),
                   ...(familySnap.length ? { family: familySnap } : {}) });
 
+    // the computed lines ride the reply only on a condition the cable bases
+    // concern (a cable setup, or a row on basis cables / pulls), so an agent
+    // learns "jacks = 14" without an export round-trip and every other
+    // edit_materials reply is unchanged
+    const after = target() as unknown as Condition;
+    const cableRelevant = hasCableSetup(after) || (after.materials || []).some((m) => isCableMaterialBasis(m?.basis));
+    const computed = cableRelevant
+      ? ((conditionTotals([after], this.shapes, this.materialsCtx()) as { materials: Record<string, unknown>[] }[])[0]?.materials ?? [])
+      : null;
     return {
       condition: tag, condition_id: cid,
       changed: { added, removed: [...removed], patched },
       materials: target().materials as unknown as MaterialRow[],
+      ...(computed ? { computed } : {}),
     };
   }
 
@@ -4223,6 +4239,14 @@ export class Session {
     const { dimsFor, uppFor } = this.rollInputs();
     const { byCond } = computeRollTakeoff(this.conditions, this.shapes, dimsFor, uppFor) as { byCond: Map<string, unknown> };
     return { seamByShape: seamLfByShape(byCond) as Map<string, number> };
+  }
+
+  /** Everything conditionTotals' figured materials bases read: the seams
+   * above, and the linked pulls and cables per device shape (basis "pulls" /
+   * "cables" — lib/cable.js cableQtyByShape). With no cable takeoff the map
+   * is empty, so a flooring session's rows are unchanged. */
+  private materialsCtx(cableT: CableTakeoff | null = this.cableTakeoff()) {
+    return { ...this.seamCtx(), cableByShape: cableQtyByShape(cableT) as Map<string, { pulls: number; cables: number }> };
   }
 
   /** The ONE place a condition's quantity knobs are written — edit_condition
@@ -5285,7 +5309,10 @@ export class Session {
     // divides against the layout's figured seams, not against an area.
     const { dimsFor, uppFor } = this.rollInputs();
     const { byCond } = computeRollTakeoff(this.conditions, this.shapes, dimsFor, uppFor) as { byCond: Map<string, unknown> };
-    const rows = (conditionTotals(this.conditions, this.shapes, { seamByShape: seamLfByShape(byCond) }) as Record<string, unknown>[]).filter((r) => (r.shape_count as number) > 0);
+    // cable (Division 27): a "cables" / "pulls" materials row divides the
+    // linked cables and pulls the same cable takeoff reports below
+    const cableT = this.cableTakeoff();
+    const rows = (conditionTotals(this.conditions, this.shapes, { seamByShape: seamLfByShape(byCond), cableByShape: cableQtyByShape(cableT) }) as Record<string, unknown>[]).filter((r) => (r.shape_count as number) > 0);
     return reportJson({
       projectName,
       rows,
@@ -5299,7 +5326,7 @@ export class Session {
       // any exist, so the document is byte-identical otherwise
       proposedConditionEdits: this.proposedConditionEdits(),
       // cable (Division 27): present only when a cable takeoff exists
-      cable: cableBlock(this.cableTakeoff(), (k: string) => this.sheets.get(k)?.sheetNumber || k),
+      cable: cableBlock(cableT, (k: string) => this.sheets.get(k)?.sheetNumber || k),
     });
   }
 
