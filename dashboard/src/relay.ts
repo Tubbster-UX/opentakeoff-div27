@@ -4,23 +4,37 @@
 // cannot subscribe themselves; they never see a Supabase key.
 //
 // Browser sockets use the hibernation API (ctx.acceptWebSocket). Each socket's
-// attachment records the project it opened and the import it shows, which is
-// all routing needs. The upstream is opened with the first browser and closed
-// with the last, so an idle relay can be evicted; an alarm re-opens it if the
-// object was restarted while browsers were still attached.
+// attachment records what it opened (ClientState): one project and the import
+// it shows, or the project list. That is all routing needs. Project sockets get
+// routed row changes; list sockets get a coalesced "touch" naming the tables
+// that changed, and re-read the list.
+//
+// The upstream is opened with the first browser and closed with the last, so
+// an idle relay can be evicted; an alarm re-opens it if the object was
+// restarted while browsers were still attached. Before opening it, the relay
+// asks Postgres (Hyperdrive) which OPTIONAL tables are in the realtime
+// publication; Realtime refuses a channel that names a missing table.
 import { DurableObject } from "cloudflare:workers";
+import { publishedTables, withClient } from "./db.js";
 import { connectSupabaseRealtime, type Upstream } from "./realtime.js";
-import type { ClientMessage, RowChange, ServerMessage, UpstreamStatus } from "./shared/protocol.js";
-import { route, type ClientState } from "./shared/routing.js";
+import { CORE_TABLES, OPTIONAL_TABLES, type ClientMessage, type RowChange, type ServerMessage, type TableName, type UpstreamStatus } from "./shared/protocol.js";
+import { isListClient, route, type ClientState } from "./shared/routing.js";
 import type { Env } from "./env.js";
 
 const WATCHDOG_MS = 30_000;
+/** List sockets are told at most this often (a re-import writes hundreds of rows). */
+const TOUCH_MS = 300;
 const OPEN = 1;
 
 export class RealtimeRelay extends DurableObject<Env> {
   private upstream: Upstream | null = null;
+  private starting: Promise<void> | null = null;
+  /** Bumped by every stop, so a start that was still checking tables does not open a stale upstream. */
+  private generation = 0;
   private status: UpstreamStatus = "connecting";
   private statusDetail: string | undefined;
+  private pendingTouch = new Set<TableName>();
+  private touchTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -30,13 +44,15 @@ export class RealtimeRelay extends DurableObject<Env> {
 
   override async fetch(req: Request): Promise<Response> {
     if (req.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("expected a WebSocket upgrade", { status: 426 });
-    const projectId = new URL(req.url).searchParams.get("project");
-    if (!projectId) return new Response("missing project", { status: 400 });
+    const q = new URL(req.url).searchParams;
+    const projectId = q.get("project");
+    const state: ClientState | null = q.get("scope") === "list" ? { kind: "list" } : projectId ? { kind: "project", projectId, importId: null } : null;
+    if (!state) return new Response("missing project", { status: 400 });
 
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ projectId, importId: null } satisfies ClientState);
+    server.serializeAttachment(state);
     this.ensureUpstream();
     server.send(this.statusMessage());
     await this.ctx.storage.setAlarm(Date.now() + WATCHDOG_MS);
@@ -51,12 +67,12 @@ export class RealtimeRelay extends DurableObject<Env> {
     } catch {
       return;
     }
-    if (msg?.type === "watch") {
-      const st = ws.deserializeAttachment() as ClientState;
+    const st = ws.deserializeAttachment() as ClientState;
+    if (msg?.type === "watch" && !isListClient(st)) {
       ws.serializeAttachment({ ...st, importId: typeof msg.importId === "string" ? msg.importId : null } satisfies ClientState);
     }
     // A message after the object restarted (hibernation, eviction) re-opens the upstream.
-    if (!this.upstream) {
+    if (!this.upstream && !this.starting) {
       this.ensureUpstream();
       ws.send(this.statusMessage());
     }
@@ -80,22 +96,39 @@ export class RealtimeRelay extends DurableObject<Env> {
       await this.stopUpstream();
       return;
     }
-    if (!this.upstream) {
+    if (!this.upstream && !this.starting) {
       this.ensureUpstream();
       this.broadcast(this.statusMessage());
     }
     await this.ctx.storage.setAlarm(Date.now() + WATCHDOG_MS);
   }
 
-  /** Fan one change out to the sockets it concerns (exported for tests through the relay's own path). */
+  /** Fan one change out: routed to the project sockets it concerns, noted for the list sockets. */
   private onChange(change: RowChange): void {
     const body = JSON.stringify({ type: "change", change } satisfies ServerMessage);
+    let lists = false;
     for (const ws of this.openSockets()) {
       const st = ws.deserializeAttachment() as ClientState;
+      if (isListClient(st)) {
+        lists = true;
+        continue;
+      }
       const { send, next } = route(change, st);
       if (next !== st) ws.serializeAttachment(next);
       if (send) safeSend(ws, body);
     }
+    if (lists) {
+      this.pendingTouch.add(change.table);
+      this.touchTimer ??= setTimeout(() => this.flushTouch(), TOUCH_MS);
+    }
+  }
+
+  private flushTouch(): void {
+    this.touchTimer = undefined;
+    if (!this.pendingTouch.size) return;
+    const body = JSON.stringify({ type: "touch", tables: [...this.pendingTouch] } satisfies ServerMessage);
+    this.pendingTouch.clear();
+    for (const ws of this.openSockets()) if (isListClient(ws.deserializeAttachment() as ClientState)) safeSend(ws, body);
   }
 
   private onStatus(status: UpstreamStatus, detail?: string): void {
@@ -106,17 +139,36 @@ export class RealtimeRelay extends DurableObject<Env> {
   }
 
   private ensureUpstream(): void {
-    if (this.upstream) return;
+    if (this.upstream || this.starting) return;
     const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = this.env;
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       this.status = "unconfigured";
       this.statusDetail = "SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not set";
       return;
     }
-    this.upstream = connectSupabaseRealtime(
-      { supabaseUrl: SUPABASE_URL, serviceKey: SUPABASE_SERVICE_ROLE_KEY },
-      { onChange: (c) => this.onChange(c), onStatus: (s, d) => this.onStatus(s, d) },
-    );
+    const gen = this.generation;
+    this.status = "connecting";
+    this.starting = (async () => {
+      const optional = await this.publishedOptionalTables();
+      if (gen !== this.generation) return;
+      this.upstream = connectSupabaseRealtime(
+        { supabaseUrl: SUPABASE_URL, serviceKey: SUPABASE_SERVICE_ROLE_KEY, tables: [...CORE_TABLES, ...optional] },
+        { onChange: (c) => this.onChange(c), onStatus: (s, d) => this.onStatus(s, d) },
+      );
+    })().finally(() => {
+      if (gen === this.generation) this.starting = null;
+    });
+  }
+
+  /** Optional tables (Portal pushes) that this database publishes to Realtime; none when Postgres cannot be asked. */
+  private async publishedOptionalTables(): Promise<TableName[]> {
+    try {
+      const set = await withClient(this.env.HYPERDRIVE.connectionString, (p) => void p, (db) => publishedTables(db, OPTIONAL_TABLES));
+      return [...set];
+    } catch (e) {
+      console.warn("relay: could not check optional realtime tables; subscribing to the core tables only", e);
+      return [];
+    }
   }
 
   private async stopIfIdle(closing: WebSocket): Promise<void> {
@@ -127,8 +179,13 @@ export class RealtimeRelay extends DurableObject<Env> {
   private async stopUpstream(): Promise<void> {
     const up = this.upstream;
     this.upstream = null;
+    this.starting = null;
+    this.generation++;
     this.status = "connecting";
     this.statusDetail = undefined;
+    clearTimeout(this.touchTimer);
+    this.touchTimer = undefined;
+    this.pendingTouch.clear();
     await this.ctx.storage.deleteAlarm();
     if (up) await up.close().catch(() => undefined);
   }

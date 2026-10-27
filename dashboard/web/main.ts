@@ -36,7 +36,7 @@ async function showProjects(): Promise<void> {
   setLive("offline");
   const res = await fetch("/api/projects");
   if (!res.ok) return void app.replaceChildren(el("p", { class: "notice error" }, `Could not read projects (${res.status}).`));
-  const rows = (await res.json()) as Row[];
+  const rows = ((await res.json()) as { projects: Row[] }).projects;
   app.replaceChildren(
     el("h1", {}, "Projects"),
     el(

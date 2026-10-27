@@ -47,17 +47,54 @@ export function applyChange(s: Snapshot, c: RowChange): ApplyResult {
   return { kind: "applied", snapshot: { ...s, [field]: rows }, key };
 }
 
+export interface Summary {
+  /** Schematic rows. */
+  devices: number;
+  rooms: number;
+  connections: number;
+  /** Sum of every connection's per-cable length. */
+  cableLf: number;
+  errors: number;
+  warnings: number;
+  bomLines: number;
+  /** BOM totals: the same sums brink-merge prints and GET /api/projects returns. */
+  bom: BomTotals;
+}
+
+export interface BomTotals {
+  devices: number;
+  trs: number;
+  cables: number;
+  netLf: number;
+  orderLf: number;
+}
+
+const r2 = (n: number): number => Math.round(n * 100) / 100;
+
+/** BOM totals from BOM lines: device / TR quantities, and the cable lines' cable count and net / order LF. */
+export function bomTotals(bom: Row[]): BomTotals {
+  const sum = (kind: string, f: (l: Row) => unknown) => r2(bom.filter((l) => l.kind === kind).reduce((t, l) => t + (Number(f(l)) || 0), 0));
+  return {
+    devices: sum("device", (l) => l.qty),
+    trs: sum("tr", (l) => l.qty),
+    cables: sum("cable", (l) => l.cables),
+    netLf: sum("cable", (l) => l.net_lf),
+    orderLf: sum("cable", (l) => l.order_lf),
+  };
+}
+
 /** Totals shown in the header, recomputed from rows. */
-export function summarize(s: Snapshot): { devices: number; rooms: number; connections: number; cableLf: number; errors: number; warnings: number; bomLines: number } {
+export function summarize(s: Snapshot): Summary {
   const lf = s.connections.reduce((t, c) => t + (Number(c.cable_length_ft) || 0), 0);
   return {
     devices: s.nodes.filter((n) => n.node_type === "device").length,
     rooms: s.nodes.filter((n) => n.node_type === "room").length,
     connections: s.connections.length,
-    cableLf: Math.round(lf * 100) / 100,
+    cableLf: r2(lf),
     errors: s.issues.filter((i) => i.severity === "error").length,
     warnings: s.issues.filter((i) => i.severity === "warning").length,
     bomLines: s.bom.filter((l) => l.kind !== "issue").length,
+    bom: bomTotals(s.bom),
   };
 }
 
