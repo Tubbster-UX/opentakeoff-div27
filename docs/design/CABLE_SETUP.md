@@ -78,6 +78,7 @@ A point per TR with a name (MDF, IDF-1, TR-2) and the sheet it sits on. Stored a
 | `route_shape_ids` | One or more linear shapes, in order; segments may sit on different sheets |
 | `tr_id` | The TR marker this run homes to |
 | `cables_override` | Optional; replaces `cables_per_location` for this location |
+| `vertical_override` | Optional, feet ≥ 0; replaces the condition's `vertical_ft` for this location (added with item 4, see Decisions) |
 | `provenance` | Actor (person or agent), method, created and review status |
 
 ## Quantity math with worked examples
@@ -277,3 +278,11 @@ Recorded while building item 5 (parts per cable and per pull, Oct 27, 2026):
 - [x] **Picker.** The basis picker offers **cable** and **pull** only on a condition with a cable setup, and keeps showing a row's basis if the setup is later removed (the row then reads 0 with its reason). The material library's picker shows them only on an entry promoted from such a row.
 - [x] **`edit_materials` reply.** Gains `computed` (the condition's computed lines, the same math as `export_report`) only on a condition with a cable setup or a row on these bases, so every other reply is unchanged. The MCP tool count stays 57.
 - [x] **Marked set.** It prints no materials, so nothing changes there.
+
+Recorded while building item 4, per-run vertical (Oct 27, 2026):
+
+- [x] **A run can state its own vertical.** The run record gains `vertical_override` (number ≥ 0, feet), the `cables_override` pattern: it replaces the condition's `vertical_ft` for that location only, is minted only when valid, and the load gate drops an invalid one. This **relaxes "one vertical per condition"** from the first-bid decisions: devices that share a type but not a vertical (intrusion door contacts at the head beside a keypad at 48", one camera on a tall pole) stay on one condition instead of becoming separate conditions only for the vertical. The vertical is still a stated allowance, never estimated: the run's own value or the condition's, and nothing else.
+- [x] **Withholding.** A condition whose only problem is a missing vertical (an access_door before the job's vertical is entered) does not withhold a run that states its own: that run is linked, and runs without one stay withheld with the existing reason. Any other missing setup value still withholds every run. `linkRunRefusal` follows the same rule, so `link_run` with `vertical_ft` accepts on such a condition.
+- [x] **Output.** A run's `vertical_ft` is the vertical used; `vertical_override` rides beside it when set. The Cable runs sheet keeps its columns: *Vertical ft* shows the vertical used and *Reason / notes* carries `vertical 9 ft (run override; condition 23 ft)`, or `(run override; condition has none)`. JSON report rows add `vertical_override` only when set, so a document without one exports byte-for-byte as before.
+- [x] **Editing a run.** A pure `override` command (`{ id, vertical_override?, cables_override? }`, `null` clears) with an exact inverse that restores each value and the record's key order; the canvas Runs panel's **↕** dispatches it on the cable undo family and edits the cables override beside the vertical. MCP has no edit verb (the tool count stays 57): `link_run` takes `vertical_ft`, and an existing run changes by `unlink_run` then `link_run`, which the tool descriptions say.
+- [x] **Not done here:** the Link Run tool (`W`) still refuses a device whose condition has no vertical; in the canvas the estimator enters the condition's vertical, links, then sets each differing run's own with **↕**. A run that is already withheld for its vertical (imported, or its condition's vertical cleared) is released in place with **↕**. The readout is unchanged.

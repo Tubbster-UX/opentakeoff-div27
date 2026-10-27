@@ -1,0 +1,215 @@
+{
+  "checks": [
+    {
+      "check": "import: 2 unlinked devices and 2 unlinked routes carry the amber cue",
+      "ok": true,
+      "detail": {
+        "devices": 2,
+        "routes": 2,
+        "tr": [
+          "MDF"
+        ]
+      }
+    },
+    {
+      "check": "import: the TR prints its name (MDF) on the sheet",
+      "ok": true,
+      "detail": [
+        "MDF"
+      ]
+    },
+    {
+      "check": "Runs panel: 1 pull, 2 cables of 3 devices, pending counted",
+      "ok": true,
+      "detail": "1 pull · 2 cables of 3 devices\n152.66 LF net · 170.98 LF with waste\n2 unlinked\n1 pending review (counted)\nAccept all\n1 linked run takes route length from a sheet whose scale no person has confirmed (A-101). Every cable length there rests on that scale: confirm it in the canvas before pricing."
+    },
+    {
+      "check": "Runs panel: 2 unlinked devices + 2 unlinked routes listed",
+      "ok": true
+    },
+    {
+      "check": "Runs panel: the TR name field holds MDF",
+      "ok": true
+    },
+    {
+      "check": "Link Run readout: DATA-1 → 1 seg → MDF, route 33.33 LF, per cable 76.33 LF, 2 cables = 152.66 LF",
+      "ok": true,
+      "detail": "LINK RUN\nDATA-1 → 1 seg → MDF\nLink ⏎\nEsc\nroute 33.33 LF · per cable 76.33 LF · 2 cables = 152.66 LF"
+    },
+    {
+      "check": "Enter links: 2 pulls, 4 cables, 1 unlinked left",
+      "ok": true,
+      "detail": "2 pulls · 4 cables of 3 devices\n305.32 LF net · 341.96 LF with waste\n1 unlinked\n1 pending review (counted)\nAccept all\n2 linked runs take route length from a sheet whose scale no person has confirmed (A-101). Every cable length there rests on that scale: confirm it in the canvas before pricing."
+    },
+    {
+      "check": "Enter links: the device cue clears (1 unlinked device on the sheet)",
+      "ok": true
+    },
+    {
+      "check": "⌘Z unlinks the new run",
+      "ok": true
+    },
+    {
+      "check": "⇧⌘Z re-links it",
+      "ok": true
+    },
+    {
+      "check": "Accept all clears the pending count",
+      "ok": true
+    },
+    {
+      "check": "⌘Z after Accept restores the pending run",
+      "ok": true
+    },
+    {
+      "check": "Enter with no segment refuses and links nothing",
+      "ok": true
+    },
+    {
+      "check": "condition editor: wall outlet, 2 per location, CAT6A, 23 / 10 / 10",
+      "ok": true,
+      "detail": {
+        "type": "wall_outlet",
+        "per": "2",
+        "kind": "CAT6A",
+        "v": "23",
+        "ld": "10",
+        "lt": "10"
+      }
+    },
+    {
+      "check": "clearing Vertical withholds the runs (0 pulls) and says why inline",
+      "ok": true,
+      "detail": "0 pulls · 0 cables of 3 devices\n0 LF net · 0 LF with waste\n3 unlinked\nAccept all"
+    },
+    {
+      "check": "entering it again restores 2 pulls",
+      "ok": true
+    },
+    {
+      "check": "a 300 ft vertical flags both runs over 295 ft (still counted) and warns once",
+      "ok": true,
+      "detail": {
+        "flags": 2,
+        "flagWarn": "2 pulls · 4 cables of 3 devices\n1413.32 LF net · 1582.92 LF with waste\n1 unlinked\n1 pending review (counted)\nAccept all\n2 linked runs exceed 295 ft per cable, the TIA-568 limit for a 4-pair copper permanent link (90 m): DATA-1 run-1c3de26a-07bc-4b5a-968b-42585897191d 353.33 ft; DATA-1 run-3a13c33d-4"
+      }
+    },
+    {
+      "check": "back to 23 ft: no over-length flag",
+      "ok": true
+    },
+    {
+      "check": "Report: Cable summary with Device EA beside Pulls and the TOTAL row",
+      "ok": true,
+      "detail": "CABLE SUMMARY\n\n2 linked runs take route length from a sheet whose scale no person has confirmed (A-101). Every cable length there rests on that scale: confirm it in the canvas before pricing.\n\nCondition\tDevice type\tCable type\tTR\tMultiplier\tWaste %\tDevice EA\tPulls\tCables\tMeasured route LF\tCable LF (net)\tCable LF (order, with waste)\tUnlinked devices\tHeld devices\tPending runs\tRuns over 295 ft\tNote\nDA"
+    },
+    {
+      "check": "Report Show closes the Report and selects the unlinked device",
+      "ok": true
+    },
+    {
+      "check": "Hold: the device leaves the unlinked count, the totals say 1 held, the Held list names the reason",
+      "ok": true,
+      "detail": {
+        "heldTotals": "2 pulls · 4 cables of 3 devices\n305.32 LF net · 341.96 LF with waste\n1 held\n1 pending review (counted)\nAccept all\n2 linked runs take route length from a sheet whose scale no person has confirmed (A-101). Every cable length there rests on that scale: confirm it in the canvas before pricing.",
+        "heldList": "HELD — NO RUN BY DECISION, EXCLUDED FROM TOTALS\nFurnished by others\n1 device\nrelease\nDATA-1\n⌖"
+      }
+    },
+    {
+      "check": "Hold: the sheet shows the grey held cue in place of the amber one",
+      "ok": true
+    },
+    {
+      "check": "⌘Z releases the hold: the device is unlinked again",
+      "ok": true
+    },
+    {
+      "check": "⇧⌘Z re-holds it",
+      "ok": true
+    },
+    {
+      "check": "override editor: blank fields with the condition's 23 ft and 2 cables as placeholders",
+      "ok": true
+    },
+    {
+      "check": "a negative vertical is refused inline and changes nothing",
+      "ok": true,
+      "detail": {
+        "net0": "305.32"
+      }
+    },
+    {
+      "check": "vertical 9 ft on one run: its row reads 62.33 LF × 2, a line under it names the condition's 23 ft; totals drop 305.32 → 277.32 LF net",
+      "ok": true,
+      "detail": {
+        "net0": "305.32",
+        "row9": "→ MDF · 62.33 LF × 2\nAccept\n↕\n⌖\n✕",
+        "line9": "run's own: vertical 9 ft (condition 23 ft)",
+        "net": "277.32"
+      }
+    },
+    {
+      "check": "⌘Z takes the override back (305.32 LF net, no chip)",
+      "ok": true
+    },
+    {
+      "check": "⇧⌘Z puts it back (277.32 LF net)",
+      "ok": true
+    },
+    {
+      "check": "the editor opens with the run's own vertical",
+      "ok": true
+    },
+    {
+      "check": "cables 3 beside it: 62.33 × 3 + 152.66 = 339.65 LF net, named under the row",
+      "ok": true,
+      "detail": "339.65"
+    },
+    {
+      "check": "blank both and Set: the run reads the condition's values again (305.32 LF net, no chip)",
+      "ok": true
+    },
+    {
+      "check": "Report: the Held list names the device and the reason",
+      "ok": true
+    },
+    {
+      "check": "marked set cover: the cable line counts the held device; DATA-1 carries pulls, cables, net and order LF",
+      "ok": true,
+      "detail": "OpenTakeoff · Marked Set\n\nUntitled project\n\n1 marked sheet · 7 takeoff items · quantities net of deducts, waste-adjusted where noted\n\nCable runs: 2 pulls linked · 1 run pending review · 0 unlinked devices · 1 held device\n\nCONDITIONS\n\nTR\n \n1 EA\n \ndiag\n\ntelecom room: where the runs home\n\nDATA-1\n \n3 EA\n \ndiag2\n\n2 pulls · 4 cables · 305.3 LF cable net · 342 LF order at 12% waste · 1 held\n\nROUTE\n \n100 LF\n \ncross\n\ncable route pathway, not a cable quantity: cable LF is figured per run on each device condition\n\nRoute chips: run ID · device condition · per-cable LF (the Cable runs sheet lists every run in full); each device tag carries its run ID. Amber ring:\n\nunlinked device. Grey ring: held device.\n\n! 2 linked runs take route length from a sheet whose scale no person has confirmed (A-101). Every cable length there rests on that scale:\n\nconfirm it in the canvas before pricing.\n\nBY SHEET\n\nA-101 ·"
+    },
+    {
+      "check": "marked set sheet: a route chip per linked run (run ID · DATA-1 · 76.3 LF per cable), the TR named",
+      "ok": true,
+      "detail": {
+        "chips": [
+          "run-1c3de2 · DATA-1 · 76.3 LF",
+          "run-3a13c3 · DATA-1 · 76.3 LF"
+        ],
+        "sheet": "OFFICE 101\n \nOFFICE 102\nBREAK 103\n \nCORRIDOR 104\n\nA-101\n\nSCALE: 1/4\" = 1’-0\"\n\nROUTE · 33.3 LF\n\nMDF\n \nrun-1c3de2\n\nrun-3a13c3\n\nrun-1c3de2 · DATA-1 · 76.3 LF\n\nrun-3a13c3 · DATA-1 · 76.3 LF\n\nA-101 · marked set"
+      }
+    },
+    {
+      "check": "marked set sheet: each run ID also tags its device",
+      "ok": true,
+      "detail": [
+        "run-1c3de2",
+        "run-3a13c3"
+      ]
+    },
+    {
+      "check": "marked set sheet: the linked routes' generic \"ROUTE · 33.3 LF\" chips gave way; the unlinked route keeps its own",
+      "ok": true
+    },
+    {
+      "check": "no console errors",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": [],
+  "blocked": [
+    "https://static.cloudflareinsights.com/beacon.min.js",
+    "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+  ]
+}

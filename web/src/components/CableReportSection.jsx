@@ -43,7 +43,7 @@ export default function CableReportSection({ takeoff, units = "imperial", sheetL
         </table>
       </div>
       <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--ink-muted)", lineHeight: 1.5 }}>
-        Pulls, cables and cable LF come only from linked runs: measured route + the condition's vertical and service loops, × cables. Device EA beside Pulls shows the gap, which is exactly the unlinked plus held devices. Pending runs are counted, like pending shapes. Waste applies only to the order column; ×N applies across the row.
+        Pulls, cables and cable LF come only from linked runs: measured route + the vertical (the condition's, or a run's own) and the service loops, × cables. Device EA beside Pulls shows the gap, which is exactly the unlinked plus held devices. Pending runs are counted, like pending shapes. Waste applies only to the order column; ×N applies across the row.
       </p>
       {held.length > 0 && (
         <div style={{ marginTop: 14 }} data-cable-report-held>

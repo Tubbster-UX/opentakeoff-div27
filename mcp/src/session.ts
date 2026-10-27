@@ -101,7 +101,7 @@ export interface CableTakeoff {
     runs: {
       id: string; status: "linked" | "withheld" | "broken"; condition_id: string | null; finish_tag: string; device_type: string; cable_type: string;
       device_shape_ids: string[]; route_shape_ids: string[]; tr_id: string; tr_name: string; sheet_ids: string[];
-      device_sheet_ids: string[]; tr_sheet_id: string; over_length?: true; scale_unconfirmed?: true;
+      device_sheet_ids: string[]; tr_sheet_id: string; over_length?: true; scale_unconfirmed?: true; vertical_override?: number; cables_override?: number;
       route_lf: number; vertical_ft: number | null; loop_device_ft: number | null; loop_tr_ft: number | null;
       per_cable_lf: number | null; cables: number | null; location_lf: number | null;
       review: "pending" | "accepted" | "human"; pending: boolean; reason?: string; reasons?: string[]; notes?: string[]; leg_warning?: true;
@@ -229,6 +229,9 @@ export interface CableRun {
   route_shape_ids: string[];
   tr_id: string;
   cables_override?: number;
+  /** The run's own vertical in feet (≥ 0), replacing the condition's
+   * vertical_ft for this location only. Absent = the condition's. */
+  vertical_override?: number;
   /** Present on a HOLD (web/src/lib/cable.js mintCableHold): device
    * locations deliberately left without a run, with the reason. A hold rides
    * cable_runs beside the runs; it has no route and no TR. */
@@ -4417,12 +4420,17 @@ export class Session {
    * value, the TR id is not a TR marker, or the device is already linked. An
    * agent cannot submit a length — only shape ids that carry measured
    * geometry. Lands pending (provenance.reviewed false), like every agent
-   * shape; counts in totals exactly as pending shapes do, and says so. */
-  linkRun(opts: { device_shape_ids: string[]; route_shape_ids: string[]; tr_id: string; cables_override?: number }) {
+   * shape; counts in totals exactly as pending shapes do, and says so.
+   * `vertical_ft` is the run's own vertical (stored as vertical_override),
+   * replacing the condition's for this location only; a condition missing
+   * only its vertical accepts a run that states one. */
+  linkRun(opts: { device_shape_ids: string[]; route_shape_ids: string[]; tr_id: string; cables_override?: number; vertical_ft?: number }) {
     if (!this.docs.size) throw new UserError("No plan loaded — call load_plan first.");
-    const refusal = (linkRunRefusal as unknown as (o: typeof opts, c: Condition[], s: Shape[], r: CableRun[], i: ReturnType<Session["cableInputs"]>) => string | null)(opts, this.conditions, this.shapes, this.cableRuns, this.cableInputs());
+    const { vertical_ft, ...rest } = opts;
+    const link = { ...rest, ...(vertical_ft !== undefined ? { vertical_override: vertical_ft } : {}) };
+    const refusal = (linkRunRefusal as unknown as (o: typeof link, c: Condition[], s: Shape[], r: CableRun[], i: ReturnType<Session["cableInputs"]>) => string | null)(link, this.conditions, this.shapes, this.cableRuns, this.cableInputs());
     if (refusal) throw new UserError(`Can't link that run: ${refusal}`);
-    const run = mintCableRun({ ...opts, provenance: { method: "manual", actor: "agent" } }) as CableRun;
+    const run = mintCableRun({ ...link, provenance: { method: "manual", actor: "agent" } }) as CableRun;
     this.cableRuns.push(run);
     this.record({ op: "run_link", tool: "link_run", id: run.id });
     const t = this.cableTakeoff()!;
@@ -4432,6 +4440,8 @@ export class Session {
       tr: r.tr_name || r.tr_id, sheets: r.sheet_ids, device_sheets: r.device_sheet_ids, tr_sheet: r.tr_sheet_id,
       route_lf: round2(r.route_lf), vertical_ft: r.vertical_ft, loop_device_ft: r.loop_device_ft, loop_tr_ft: r.loop_tr_ft,
       per_cable_lf: round2(r.per_cable_lf as number), cables: r.cables, location_lf: round2(r.location_lf as number),
+      ...(r.vertical_override != null ? { vertical_override: r.vertical_override } : {}),
+      ...(r.cables_override != null ? { cables_override: r.cables_override } : {}),
       reviewed: false,
       ...(r.over_length ? { over_length: true as const } : {}),
       ...(r.scale_unconfirmed ? { scale_unconfirmed: true as const } : {}),
@@ -4455,6 +4465,8 @@ export class Session {
         ...(r.over_length ? { over_length: true as const } : {}),
         ...(r.scale_unconfirmed ? { scale_unconfirmed: true as const } : {}),
         ...(r.status === "linked" ? { vertical_ft: r.vertical_ft, loop_device_ft: r.loop_device_ft, loop_tr_ft: r.loop_tr_ft, per_cable_lf: round2(r.per_cable_lf as number), cables: r.cables, location_lf: round2(r.location_lf as number) } : {}),
+        ...(r.vertical_override != null ? { vertical_override: r.vertical_override } : {}),
+        ...(r.cables_override != null ? { cables_override: r.cables_override } : {}),
         review: r.review,
         ...(r.reason ? { reason: r.reason } : {}),
         ...(r.notes ? { notes: r.notes } : {}),

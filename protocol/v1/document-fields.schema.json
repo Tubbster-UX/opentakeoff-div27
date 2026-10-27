@@ -152,6 +152,11 @@
             "type": "integer",
             "minimum": 1
           },
+          "vertical_override": {
+            "type": "number",
+            "minimum": 0,
+            "description": "The run's own vertical in feet, replacing the device condition's cable_setup.vertical_ft for this location only (a stated allowance, never estimated). Omitted = the condition's."
+          },
           "hold": {
             "type": "object",
             "description": "Present on a hold record: the devices get no run by decision. Excluded from totals like an unlinked device, listed with the reason.",
