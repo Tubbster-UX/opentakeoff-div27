@@ -145,9 +145,9 @@ second use is not a side effect; see [the data layer](#the-data-layer--why-this-
   gets the schedule row with a citation per cell, across continuation sheets, rotated headers,
   and multi-building keys: `sheet_graph` / `resolve_tag` / `find_schedule`
   ([#87](https://github.com/Kentucky-ai/opentakeoff/issues/87))
-- **Division 27 cable runs** (headless in this build)—opt a count condition into a cable setup,
-  flag a telecom-room condition, trace routes with the Linear tool or `measure_line`, and
-  `link_run` joins device → route → TR: per cable LF from the measured route plus the setup's
+- **Division 27 cable runs**—opt a count condition into a cable setup, flag a telecom-room
+  condition, trace routes with Linear, and link device → route → TR with the Link Run tool
+  (`W`) or `link_run`: per cable LF from the measured route plus the setup's
   vertical and service loops, pulls and cables per location, waste on the order figure only, no
   routing factor and nothing estimated. Cable summary and runs ride the report, CSV and
   workbook ([design](docs/design/CABLE_SETUP.md))
@@ -545,7 +545,7 @@ key) or an **Anthropic-style** one, plus a vision-capable model id.
 | **Conditions** | Color + CAD hatch per finish, waste %, ×N multiplier, wall height, border thickness, schedule import, browser-wide library |
 | **Supporting Materials** | Labor + subfloor type, coverage rate × basis (incl. figured seam LF) → rounded order quantities, trowel/roller presets, grout calculator |
 | **Roll goods** | Per-condition roll setup → lanes, seams, multi-roll splits, to-scale cuts with drag-to-reorder nesting, Roll Order LF + Rolls + figured Seam LF on every export |
-| **Division 27 cable runs** | Per-condition cable setup + TR markers → runs that link a device to its measured route and TR; pulls, cables and cable LF (net and with waste) per condition × TR, a per-run sheet and an unlinked list on the report, CSV and workbook; MCP `link_run` / `list_runs` / `unlink_run` (canvas tools follow) |
+| **Division 27 cable runs** | Per-condition cable setup + TR markers → runs that link a device to its measured route and TR; pulls, cables and cable LF (net and with waste) per condition × TR, a per-run sheet and an unlinked list on the report, CSV and workbook; the Link Run tool (`W`) and Runs panel in the canvas; MCP `link_run` / `list_runs` / `unlink_run` |
 | **Multi-sheet** | Sheets tree with title-block sheet numbers, sheet gallery, tabs and side-by-side groups, Regroup, levels, **stitching across a match line**, PDF layer roles |
 | **Search and copy** | Search every sheet's text from the gallery, **Copy text** from a box or a whole sheet, and read a scanned sheet on-device (OCR, labelled wherever it's used) |
 | **Report** | Per-condition Floor/Wall/Border SF, LF, EA, SY with and without waste, plus the combined buy list; columns, grouping, saved templates |

@@ -263,3 +263,51 @@ In the app, Sheet → Import takeoff… on the `export_takeoff` JSON lands the s
 | `mcp`: check:tool-count, check:protocol-resources, check:wiki, build, smoke:dist | pass (56 flat / 12 staged tools, 11 schemas, 9 wiki pages) |
 | `protocol`: `npm run check` | pass |
 | `node scripts/check-doc-links.mjs` | pass |
+
+## 11. Phase 2 — canvas UI, as built (Oct 27, 2026)
+
+`TakeoffCanvas.jsx` changes are mounting and wiring only: the cable undo family next to the
+approvals one, the `W` key, `⏎` / `⌫` / `Esc` routing for the tool, the click dispatch, two rail
+buttons, and the component mounts. Everything else is in new files.
+
+| New file | What it is |
+|---|---|
+| `web/src/lib/cableLink.js` | The Link Run tool's pure click logic: what a click means (device → segments in order → TR), take-backs, and the live readout (which asks `cable.js` for every length). |
+| `web/src/components/CableSetupEditor.jsx` | The **+ cable…** opt-in and the setup fields in the docked condition properties; required values left empty show inline. |
+| `web/src/components/RunsPanel.jsx` | The docked Runs panel: totals, runs by condition with Accept and unlink, the unlinked list, TR name fields, ⌖ locate. |
+| `web/src/components/CableOverlay.jsx` | Per-sheet SVG: amber cues on unlinked devices and routes, TR names, the Link Run draft in cobalt. |
+| `web/src/components/CableLinkReadout.jsx` | The readout chip while Link Run is armed. |
+| `web/src/components/CableReportSection.jsx` | The Report's Cable summary and Unlinked list (the same cell matrix as the CSV and workbook). |
+| `web/test/cableLink.test.ts` | The click sequence, take-backs, refusals, readout values, and the run commands' exact inverses. |
+| `web/scripts/make-cable-fixture.mts`, `web/scripts/verify-cable-runs.mjs` | The invented fixture (through the MCP `Session`) and the browser check. |
+
+Changed: `cable.js` (`applyCableRunCommand`, the vertical reason worded by device type),
+`canvasConstants.js` (the Link Run tool entry), `cursorSnap.ts` (Link Run picks with the raw
+cursor), `TakeoffsPanel.jsx` and `ReportPanel.jsx` (one mount each), `canvasUtil.js` and the
+canvas's template copy (`cable_setup` and `role` ride condition templates), `UserGuide.jsx`
+and `docs/USER_GUIDE.md` (`W`), the `cableRun` icon.
+
+Deviations and choices, all inside the spec's Canvas UI section (recorded in the spec's Decisions):
+`W` as the shortcut; waste pre-filled only on a condition with none; the opt-in offered by what
+a condition holds; the TR name field in the Runs panel; run Accept in the Runs panel. Setup
+field edits stay off the undo stack (the Phase 1 review decision); link, unlink, accept and TR
+renames are on it.
+
+### Phase 2 check record (this container: Node 22, root)
+
+| Check | Result |
+|---|---|
+| Browser: `web/scripts/verify-cable-runs.mjs` on the invented fixture | 19 of 19 checks; screenshots and `results.json` in [`docs/review/cable-runs-phase2/`](../review/cable-runs-phase2/README.md) |
+| `web`: typecheck, lint, tests, bench (`results.json` unchanged), build, dist check | see the commit's report; the two environment-only failures from §10 are unchanged |
+| `mcp`, `protocol`, doc links | see the commit's report |
+
+To repeat the browser check:
+
+```
+cd web
+npm run build
+node --import tsx scripts/make-cable-fixture.mts /tmp/cable-fixture.json
+PLAYWRIGHT_MODULE=/path/to/playwright-core/index.mjs BROWSER_PATH=/path/to/chrome \
+  node scripts/verify-cable-runs.mjs /tmp/cable-fixture.json ../docs/review/cable-runs-phase2/results.json
+```
+

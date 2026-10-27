@@ -38,6 +38,7 @@ import { materialKind, MATERIAL_PRESETS, GROUT_DEFAULTS, groutDerivedFields, sho
 import { draftCommitValue, blurCommitValue, blurCommitNonNegative } from "../lib/draftInput.js";
 import { ROLL_FLOORING_TYPES } from "../lib/rollgoods.js";
 import { hasRollSetup, mintRollSetup } from "../lib/rollTakeoff.js";
+import CableSetupEditor from "./CableSetupEditor.jsx";
 import { Z } from "../lib/ui.js";
 import { ftIn } from "../lib/units";
 import { describeConditionEdit } from "../lib/proposals.js";
@@ -407,7 +408,7 @@ function AddValueInput({ onAdd }) {
 // the docked panel AND the restored top-bar band render the SAME editor (one
 // source of truth, like the app's single activateCondition path). Owns only its
 // hatch-popover open state; everything else flows through the passed handlers.
-export function ConditionAppearanceEditor({ cond: c, onUpdateCond, onSetCondParam, onAssignAttr, conditionColumns = [], layout = "stack", units = "imperial", rollInfo = null }) {
+export function ConditionAppearanceEditor({ cond: c, onUpdateCond, onSetCondParam, onAssignAttr, conditionColumns = [], layout = "stack", units = "imperial", rollInfo = null, cableInfo = null }) {
   const [hatchOpen, setHatchOpen] = useState(false);
   const activeColor = c.color || "#c96442";
   // Top-bar band ("row") only: the two palettes fold into two swatch buttons
@@ -557,6 +558,9 @@ export function ConditionAppearanceEditor({ cond: c, onUpdateCond, onSetCondPara
           footage from the condition's floor areas; the readout below comes back
           from the canvas via rollInfo. All lengths stored in feet (the lib/units
           contract); seam/wall allowances are inch-native like the engine. */}
+      {/* Division 27 cable setup / TR / route flags — docked layout only, the
+          roll precedent; the editor lives in its own component */}
+      {!isRow && <CableSetupEditor cond={c} onUpdateCond={onUpdateCond} row={cableInfo?.row || null} cableRows={cableInfo?.rows || []} units={units} />}
       {!isRow && !hasRollSetup(c) && (
         <div style={{ display: "flex", alignItems: "center", gap: 6, paddingTop: 6, marginTop: 1, borderTop: "1px solid var(--ink-faint)" }}>
           <select name="condition-roll-optin" value=""
@@ -819,7 +823,7 @@ const NO_HIDDEN = new Set();
 
 function TakeoffsPanel({
   open, width, overlay = false, multiSheet, dockSide, layoutLocked = false, dockHandle, units = "imperial",
-  conditions, activeCond, visRowById, projRowById = new Map(), conditionColumns, shapeLabels = [], templates, palette = [], rollByCond = null,
+  conditions, activeCond, visRowById, projRowById = new Map(), conditionColumns, shapeLabels = [], templates, palette = [], rollByCond = null, cableTakeoff = null,
   transitionSources = [],
   matLib, matLibById, linkedCountById,
   panelPrefs, onPanelPrefs, reassigning, epoch, clearSelectionRef,
@@ -1134,7 +1138,8 @@ function TakeoffsPanel({
             </div>
           );
         })()}
-        {on && <ConditionAppearanceEditor cond={c} onUpdateCond={onUpdateCond} onSetCondParam={onSetCondParam} onAssignAttr={onAssignAttr} conditionColumns={conditionColumns} units={units} rollInfo={rollByCond?.get(c.id) || null} />}
+        {on && <ConditionAppearanceEditor cond={c} onUpdateCond={onUpdateCond} onSetCondParam={onSetCondParam} onAssignAttr={onAssignAttr} conditionColumns={conditionColumns} units={units} rollInfo={rollByCond?.get(c.id) || null}
+          cableInfo={{ row: projRowById.get(c.id) || null, rows: (cableTakeoff?.summary?.rows || []).filter((r) => r.condition_id === c.id) }} />}
         {on && onDeriveTransitions && <TransitionsAction cond={c} sources={transitionSources} draft={transDraft} setDraft={setTransDraft}
           result={transResult} setResult={setTransResult} onDerive={onDeriveTransitions} onLocate2={onLocateTransition} />}
         {matOn && (

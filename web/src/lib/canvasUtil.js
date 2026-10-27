@@ -66,6 +66,8 @@ export const instantiateTemplate = (t) => ({
   ...(t.laborType != null ? { laborType: t.laborType } : {}),
   ...(t.subfloorType != null ? { subfloorType: t.subfloorType } : {}),
   ...(t.roll_setup ? { roll_setup: { ...t.roll_setup } } : {}),   // #136 — deep-copied like grout: a template's roll spec must never be shared by reference
+  ...(t.cable_setup ? { cable_setup: { ...t.cable_setup } } : {}),   // Division 27 — a template's cable spec is copied, never shared
+  ...(t.role === "tr" || t.role === "route" ? { role: t.role } : {}),
   // instantiateMaterial (lib/materials.js) deep-copies the nested grout
   // geometry — a shallow spread here aliased the CT-1 seed's one grout object
   // into every fresh-workspace condition across every project in the session

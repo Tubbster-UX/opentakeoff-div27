@@ -75,6 +75,9 @@ export const MEASURE_TOOLS = [
   { id: "surface", icon: "surface", label: "Surface Area", shortcut: "S" },
   { id: "count", icon: "count", label: "Count", shortcut: "C" },
   { id: "symbol", icon: "symbol", label: "Symbol — marquee ONE instance, count every placement (#264)", shortcut: "Y" },
+  // Division 27 (docs/design/CABLE_SETUP.md): W — "wire". Every other letter
+  // near it is taken (A R L S C D O K H N Y T G F Q M V); P is deliberately unbound.
+  { id: "cablelink", icon: "cableRun", label: "Link Run — device, route segments, TR, then Enter", shortcut: "W" },
 ];
 export const CUT_TOOLS = [
   { id: "deduct", icon: "deduct", label: "Deduct shape", shortcut: "D" },

@@ -392,24 +392,54 @@ cut edits on shapes are kept but go inert.
 Agents get the same thing headlessly—`roll_setup` is a field on the MCP server's
 `edit_condition`, and the reply echoes the figured order ([§14](#14-ai-settings-and-driving-opentakeoff-from-an-agent)).
 
-### Cable runs — Division 27 (headless in this build)
+### Cable runs — Division 27
 
-A count condition can carry a **cable setup**: device type (wall outlet, WAP, camera, access
-control door, other ceiling device, custom), cables per location, cable type, and the vertical
-and service-loop allowances per cable. A second count condition flagged as **telecom rooms**
-holds the TR markers (name each with its label: `MDF`, `IDF-1`), and a linear condition flagged
-as **cable routes** holds the segments you trace with Linear (so any left unlinked is listed).
-A **run** links one device marker to its route (one or more segments, in order, each measured at
-its own sheet's scale) and the TR it homes to. Per cable LF = the measured route + the vertical
-+ both loops; pulls are per location, cables per pull; the condition's waste % applies only to
-the order figure. Nothing is estimated: a device or route with no run, a run whose shape was
-deleted, and a condition missing its vertical are listed as unlinked or withheld and excluded.
+A cable takeoff measures each device's route and adds fixed allowances to it. Nothing is
+estimated: horizontal length comes only from route segments you trace.
 
-In this build the setup, the TR flag and the links are made over MCP (`edit_condition`,
-`link_run`, `list_runs`, `unlink_run` in [`docs/MCP.md`](MCP.md)); the Report's CSV, Excel
-and JSON exports carry the Cable summary, Cable runs and Unlinked tables whenever a cable
-condition exists, and the marked set's cover tallies pulls, pending runs and unlinked devices.
-The canvas setup panel, the Link Run tool and the Runs panel are the next phase of
+**Set up the conditions.** In the Takeoffs panel, select a count condition and choose
+**+ cable…** in its properties:
+
+- **A device type** (Wall outlet, WAP, Camera, Access control door, Other ceiling device,
+  Custom) makes it a device condition. The type fills in its starting vertical and service
+  loops, and the condition's waste becomes 12% if it had none. The project spec governs: edit
+  **Cables/loc**, **Type** (free text such as `CAT6A`, which groups the summary), **Vertical**,
+  **Loop dev** and **Loop TR** to match it. An Access control door has no starting vertical;
+  until you enter one, its runs are withheld and the reason shows in red under the fields.
+- **Telecom room (TR)** makes a count condition's markers the rooms runs home to.
+- **Cable route (linear)** on a linear condition marks its lines as routes. Any route
+  segment that no run uses is listed as unlinked.
+
+**Place and trace.** Count the devices (Count or Symbol), count each TR, and trace each route
+segment with Linear under the route condition. A route may continue on another sheet; each
+segment is measured at its own sheet's scale.
+
+**Link Run (`W`).** Click the device marker, then its route segments in order from the device
+toward the TR, then the TR marker, and press `⏎`. A readout at the top of the canvas shows the
+measured route and the per-cable length before you commit, and names anything that would
+refuse: a segment on an unscaled sheet, a device condition missing its vertical, a device that
+is already linked. `⌫` takes back the last pick, clicking the newest segment again removes it,
+`Esc` cancels the draft. One segment may serve several runs (a shared corridor trunk). A
+segment on a stitched surface links here, in the canvas, which knows the stitch's scale.
+
+**The Runs panel** (the cable button on the right rail) lists every run by condition with its
+per-cable length × cables, its status, and **Accept** for runs an agent linked; the unlinked
+devices and routes; and each TR with a name field (the name is the marker's label, so it also
+appears as a label bucket in the Report's group-by-label view and the workbook's floor × room
+tab). **⌖** puts any item on screen. Unlinked devices carry an amber dashed ring on the sheet,
+unlinked routes an amber halo, and each TR prints its name.
+
+Per cable LF = measured route + vertical + both loops. Pulls are per location and cables per
+pull; the condition's waste % applies only to the order figure and ×N to the whole row.
+Linking, unlinking and accepting are on the undo stack (`⌘Z`); cable setup field edits, like
+other condition properties, are not.
+
+The Report shows a **Cable summary** (per condition and TR, subtotaled by TR and by cable type,
+device EA beside pulls so an unlinked device shows as a gap) and the **Unlinked** list, where
+**Show** closes the Report and puts the item on screen. CSV, Excel and JSON carry the same
+tables plus a per-run sheet, and the marked set's cover tallies pulls, pending runs and
+unlinked devices. Agents do the same work over MCP (`link_run`, `list_runs`, `unlink_run` in
+[`docs/MCP.md`](MCP.md)); their runs arrive pending and count, as their shapes do. Design:
 [`docs/design/CABLE_SETUP.md`](design/CABLE_SETUP.md).
 
 ### Import from schedule
@@ -1140,6 +1170,7 @@ Every shortcut in the app, verified against the code. Letter keys are suppressed
 | `⇧D` | Deduct rectangle |
 | `H` | Highlighter |
 | `N` | Dimension line—a standalone length label at the sheet's scale (markup, never counted) |
+| `W` | Link Run—click a device, its route segments in order, the TR, then `⏎` (Division 27 cable runs) |
 | `K` | Check a dimension |
 | `V` | Select |
 | `G` | Sheet gallery |

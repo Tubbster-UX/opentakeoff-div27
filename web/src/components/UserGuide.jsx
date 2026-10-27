@@ -79,6 +79,7 @@ export const TOOLS = [
   [["D"], "Deduct shape (Cut Out)"], [["⇧", "D"], "Deduct rectangle"],
   [["H"], "Highlighter"], [["K"], "Check a dimension against what the drawing says"],
   [["N"], "Dimension line — a standalone length label at the sheet's scale (markup, never counted)"],
+  [["W"], "Link Run — click a device, its route segments in order, the TR, then ⏎"],
   [["V"], "Select"], [["G"], "Sheet gallery"],
   [[], "Copy text (no key) — box a note or schedule; its text goes on your clipboard"],
   [["1", "–", "9"], "Arm condition N"],

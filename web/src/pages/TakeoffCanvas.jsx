@@ -157,7 +157,13 @@ import { rollColorForType } from "../lib/rollgoods.js";
 import { computeRollTakeoff, seamLfByShape } from "../lib/rollTakeoff.js";
 // Division 27 cable runs (docs/design/CABLE_SETUP.md) — the pure library;
 // the canvas only holds the records, resolves them, and hands the result on.
-import { sanitizeCableRuns, computeCableTakeoff } from "../lib/cable.js";
+import { sanitizeCableRuns, computeCableTakeoff, applyCableRunCommand, mintCableRun, isTrCondition } from "../lib/cable.js";
+// Phase 2 canvas UI — the click logic is pure (lib/cableLink.js); the panels,
+// the overlay and the readout are their own components
+import { EMPTY_LINK, linkClick, linkUndoPick, linkReadout } from "../lib/cableLink.js";
+import RunsPanel from "../components/RunsPanel.jsx";
+import CableOverlay from "../components/CableOverlay.jsx";
+import CableLinkReadout from "../components/CableLinkReadout.jsx";
 // In-canvas takeoff agent — BYO-key tool-use loop (lib/agentLoop) aiming the
 // registry of deterministic tools (lib/agentTools); this file provides the
 // CAPABILITIES those tools close over and the review gate their proposals
@@ -633,6 +639,8 @@ export default function TakeoffCanvas() {
   const [rollShow, setRollShow] = useState(true);         // draw the figured cuts over the plan (on: opting a condition in shows its cuts immediately)
   const [rollEdit, setRollEdit] = useState(false);        // cut-edit mode — cuts take pointer events (slide / resize / double-click reset)
   const [rollPanelOpen, setRollPanelOpen] = useState(false); // docked Roll panel (diagram + reorder)
+  const [runsPanelOpen, setRunsPanelOpen] = useState(false); // docked Runs panel (Division 27 cable runs)
+  const [linkDraft, setLinkDraft] = useState(EMPTY_LINK);   // Link Run tool draft — session-only, never persisted
   const rollDragRef = useRef(null);                       // live cut-drag gesture; commit is ONE rollcut command on release
   const [agentLog, setAgentLog] = useState([]);           // streaming run status [{kind, text}]
   const [agentRunning, setAgentRunning] = useState(false);
@@ -732,6 +740,12 @@ export default function TakeoffCanvas() {
       redoStackRef.current = [...redoStackRef.current, { family: "approval", cmd: res.inverse, inverse: entry.inverse }];
       return;
     }
+    if (entry.family === "cable") {   // Division 27 runs — the approvals pattern (lib/cable.js applyCableRunCommand)
+      const res = applyCableRunCommand(cableRuns, entry.inverse);
+      setCableRuns(res.runs);
+      redoStackRef.current = [...redoStackRef.current, { family: "cable", cmd: res.inverse, inverse: entry.inverse }];
+      return;
+    }
     const res = applyShapeCommand(shapes, entry.inverse);
     setShapes(res.shapes);
     redoStackRef.current = [...redoStackRef.current, { cmd: res.inverse, inverse: entry.inverse }];
@@ -752,6 +766,12 @@ export default function TakeoffCanvas() {
       undoStackRef.current = [...undoStackRef.current, { family: "approval", cmd: entry.cmd, inverse: res.inverse }];
       return;
     }
+    if (entry.family === "cable") {
+      const res = applyCableRunCommand(cableRuns, entry.cmd);
+      setCableRuns(res.runs);
+      undoStackRef.current = [...undoStackRef.current, { family: "cable", cmd: entry.cmd, inverse: res.inverse }];
+      return;
+    }
     const res = applyShapeCommand(shapes, entry.cmd);
     setShapes(res.shapes);
     undoStackRef.current = [...undoStackRef.current, { cmd: entry.cmd, inverse: res.inverse }];
@@ -770,6 +790,20 @@ export default function TakeoffCanvas() {
       const st = recordCommand(undoStackRef.current, { family: "approval", cmd, inverse: res.inverse });
       undoStackRef.current = st.undo;
       redoStackRef.current = st.redo;   // a new command discards the redone future
+    }
+    return res;
+  }
+  // ── the cable-run wrapper (Division 27) — dispatchApproval's twin: pure
+  // apply (lib/cable.js applyCableRunCommand) + setCableRuns + the SHARED
+  // undo/redo stacks under family "cable", so ⌘Z takes back a link, an
+  // unlink or an accept in order with shape edits.
+  function dispatchCableRun(cmd, { record = true } = {}) {
+    const res = applyCableRunCommand(cableRuns, cmd);
+    setCableRuns(res.runs);
+    if (record && res.inverse) {
+      const st = recordCommand(undoStackRef.current, { family: "cable", cmd, inverse: res.inverse });
+      undoStackRef.current = st.undo;
+      redoStackRef.current = st.redo;
     }
     return res;
   }
@@ -1532,6 +1566,47 @@ export default function TakeoffCanvas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- uppFor reads scales (listed) + renderScalesRef pinned to RENDER_SCALE, the roll memo's rule
     [conditions, shapes, cableRuns, scales]
   );
+  // Phase 2 wiring: which conditions hold TR markers (the overlay names them),
+  // the Link Run readout (lib/cableLink.js → lib/cable.js), and the handlers.
+  const trCondIds = useMemo(() => new Set(conditions.filter(isTrCondition).map((c) => c.id)), [conditions]);
+  const linkReadoutNow = useMemo(
+    () => (tool === "cablelink" ? linkReadout(linkDraft, { conditions, shapes, runs: cableRuns, uppFor: (k) => uppFor(k) }) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- uppFor reads scales (listed), the cable memo's rule
+    [tool, linkDraft, conditions, shapes, cableRuns, scales]
+  );
+  // a draft belongs to the armed tool — leaving it drops the draft
+  useEffect(() => { if (tool !== "cablelink") setLinkDraft((d) => (d === EMPTY_LINK ? d : EMPTY_LINK)); }, [tool]);
+  // Link Run click: every shape under the cursor (topmost first, hidden
+  // conditions excluded — the pickers' own list) goes to the pure click logic
+  function cableLinkAt(p) {
+    const thr = 8 / tfRef.current.scale;
+    const hits = [...stackedShapes].reverse().filter((s) => {
+      const sp = panelByKey(s.sheet_id);
+      return sp?.img?.w && hitShapeC(s, p[0] - sp.xOffset, p[1], sp.img.w, sp.img.h, thr);
+    });
+    const r = linkClick(linkDraft, hits, { conditions, runs: cableRuns });
+    setLinkDraft(r.draft);
+    setCommitMsg(r.msg);
+  }
+  // Enter / the readout's Link button: the library's refusal or one undoable link
+  function commitCableLink() {
+    if (!linkDraft.device) { setCommitMsg("Link Run: click a device marker first."); return; }
+    const rd = linkReadout(linkDraft, { conditions, shapes, runs: cableRuns, uppFor: (k) => uppFor(k) });
+    if (rd.stage !== "ready") { setCommitMsg(rd.stage === "route" ? "Link Run: the run needs at least one route segment." : "Link Run: click the TR marker the run homes to."); return; }
+    if (rd.refusal) { setCommitMsg(`Couldn't link the run: ${rd.refusal}`); return; }
+    const by = authorName();
+    const run = mintCableRun({ device_shape_ids: [linkDraft.device], route_shape_ids: linkDraft.routes, tr_id: linkDraft.tr, provenance: { method: "manual", ...(by ? { author: by } : {}) } });
+    dispatchCableRun({ type: "link", run });
+    setLinkDraft(EMPTY_LINK);
+    setCommitMsg(`Run linked: ${rd.device} → ${rd.tr} · per cable ${Math.round(lenVal(rd.per_cable_lf, units) * 100) / 100} ${lenUnit(units)} × ${rd.cables}. Click the next device (⌘Z unlinks).`);
+  }
+  // "put it on screen" for any cable item (Runs panel, Report) — the Work
+  // panel's locate path: open the sheet, frame the shape, select it
+  function locateCableShape(id) {
+    const shape = shapes.find((x) => x.id === id);
+    if (!shape) { setCommitMsg("That shape no longer exists — the run reads broken until it is re-linked."); return; }
+    locateWork(shape);
+  }
 
   // Cut drag (#136) — the self-contained element-drag pattern (the panel-resize
   // handle's): the cut's own <g> opts into pointer events in edit mode, captures
@@ -3378,6 +3453,7 @@ export default function TakeoffCanvas() {
         // agent-proposal accept resumes the key the moment the offer clears
         if (agentOfferFnsRef.current?.pending()) { e.preventDefault(); agentOfferFnsRef.current.confirm(); return; }
         if (tool === "oneclick" && proposal?.regions.length) { e.preventDefault(); createProposal(); return; }
+        if (tool === "cablelink") { e.preventDefault(); commitCableLink(); return; }
         const ok = !bowOpen && (((tool === "area" || tool === "deduct") && poly.length >= 3) || (tool === "zone" && poly.length >= 3 && !zoneTraceCross) || ((tool === "linear" || tool === "surface") && poly.length >= 2));
         if (ok) { e.preventDefault(); finishShape(); return; }
         // ⏎ with agent proposals pending on a visible sheet = accept them all —
@@ -3451,7 +3527,7 @@ export default function TakeoffCanvas() {
         setCommitMsg(`${label} armed${tag ? ` under ${tag}` : ""}${plan.curve ? " · Curve" : ""} — trace the next one.`);
         return;
       }
-      const map = { v: "select", a: "area", r: "rect", l: "linear", s: "surface", c: "count", d: "deduct", o: "oneclick", k: "check", h: "highlighter", n: "dimension", y: "symbol" };
+      const map = { v: "select", a: "area", r: "rect", l: "linear", s: "surface", c: "count", d: "deduct", o: "oneclick", k: "check", h: "highlighter", n: "dimension", y: "symbol", w: "cablelink" };
       const t = map[lower];
       if (t === "oneclick" && !oneClickEnabled()) { setCommitMsg(ONE_CLICK_GATE_MESSAGE); return; }   // the gate (lib/gate.js)
       if (t) setTool(t);
@@ -3459,7 +3535,7 @@ export default function TakeoffCanvas() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tool, poly, proposal, agentProposals, activeCond, sheetGroup, sheetKey, shapes, scales, selectedId, conditions]);
+  }, [tool, poly, proposal, agentProposals, activeCond, sheetGroup, sheetKey, shapes, scales, selectedId, conditions, linkDraft, cableRuns]);
   // ^ selectedId/conditions joined for T (repeat the selected shape): the
   //   handler reads the selected record and validates its condition id.
   // ^ shapes/scales joined the deps with the agent accept path (the delete-handler
@@ -3514,6 +3590,7 @@ export default function TakeoffCanvas() {
       if (e.key === "Backspace" || e.key === "Delete") {
         e.preventDefault();
         if (poly.length) { dropLastPoint(); }
+        else if (tool === "cablelink") { setLinkDraft((d) => linkUndoPick(d)); }
         else if (ocSel && proposal) { deleteSelectedOcVertex(); }
         else if (proposal?.regions.length) { setProposal((pr) => { const rg = pr.regions.slice(0, -1); return rg.length ? { ...pr, regions: rg } : null; }); }
         else if (selVert != null && selectedId) { deleteSelectedShapeVertex(); }
@@ -3527,7 +3604,7 @@ export default function TakeoffCanvas() {
         // tool's points, on-screen or hidden
         else if (tool === "calibrate") { setCalib((c) => c.slice(0, -1)); }
         else if (tool === "check") { setCheck((c) => c.slice(0, -1)); }
-      } else if (e.key === "Escape") { if (agentOfferFnsRef.current?.pending()) { agentOfferFnsRef.current.dismiss(); } else if (ocSel) { setOcSel(null); } else if (selVert != null) { setSelVert(null); } else { clearPoly(); setCalib([]); setCheck([]); setCheckStated(""); setScaleGuide(null); selectShape(null); setMarkupDraft(null); setProposal(null); setArmedStamp(null); setScheduleAnchor(null); setSymbolAnchor(null); setImageAnchor(null); setTextAnchor(null); setCopyReceipt(receiptAfterEsc); copyGateRef.current.begin(); setPlacingImageId(null); placeGrabRef.current = null; placeCrossSheetRef.current = null; setAlignPt(null); resetZone(); hlRef.current = null; if (hlPathRef.current) hlPathRef.current.style.display = "none"; } }
+      } else if (e.key === "Escape") { if (agentOfferFnsRef.current?.pending()) { agentOfferFnsRef.current.dismiss(); } else if (ocSel) { setOcSel(null); } else if (selVert != null) { setSelVert(null); } else { clearPoly(); setCalib([]); setCheck([]); setCheckStated(""); setScaleGuide(null); selectShape(null); setMarkupDraft(null); setProposal(null); setArmedStamp(null); setScheduleAnchor(null); setSymbolAnchor(null); setImageAnchor(null); setTextAnchor(null); setCopyReceipt(receiptAfterEsc); copyGateRef.current.begin(); setPlacingImageId(null); placeGrabRef.current = null; placeCrossSheetRef.current = null; setAlignPt(null); resetZone(); setLinkDraft(EMPTY_LINK); hlRef.current = null; if (hlPathRef.current) hlPathRef.current.style.display = "none"; } }
       // ⌘Z: the drawing context wins — mid-trace it still pops the last placed
       // point (with or without ⇧, matching the old behavior byte-for-byte);
       // only with no trace in progress does the command stack engage
@@ -3684,6 +3761,7 @@ export default function TakeoffCanvas() {
       addPoint(p, wantCurve && poly.length > 0 && !bowOpen);
     }
     else if (tool === "count") commitCount(p);
+    else if (tool === "cablelink") cableLinkAt(p);
     else if (tool === "rect" || tool === "deduct-rect") {
       if (poly.length === 0) addPoint(p, false);
       else { const a = poly[0]; commitPoly([[a[0], a[1]], [p[0], a[1]], [p[0], p[1]], [a[0], p[1]]], tool === "deduct-rect"); clearPoly(); }
@@ -8389,6 +8467,8 @@ export default function TakeoffCanvas() {
     ...(c.laborType != null ? { laborType: c.laborType } : {}),
     ...(c.subfloorType != null ? { subfloorType: c.subfloorType } : {}),
     ...(c.roll_setup ? { roll_setup: { ...c.roll_setup } } : {}),   // #136 — the roll spec is part of what makes a CPT-1 template CPT-1
+    ...(c.cable_setup ? { cable_setup: { ...c.cable_setup } } : {}),   // Division 27 — so is a device condition's cable setup
+    ...(c.role === "tr" || c.role === "route" ? { role: c.role } : {}),
     materials: (c.materials || []).map(({ id: _id, ...m }) => (m.grout ? { ...m, grout: { ...m.grout } } : m)),   // ids are minted on instantiation; grout never shared by reference
   });
   const saveActiveAsTemplate = () => {
@@ -8880,6 +8960,7 @@ export default function TakeoffCanvas() {
           {panelBtn(() => setLeftTab((t) => (t === "stamp" ? null : "stamp")), "stamp", "Stamps — reusable annotations dropped click-to-place", leftTab === "stamp", stampLib.stamps.length)}
           {panelBtn(() => setLeftTab((t) => (t === "rfi" ? null : "rfi")), "rfi", "RFI register — raise, track, and export Requests For Information", leftTab === "rfi", rfis.length)}
           {rollByCond.size > 0 && panelBtn(() => setRollPanelOpen((o) => !o), "roll", "Roll goods — the cut diagram, cutting order, and figured order footage", rollPanelOpen, rollByCond.size)}
+          {cableTakeoff && panelBtn(() => setRunsPanelOpen((o) => !o), "cableRun", "Cable runs — runs by condition, unlinked devices and routes, TR names (Link Run: W)", runsPanelOpen, cableTakeoff.resolved.runs.length)}
           {layerEntries.length > 0 && panelBtn(() => setLayersOpen((o) => !o), "layers", "PDF layers — drawing layers", layersOpen, layerEntries.reduce((n, e) => n + e.layers.length, 0))}
           {panelBtn(() => setShowRevisions(true), "revisions", "Revisions — save the takeoff at each bid revision, compare what moved", showRevisions)}
         </div>}
@@ -9738,6 +9819,7 @@ export default function TakeoffCanvas() {
           </div>
           <div ref={aimChipRef} style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none", display: "none", zIndex: 6, padding: "2px 8px", background: DS.chip.bg, border: `1px solid ${DS.chip.border}`, boxShadow: "var(--shadow-1)", fontFamily: DS.chip.font === "mono" ? "var(--f-mono)" : "var(--f-body)", fontSize: 10.5, fontWeight: 600, color: DS.chip.fg, whiteSpace: "nowrap", willChange: "transform" }} />
           {/* hover readout — what takeoff is under the cursor (DOM-direct) */}
+          {tool === "cablelink" && <CableLinkReadout readout={linkReadoutNow} units={units} onLink={commitCableLink} onCancel={() => setLinkDraft(EMPTY_LINK)} />}
           <div ref={hoverRef} style={{ position: "absolute", display: "none", pointerEvents: "none", zIndex: 8, background: "var(--paper-bright)", border: "1px solid var(--ink)", boxShadow: "var(--shadow-1)", padding: "4px 8px", fontFamily: "var(--f-mono)", fontSize: 11, color: "var(--ink)", whiteSpace: "nowrap" }} />
           {/* edge-insert ghost — the "+" that rides the selected shape's edge under
               the cursor; pressing there inserts a vertex at that exact spot */}
@@ -10323,6 +10405,10 @@ export default function TakeoffCanvas() {
                         </g>
                       );
                     })}
+                    {/* Division 27 cable cues: unlinked devices and routes, TR
+                        names, and the Link Run draft (components/CableOverlay) */}
+                    <CableOverlay panelKey={p.key} img={p.img} z={tf.scale} shapes={pShapes} takeoff={cableTakeoff}
+                      draft={tool === "cablelink" ? linkDraft : null} trConds={trCondIds} dark={darkMode} />
                     {/* Roll-goods cut overlay (#136) — every figured cut drawn to
                         scale over its room in the MATERIAL-TRUE color (carpet tan,
                         vinyl/rubber grey — the engine's own palette, so cuts never
@@ -10989,6 +11075,7 @@ export default function TakeoffCanvas() {
           {(!workspaceLayout || focusMode) && panelBtn(toggleTakeoffs, "takeoffs", "Takeoffs — conditions + running totals", takeoffsOpen, visibleShapes.length)}
           {(!workspaceLayout || focusMode) && panelBtn(() => setAgentOpen((o) => !o), "target", "Work and review — measurements and agent proposals", agentOpen, agentProposals.length)}
           {rollByCond.size > 0 && panelBtn(() => setRollPanelOpen((o) => !o), "roll", "Roll goods — the cut diagram, cutting order, and figured order footage", rollPanelOpen, rollByCond.size)}
+          {cableTakeoff && panelBtn(() => setRunsPanelOpen((o) => !o), "cableRun", "Cable runs — runs by condition, unlinked devices and routes, TR names (Link Run: W)", runsPanelOpen, cableTakeoff.resolved.runs.length)}
           {layerEntries.length > 0 && panelBtn(() => setLayersOpen((o) => !o), "layers", "PDF layers — what this drawing's own layer table states each ink is; set what One-Click treats as wall and what it ignores", layersOpen, layerEntries.reduce((n, e) => n + e.layers.length, 0))}
           {panelBtn(() => setShowRevisions(true), "revisions", "Revisions — save the takeoff at each bid revision, compare what moved", showRevisions)}
         </div>
@@ -11043,6 +11130,19 @@ export default function TakeoffCanvas() {
           />
         )}
 
+        {/* Runs panel (Division 27) — DOCKED right-rail sibling like the Roll
+            panel: runs by condition, unlinked items, TR names. Records change
+            only through the cable undo family. */}
+        {runsPanelOpen && (
+          <RunsPanel takeoff={cableTakeoff} conditions={conditions} shapes={shapes} units={units}
+            linkArmed={tool === "cablelink"} onArmLink={() => setTool((t) => (t === "cablelink" ? "select" : "cablelink"))}
+            onLocate={locateCableShape}
+            onUnlink={(id) => { dispatchCableRun({ type: "unlink", id }); setCommitMsg("Run unlinked — the shapes stay. ⌘Z re-links it."); }}
+            onAccept={(ids) => { const r = dispatchCableRun({ type: "review", ids }); if (r.inverse) setCommitMsg(`${r.inverse.restore.length} run${r.inverse.restore.length === 1 ? "" : "s"} accepted — their route segments keep their own review status.`); }}
+            onRenameTr={(id, name) => dispatchShape({ type: "label", ids: [id], value: name })}
+            onClose={() => setRunsPanelOpen(false)} />
+        )}
+
         {/* Layers panel (#85 phase 2) — DOCKED right-rail sibling like the Roll
             panel: the sheet's PDF layer table (names + stated roles) with the
             per-layer Auto/Wall/Off controls feeding One-Click's role
@@ -11083,6 +11183,7 @@ export default function TakeoffCanvas() {
           palette={palette}
           hiddenConds={hiddenConds}
           rollByCond={rollByCond}
+          cableTakeoff={cableTakeoff}
           transitionSources={transitionSources}
           matLib={matLib}
           matLibById={matLibById}
@@ -11169,6 +11270,7 @@ export default function TakeoffCanvas() {
           scaleInfo={Object.entries(scales).map(([sheet_id, units_per_px]) => ({ sheet_id, units_per_px, scale_source: scaleSources[sheet_id] || "unknown", scale_confirmed: scaleUnconfirmed[sheet_id] !== false }))}
           rollByCond={rollByCond}
           cableTakeoff={cableTakeoff}
+          onLocateCable={(id) => { setShowReport(false); locateCableShape(id); }}
           provenanceCounters={provCounters}
           sheetLabel={(k) => tabLabel(k)}
           sheetDims={(k) => panelByKey(k)?.img}

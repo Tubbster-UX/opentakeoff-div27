@@ -225,4 +225,13 @@ Recorded from the Phase 1 review (Oct 21, 2026):
 - [x] **Route conditions.** A linear condition flagged `role: "route"` (set with `edit_condition`, the same pattern as `role: "tr"`) holds the route segments. Every linear shape on a route condition that no linked run uses is reported unlinked; a line on any other condition (base, a transition, a wall) is never assumed to be a route. The earlier inferred rule is dropped. Linking stays by shape id.
 - [x] **Cable setup over MCP.** A fresh opt-in or a device-type change keeps minting the device type's starting values for whatever the call does not state, and the `edit_condition` reply names every minted value under `cable.minted` with the note "starting values, not verified against spec". (The review left this choice blank; this is the less disruptive option and the canvas pre-fill in Phase 2 is unchanged either way.)
 - [x] **Shared trunk segments.** Kept allowed. (Left blank in the review; unchanged from the plan default.)
-- [x] **Stitched sheets in the canvas.** The Phase 2 Link Run tool will link route segments on stitched surfaces: the library resolves a segment through the caller's scale answer, the canvas knows every stitch's scale, and `web/test/cable.test.ts` already proves a `stitch:<uid>` segment links there while the same run reads broken over MCP.
+- [x] **Stitched sheets in the canvas.** The Phase 2 Link Run tool links route segments on stitched surfaces: the library resolves a segment through the caller's scale answer, the canvas knows every stitch's scale, and `web/test/cable.test.ts` already proves a `stitch:<uid>` segment links there while the same run reads broken over MCP.
+
+Recorded while building Phase 2 (Oct 27, 2026), each within the spec's Canvas UI section:
+
+- [x] **Link Run shortcut: `W`.** Checked against every binding in the app: A R L S C D ⇧D O K H N Y T G F Q M V and ? are taken, and P is deliberately unbound. W ("wire") was free.
+- [x] **Device-type pick pre-fills waste only when the condition has none.** The spec's 12% starting waste is written when the condition's waste is 0; an estimator's existing waste is never overwritten.
+- [x] **The cable opt-in is offered by what a condition holds.** Device types and Telecom room are offered on a condition with no area or linear shapes; Cable route on one with no area or count shapes; an empty condition is offered all three. (The app has no condition type field to read instead.)
+- [x] **The TR name field lives in the Runs panel** (one per placed TR marker) and writes the marker's label through the existing, undoable label command.
+- [x] **Accepting an agent-linked run** is a button on its row in the Runs panel (and Accept all), on the undo stack; it never touches the route segments' own review status.
+

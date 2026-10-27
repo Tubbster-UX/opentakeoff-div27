@@ -95,7 +95,7 @@ export function cableSetupProblems(setup) {
   if (!isDeviceType(setup.device_type)) out.push(`device_type must be one of ${DEVICE_TYPES.join(", ")}`);
   const n = setup.cables_per_location;
   if (!(Number.isInteger(n) && n >= 1)) out.push("cables_per_location must be a whole number of 1 or more");
-  if (!finiteNonNeg(setup.vertical_ft)) out.push("vertical_ft is required (no starting value for this device type — enter the job's vertical)");
+  if (!finiteNonNeg(setup.vertical_ft)) out.push(`vertical_ft is required — enter the job's vertical${setup.device_type === "access_door" || setup.device_type === "custom" ? " (this device type has no starting value)" : ""}`);
   if (!finiteNonNeg(setup.loop_device_ft)) out.push("loop_device_ft is required");
   if (!finiteNonNeg(setup.loop_tr_ft)) out.push("loop_tr_ft is required");
   return out;
@@ -559,4 +559,60 @@ export function linkRunRefusal({ device_shape_ids, route_shape_ids, tr_id, cable
   if (/has no cable setup/.test(first)) return `${first} — set cable_setup on it with edit_condition before linking`;
   if (r.status === "withheld") return `${first} — set it with edit_condition { cable_setup: { … } } and link again (no length is ever assumed)`;
   return first;
+}
+
+// ── run commands (the canvas's undo family "cable") ────────────────────────
+// Pure apply + exact inverse, the approvals.js precedent: the canvas records
+// { family: "cable", cmd, inverse } on its ONE gesture history, so ⌘Z takes
+// back a link, an unlink or an accept in order with shape edits.
+//   link       { run }                 → add;   inverse unlink
+//   unlink     { id }                  → drop;  inverse restore (same index)
+//   restore    { run, index }          → re-seat verbatim; inverse unlink
+//   review     { ids, ts? }            → pending runs get reviewed:true + accepted_ts;
+//                                        inverse provenance (verbatim prior origins)
+//   provenance { restore: [{ id, provenance }] } → put provenance back verbatim
+// Accepting a run never touches its shapes: each keeps its own review status.
+// A command that changes nothing returns inverse null (nothing to record).
+/** @param {any[]} runs @param {any} cmd @returns {{ runs: any[], inverse: any }} */
+export function applyCableRunCommand(runs, cmd) {
+  const list = Array.isArray(runs) ? runs : [];
+  switch (cmd?.type) {
+    case "link": {
+      if (!cmd.run || typeof cmd.run.id !== "string" || list.some((r) => r.id === cmd.run.id)) return { runs: list, inverse: null };
+      return { runs: [...list, cmd.run], inverse: { type: "unlink", id: cmd.run.id } };
+    }
+    case "unlink": {
+      const index = list.findIndex((r) => r.id === cmd.id);
+      if (index < 0) return { runs: list, inverse: null };
+      return { runs: list.filter((_, i) => i !== index), inverse: { type: "restore", run: list[index], index } };
+    }
+    case "restore": {
+      if (!cmd.run || list.some((r) => r.id === cmd.run.id)) return { runs: list, inverse: null };
+      const at = Math.max(0, Math.min(Number.isInteger(cmd.index) ? cmd.index : list.length, list.length));
+      return { runs: [...list.slice(0, at), cmd.run, ...list.slice(at)], inverse: { type: "unlink", id: cmd.run.id } };
+    }
+    case "review": {
+      const ids = new Set(Array.isArray(cmd.ids) ? cmd.ids : []);
+      const ts = typeof cmd.ts === "string" ? cmd.ts : nowIso();
+      const restore = [];
+      const next = list.map((r) => {
+        if (!ids.has(r.id) || r.provenance?.reviewed !== false) return r;
+        restore.push({ id: r.id, provenance: r.provenance });
+        return { ...r, provenance: { ...r.provenance, reviewed: true, accepted_ts: ts } };
+      });
+      return restore.length ? { runs: next, inverse: { type: "provenance", restore } } : { runs: list, inverse: null };
+    }
+    case "provenance": {
+      const byId = new Map((Array.isArray(cmd.restore) ? cmd.restore : []).map((x) => [x.id, x.provenance]));
+      const restore = [];
+      const next = list.map((r) => {
+        if (!byId.has(r.id)) return r;
+        restore.push({ id: r.id, provenance: r.provenance });
+        return { ...r, provenance: byId.get(r.id) };
+      });
+      return restore.length ? { runs: next, inverse: { type: "provenance", restore } } : { runs: list, inverse: null };
+    }
+    default:
+      return { runs: list, inverse: null };
+  }
 }
