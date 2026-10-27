@@ -174,11 +174,13 @@ export function cableSheetMarks(cable, { sheetId, shapes, conditions, W, H, ptSc
 /**
  * The legend cover's cable text: the meta line, one line per cable / route /
  * TR condition (pulls, cables, net and order LF — ×N applied, waste on the
- * order only), the key to the sheet marks, and the cable warnings.
+ * order only), the key to the sheet marks, the box/reel count per cable type
+ * (`order`, present only once a condition states package_ft), and the cable
+ * warnings.
  * @param {any} cable computeCableTakeoff() result
  * @param {any[]} conditions
  * @param {{ fmtLen: (ft: number) => string }} fmt
- * @returns {{ meta: string, lines: Map<string, string>, key: string, warnings: string[] } | null}
+ * @returns {{ meta: string, lines: Map<string, string>, key: string, order?: string[], warnings: string[] } | null}
  */
 export function cableLegend(cable, conditions, { fmtLen }) {
   if (!cable?.summary?.totals) return null;
@@ -214,7 +216,12 @@ export function cableLegend(cable, conditions, { fmtLen }) {
     }
   }
   const key = "Route chips: run ID · device condition · per-cable LF (the Cable runs sheet lists every run in full); each device tag carries its run ID. Amber ring: unlinked device. Grey ring: held device.";
-  return { meta, lines, key, warnings: [...(cable.summary.warnings || [])] };
+  // boxes / reels per cable type (present once a condition states
+  // package_ft): one line per type that has a box count; a type left blank
+  // is explained by the warnings below
+  const order = (cable.order?.rows || []).filter((r) => r.boxes != null).map((r) =>
+    `Cable order: ${r.cable_type}: ${r.boxes} box${r.boxes === 1 ? "" : "es"} of ${fmtLen(r.package_ft)} · ${fmtLen(r.purchased_lf)} purchased against ${fmtLen(r.order_lf)} order · ${fmtLen(r.leftover_lf)} left over`);
+  return { meta, lines, key, ...(cable.order ? { order } : {}), warnings: [...(cable.summary.warnings || [])] };
 }
 
 /** Word-wrap `text` to `maxW` points with `measure(str)` → points. A single

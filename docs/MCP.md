@@ -259,7 +259,13 @@ Fifty-two tools, in the order an agent tends to reach for them:
   `export_report.cable` gain a `pathway` block, one row per route condition with each segment
   counted once. J-hooks are an `edit_materials` row on the branch condition (basis `"linear"`,
   `per` = spacing), whose basis is that condition's LF counted once. Never derive branch LF by
-  dividing a full-route LF
+  dividing a full-route LF. **Boxes and reels:** `edit_condition { cable_setup: { package_ft:
+  1000 } }` states the feet per box or reel (`null` clears it; nothing is minted). `list_runs`,
+  `takeoff_summary.cable` and `export_report.cable` then gain an `order` block, one row per
+  cable type: the type's order LF (waste and ×N in) pooled across its conditions, `boxes` =
+  ceil(order LF ÷ `package_ft`), `purchased_lf` and `leftover_lf`. Conflicting sizes on one
+  cable type, a type with no size, and the blank cable type read `null` (with a warning for a
+  conflict), never 0
 - **Scope collision** (#366)—`takeoff_summary.shared_floor_sf` is the floor
   claimed by more than one shape across the takeoff (Σ areas − union, once per
   cell), the number that has to read zero before a total means anything;

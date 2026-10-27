@@ -523,6 +523,12 @@ export function totalsToCsv(rows, projectName = "", bySheet = null, sheetLabel =
       lines.push("", "Pathway");
       for (const row of cableT.pathway) lines.push(row.map(esc).join(","));
     }
+    // boxes / reels per cable type — only once a condition states
+    // package_ft, so a cable CSV without one is byte-identical
+    if (cableT.order) {
+      lines.push("", "Cable order");
+      for (const row of cableT.order) lines.push(row.map(esc).join(","));
+    }
   }
 
   const title = projectName ? `# ${projectName} — ${brandName} report\n` : "";

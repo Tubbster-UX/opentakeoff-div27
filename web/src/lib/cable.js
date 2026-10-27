@@ -756,6 +756,89 @@ export function pathwayRollup(resolved, conditions, shapes) {
   return { rows, by_kind, totals: fin(fold(raw)) };
 }
 
+// ── box / reel rounding (item 7) ────────────────────────────────────────────
+
+/** A setup's box or reel size in feet (`package_ft`, optional): a finite
+ *  number > 0, else null (not stated). Cable is bought by the box (Cat 6A in
+ *  1000 ft boxes) or the reel (fiber on 1000 / 2000 ft reels), not by the
+ *  foot. Never minted, never defaulted: it is the estimator's to state. */
+export function packageFt(setup) {
+  const v = setup?.package_ft;
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
+}
+
+/** True once any cable condition states a box/reel size — the gate for every
+ *  box output (the report's `cable.order`, the CSV "Cable order" section, the
+ *  Excel "Cable order" tab, the Report table, the MCP blocks and the cover
+ *  line), so a cable takeoff that never stated one exports exactly as it did
+ *  before the field existed. */
+export function usesPackageSizes(conditions) {
+  return (conditions || []).some((c) => hasCableSetup(c) && packageFt(c.cable_setup) != null);
+}
+
+/** Same size for comparison: a metric entry converted to feet can land a
+ *  hair off the imperial number it means. */
+const sameSize = (a, b) => Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a), Math.abs(b));
+
+/**
+ * The Cable ORDER table: boxes per CABLE TYPE, not per condition. Rounding
+ * each condition up separately overstates (three conditions of 400 LF of the
+ * same Cat 6A are 2 boxes of 1000 ft, not 3), so the order LF of every
+ * condition sharing a cable type is pooled first — the summary's
+ * by_cable_type subtotal, which already carries waste and ×N — and then
+ * rounded up once:
+ *   boxes = ceil(order LF / package_ft); purchased = boxes × package_ft;
+ *   leftover = purchased − order LF.
+ * The size is the cable type's: one condition stating it sizes the type.
+ * Withhold, don't guess:
+ *   - conditions of one type stating DIFFERENT sizes → that type's boxes are
+ *     blank and a warning names the conditions and their sizes;
+ *   - a type no condition sizes → blank (null), never 0;
+ *   - the blank cable type ("") → blank, and a warning when one of its
+ *     conditions states a size: "" pools every condition nobody named, which
+ *     may be different products, so a box count for it would be a guess.
+ * Order LF is the rounded subtotal the Cable summary prints, so a row's
+ * leftover is exactly purchased − the order LF beside it.
+ *
+ * @returns {{ rows: any[], warnings: string[] }}
+ */
+export function cableOrderRollup(summary, conditions) {
+  const cableConds = (conditions || []).filter(hasCableSetup);
+  const typeOf = (c) => (typeof c.cable_setup.cable_type === "string" ? c.cable_setup.cable_type : "");
+  const fmt = (v) => `${round2(v)} ft`;
+  const rows = [];
+  const warnings = [];
+  for (const g of summary?.by_cable_type || []) {
+    const k = g.cable_type;
+    const conds = cableConds.filter((c) => typeOf(c) === k);
+    const stated = conds.map((c) => ({ finish_tag: c.finish_tag, package_ft: packageFt(c.cable_setup) })).filter((x) => x.package_ft != null);
+    const sizes = [];
+    for (const s of stated) if (!sizes.some((v) => sameSize(v, s.package_ft))) sizes.push(s.package_ft);
+    const order_lf = round2(g.cable_lf_order);
+    const row = {
+      cable_type: k, order_lf, package_ft: null, boxes: null, purchased_lf: null, leftover_lf: null,
+      conditions: conds.map((c) => c.finish_tag),
+      package_set_on: stated.map((s) => s.finish_tag),
+    };
+    if (k === "" && stated.length) {
+      row.note = "no cable type: boxes are pooled by cable type, so none are figured";
+      warnings.push(`${stated.map((s) => `${s.finish_tag} states a ${fmt(s.package_ft)} box/reel`).join("; ")} but no cable type. Boxes are pooled by cable type, so none are figured for ${stated.length === 1 ? "it" : "them"}: name the cable type (the blank group may hold different products).`);
+    } else if (sizes.length > 1) {
+      row.note = `conflicting box/reel sizes: ${stated.map((s) => `${s.finish_tag} ${fmt(s.package_ft)}`).join(", ")}`;
+      row.package_conflict = stated;
+      warnings.push(`Cable type ${k}: its conditions state different box/reel sizes (${stated.map((s) => `${s.finish_tag} ${fmt(s.package_ft)}`).join("; ")}). Its boxes are left blank rather than guessed: state one package_ft for the cable type, or give the different products different cable types.`);
+    } else if (sizes.length === 1) {
+      const p = sizes[0];
+      // the epsilon keeps an exact multiple (2000 / 1000) from rounding up a box on float noise
+      const boxes = order_lf > 0 ? Math.ceil(order_lf / p - 1e-9) : 0;
+      const purchased = boxes * p;
+      Object.assign(row, { package_ft: p, boxes, purchased_lf: round2(purchased), leftover_lf: round2(purchased - order_lf) });
+    }
+    rows.push(row);
+  }
+  return { rows, warnings };
+}
+
 /** The whole cable takeoff, figured once: conditions + shapes + runs → what
  *  every surface reads. `null` when no condition carries a cable setup, so a
  *  project that never used the feature pays nothing and exports byte-identically.
@@ -766,7 +849,10 @@ export function pathwayRollup(resolved, conditions, shapes) {
  *  is null.
  *  `pathway` is the trunk/branch rollup, present only once a route condition
  *  is tagged trunk or branch (usesRouteKinds) and null otherwise, so a cable
- *  takeoff made before route_kind existed exports exactly as it did. */
+ *  takeoff made before route_kind existed exports exactly as it did.
+ *  `order` is the box/reel table per cable type (cableOrderRollup), present
+ *  only once a condition states package_ft and null otherwise, for the same
+ *  reason. */
 export function computeCableTakeoff(conditions, shapes, runs, opts = {}) {
   if (!(conditions || []).some((c) => hasCableSetup(c) || isRouteCondition(c)) && !(runs || []).length) return null;
   const resolved = resolveCableRuns(conditions, shapes, runs, opts);
@@ -774,7 +860,11 @@ export function computeCableTakeoff(conditions, shapes, runs, opts = {}) {
   const duplicates = typeof opts.sheetSize === "function" ? findCableDuplicates(conditions, shapes, opts) : null;
   if (duplicates) summary.warnings.push(...duplicates.warnings);
   const pathway = usesRouteKinds(conditions) ? pathwayRollup(resolved, conditions, shapes) : null;
-  return { resolved, summary, byCond: cableByCondition(summary), duplicates, pathway };
+  // boxes / reels per cable type, only once a condition states a size; its
+  // warnings (conflicting sizes, a size on the blank type) join the rest
+  const order = usesPackageSizes(conditions) ? cableOrderRollup(summary, conditions) : null;
+  if (order) summary.warnings.push(...order.warnings);
+  return { resolved, summary, byCond: cableByCondition(summary), duplicates, pathway, order: order ? { rows: order.rows } : null };
 }
 
 /** Short, still-unique display ids for runs and holds — what a marked-set
@@ -858,6 +948,9 @@ export function cableReportBlock(takeoff, sheetLabel = null) {
     // trunk/branch (present once a route condition is tagged): one row per
     // route condition, each segment counted once, then by kind and in total
     ...(takeoff.pathway ? { pathway: takeoff.pathway } : {}),
+    // boxes / reels per cable type (present once a condition states
+    // package_ft): order LF pooled by type, rounded up to whole packages
+    ...(takeoff.order ? { order: takeoff.order } : {}),
   };
 }
 
@@ -868,7 +961,11 @@ export const CABLE_UNLINKED_HEADER = Object.freeze(["Kind", "Shape", "Condition"
  *  is tagged — every column a bid workbook references keeps its position. */
 export const CABLE_RUNS_SPLIT_HEADER = Object.freeze(["Branch LF", "Trunk LF"]);
 export const CABLE_PATHWAY_HEADER = Object.freeze(["Route condition", "Kind", "Segments", "Pathway LF (each segment once)", "Used by linked runs LF", "Not used by a linked run LF", "Linked runs", "Multiplier", "Pathway LF ×N"]);
+/** The Cable order table (boxes / reels per cable type) — present once a
+ *  condition states package_ft. Boxes are a count and never convert. */
+export const CABLE_ORDER_HEADER = Object.freeze(["Cable type", "Order LF", "Box/reel ft", "Boxes", "Purchased LF", "Leftover LF", "Note"]);
 const KIND_CELL = (k) => (k ? ROUTE_KIND_LABELS[k] : "unspecified");
+const NO_CABLE_TYPE = "(no cable type)";
 
 const rowNote = (r) => [r.withheld ? `withheld: ${r.withheld}` : "", r.leg_warning ? "route segment(s) carry rise/drop legs (ignored)" : "", r.over_length_runs ? `${r.over_length_runs} run${r.over_length_runs === 1 ? "" : "s"} over ${TIA_MAX_LINK_FT} ft per cable` : ""].filter(Boolean).join("; ");
 const NO_TR = "(no TR — no linked run)";
@@ -908,12 +1005,19 @@ export function cableTables(takeoff, { sheetLabel = null, L = (v) => v, lengthUn
     for (const g of p.by_kind) pathway.push([`Subtotal ${KIND_CELL(g.route_kind).toLowerCase()}`, KIND_CELL(g.route_kind), ...cells(g), "", conv(g.pathway_lf_total)]);
     pathway.push(["TOTAL", "", ...cells(p.totals), "", conv(p.totals.pathway_lf_total)]);
   }
+  // Cable order: boxes / reels per cable type, from the order LF (waste and
+  // ×N in). A blank cell is "not figured", never 0. null without a size.
+  let order = null;
+  if (takeoff.order) {
+    order = [CABLE_ORDER_HEADER.map(lenHdr)];
+    for (const r of takeoff.order.rows) order.push([r.cable_type || NO_CABLE_TYPE, conv(r.order_lf), conv(r.package_ft), r.boxes ?? "", conv(r.purchased_lf), conv(r.leftover_lf), r.note || ""]);
+  }
   const label = (id) => (sheetLabel ? sheetLabel(id) : id);
   const unlinked = [CABLE_UNLINKED_HEADER.map(lenHdr)];
   for (const d of takeoff.resolved.unlinked.devices) unlinked.push(["device", d.shape_id, d.finish_tag, label(d.sheet_id), "", d.reason]);
   for (const r of takeoff.resolved.unlinked.routes) unlinked.push(["route", r.shape_id, r.finish_tag, label(r.sheet_id), conv(r.length_lf), r.reason]);
   for (const d of takeoff.resolved.held || []) unlinked.push(["held device", d.shape_id, d.finish_tag, label(d.sheet_id), "", `held (${d.hold_id}): ${d.reason}`]);
-  return { summary, runs, unlinked, ...(pathway ? { pathway } : {}), warnings: takeoff.summary.warnings };
+  return { summary, runs, unlinked, ...(pathway ? { pathway } : {}), ...(order ? { order } : {}), warnings: takeoff.summary.warnings };
 }
 
 /** The shared refusal for link_run (MCP) and the Link Run tool (canvas): the

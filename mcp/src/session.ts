@@ -127,6 +127,8 @@ export interface CableTakeoff {
   } | null;
   /** Trunk/branch pathway rollup — null until a route condition is tagged. */
   pathway: { rows: (Record<string, unknown> & { condition_id: string })[]; by_kind: Record<string, unknown>[]; totals: Record<string, number> } | null;
+  /** Boxes / reels per cable type — null until a condition states package_ft. */
+  order: { rows: (Record<string, unknown> & { cable_type: string })[] } | null;
 }
 /** A run's route LF by kind, rounded (web/src/lib/cable.js routeSplit). */
 const runSplit = routeSplit as unknown as (r: unknown) => { branch_lf: number; trunk_lf: number; other_lf: number };
@@ -231,6 +233,9 @@ export interface CableSetup extends Record<string, unknown> {
   vertical_ft: number | null;
   loop_device_ft: number | null;
   loop_tr_ft: number | null;
+  /** Feet per box or reel (optional, > 0, never minted) — boxes are figured
+   * per cable type from the order LF in the cable block's `order`. */
+  package_ft?: number;
 }
 
 /** A cable run: one device location → its route segments, in order → the TR
@@ -3924,7 +3929,7 @@ export class Session {
     // condition or a run exists — a flooring session's reply is unchanged
     return {
       conditions: lean, totals: grandTotals(rows),
-      ...(cableT ? { cable: { rows: cableT.summary.rows, by_tr: cableT.summary.by_tr, by_cable_type: cableT.summary.by_cable_type, totals: cableT.summary.totals, unlinked_devices: cableT.resolved.unlinked.devices.length, unlinked_routes: cableT.resolved.unlinked.routes.length, held_devices: cableT.resolved.held.length, warnings: cableT.summary.warnings, ...(hasDuplicateFindings(cableT.duplicates) ? { duplicates: cableT.duplicates } : {}), ...(cableT.pathway ? { pathway: cableT.pathway } : {}) } } : {}),
+      ...(cableT ? { cable: { rows: cableT.summary.rows, by_tr: cableT.summary.by_tr, by_cable_type: cableT.summary.by_cable_type, totals: cableT.summary.totals, unlinked_devices: cableT.resolved.unlinked.devices.length, unlinked_routes: cableT.resolved.unlinked.routes.length, held_devices: cableT.resolved.held.length, warnings: cableT.summary.warnings, ...(hasDuplicateFindings(cableT.duplicates) ? { duplicates: cableT.duplicates } : {}), ...(cableT.pathway ? { pathway: cableT.pathway } : {}), ...(cableT.order ? { order: cableT.order } : {}) } } : {}),
       shared_floor_sf: scope.shared_floor_sf,
       ...(scope.unmeasured.length ? { shared_floor_unmeasured: scope.unmeasured } : {}),
       ...(unconfirmed.length ? { scale_unconfirmed: unconfirmed } : {}),
@@ -4343,8 +4348,17 @@ export class Session {
         if (!isDeviceType(type)) throw new UserError(given.device_type !== undefined
           ? `cable_setup.device_type ${JSON.stringify(given.device_type)} is not a device type — use one of ${DEVICE_TYPES.join(", ")} (access control → access_door; aliases accepted: ${Object.keys(DEVICE_TYPE_ALIASES).join(", ")}).`
           : `cable_setup.device_type is required on a fresh opt-in — one of ${DEVICE_TYPES.join(", ")}.`);
-        const base = hasCableSetup(c) && type === prevType ? (c.cable_setup as object) : (mintCableSetup(type) as object);
-        c.cable_setup = { ...base, ...given, device_type: type } as CableSetup;
+        // package_ft (feet per box / reel) is the cable's, not the device
+        // type's: it has no starting value, survives a type change, and
+        // null clears it (the key is removed, never stored as null)
+        if (given.package_ft !== undefined && given.package_ft !== null && !(typeof given.package_ft === "number" && Number.isFinite(given.package_ft) && given.package_ft > 0)) {
+          throw new UserError(`cable_setup.package_ft must be a number of feet greater than 0 (1000 for a 1000 ft box), or null to clear it.`);
+        }
+        const keepPackage = hasCableSetup(c) && type !== prevType && c.cable_setup?.package_ft !== undefined ? { package_ft: c.cable_setup.package_ft } : {};
+        const base = hasCableSetup(c) && type === prevType ? (c.cable_setup as object) : { ...(mintCableSetup(type) as object), ...keepPackage };
+        const next = { ...base, ...given, device_type: type } as CableSetup;
+        if (next.package_ft === null) delete next.package_ft;
+        c.cable_setup = next;
       }
     }
     if (opts.role !== undefined) {
@@ -4430,8 +4444,13 @@ export class Session {
     if (hasCableSetup(c)) {
       const t = this.cableTakeoff();
       const rows = t ? t.summary.rows.filter((r) => r.condition_id === c.id) : [];
+      // boxes / reels: the condition's CABLE TYPE row (boxes pool across
+      // every condition of the type), once any condition states package_ft
+      const typeKey = typeof c.cable_setup?.cable_type === "string" ? c.cable_setup.cable_type : "";
+      const orderRow = t?.order?.rows.find((r) => r.cable_type === typeKey);
       cable = {
         problems: cableSetupProblemsOf(c), rows,
+        ...(orderRow ? { order: orderRow } : {}),
         ...(aliasNote ? { device_type_alias: aliasNote } : {}),
         ...(Object.keys(minted).length ? { minted, note: "starting values, not verified against spec — these came from the device type, not the project spec; confirm vertical_ft, loop_device_ft and loop_tr_ft (edit_condition patches them)" } : {}),
       };
@@ -4556,6 +4575,7 @@ export class Session {
       duplicates: t.duplicates,
       summary: { rows: t.summary.rows, by_tr: t.summary.by_tr, by_cable_type: t.summary.by_cable_type, totals: t.summary.totals },
       ...(t.pathway ? { pathway: t.pathway } : {}),
+      ...(t.order ? { order: t.order } : {}),
       count: t.resolved.runs.length,
     };
   }

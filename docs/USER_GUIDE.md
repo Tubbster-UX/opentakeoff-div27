@@ -522,6 +522,17 @@ list and the **Unlinked** list, where **Show** closes the Report and puts the it
 CSV, Excel and JSON carry the same tables plus a per-run sheet naming each run's device sheet,
 route sheet(s) and TR sheet.
 
+**Boxes and reels.** Cable is bought in boxes or reels, not by the foot. Enter the box or
+reel length in a device condition's **Box/reel** field (1000 for a Cat 6A box; ft, or m in
+metric). The Report, CSV and Excel then add a **Cable order** table with one row per cable
+type: order LF, box/reel size, boxes, purchased LF and leftover LF. Boxes are bought against
+the order LF (waste and ×N included), and every condition with the same **Type** shares them:
+three conditions of 400 LF of CAT6A are 2 boxes of 1000 ft, not 3. Entering the size on one
+condition of a type sizes the whole type. A blank cell means not figured, never 0: no condition
+of that type has a size, its conditions have different sizes (a warning names them), or the
+condition has no **Type**. The marked-set cover adds a line per sized cable type
+(`Cable order: CAT6A: 36 boxes of 1,000 LF · …`). Leave the field blank and nothing changes.
+
 **The marked set** draws each run's route with a chip reading its run ID, device condition and
 per-cable length (`run-c711ef · DATA-1 · 54.6 LF`). The chip is amber with `>295` for an
 over-length run and red with the status for a withheld or broken one. The same run ID is

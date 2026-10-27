@@ -668,3 +668,63 @@ replaced.
 | `web/test/xlsx.test.ts` | 17 of 17 |
 | `web` `npm test` | 3,597 tests: 3,584 pass, 1 fail, 8 cancelled, 4 skipped, at load 12. The fail is `sheetName.test.ts` "cost grows about linearly" (a timing test); the cancellations are `pictures.test.ts`, 5 in `stageOcrModel.test.ts`, and the `ocrPageRead.test.ts` and `planSearch.test.ts` file timeouts. Run alone: `sheetName` 10 of 10, `ocrPageRead` 96 of 96, `planSearch` 105 of 105 |
 | `protocol` `npm run check`, `node scripts/check-doc-links.mjs` | pass (62 tests; 11 schemas); doc links pass |
+### 15.2 Cable box and reel rounding
+
+Item 7: cable is bought in boxes (Cat 6A, 1000 ft) or reels (fiber, 1000 / 2000 ft), and the
+estimator rounded the Cable summary's order LF to boxes by hand. A cable setup may now state
+`package_ft`, and a **Cable order** table rounds each cable type's pooled order LF up to whole
+packages. Built on `wip/div27-cable-boxes` from `28ea3cc`. The decisions are in the spec's
+Decisions ("Recorded while building item 7").
+
+| File | Change |
+|---|---|
+| `web/src/lib/cable.js` | `packageFt`, `usesPackageSizes` (the gate), `cableOrderRollup` (per `by_cable_type` group: pooled order LF, boxes = ceil(order / size), purchased, leftover; blank on conflicting sizes, an unsized type and the blank type; the two warnings); `computeCableTakeoff().order` (null until a size is stated, its warnings appended to `summary.warnings`); `cableReportBlock` appends `order`; `CABLE_ORDER_HEADER` and `cableTables().order` (lengths through `L` / `lengthUnit`, boxes a count) |
+| `web/src/lib/totals.js`, `web/src/lib/xlsx.js` | CSV *Cable order* section and Excel *Cable order* tab, each after every other cable section and tab, both gated |
+| `web/src/lib/cableMarks.js`, `web/src/lib/markedset.js` | `cableLegend().order` (one line per sized type, present only with a size); the cover draws it after the key |
+| `web/src/components/CableReportSection.jsx` | The Report's Cable order table and footnote, under the Cable summary |
+| `web/src/components/CableSetupEditor.jsx` | **Box/reel** field (ft, or m in metric; blank removes the key; a metric entry is rounded to a millionth of a foot); a device-type change keeps it |
+| `mcp/src/session.ts` | `edit_condition { cable_setup: { package_ft } }`: refused unless a number > 0, `null` deletes the key, kept through a device-type change, never minted; the reply's `cable.order` is the condition's cable-type row; `list_runs.order` and `takeoff_summary.cable.order`; `export_report.cable.order` through the report block |
+| `mcp/src/tools.ts`, `mcp/src/outputs.ts` | The `package_ft` input (null or positive), `cableOrderRow` / `cableOrderBlock` on the four replies, `package_ft` on the setup shape, three descriptions. No new tool (57 / 59 / 11) |
+| `protocol/v1/condition.schema.json`, `protocol/INVENTORY.md`, `protocol/test/current-records.test.mjs` | `cable_setup.package_ft` (number, exclusive minimum 0), an inventory row, a conforming case and three that do not (0, −1, a string). Generated: `protocol/README.md`, `mcp/src/protocol.generated.ts` |
+| `web/test/cableBoxes.test.ts`, `web/test/fixtures/cableBoxes.base.ts` (new), `mcp/test/cable.test.ts` | Tests below |
+| Docs | `USER_GUIDE.md` (Boxes and reels), `AGENT_GUIDE.md` (two rows), `MCP.md`, `mcp/README.md` (`edit_condition` row), `docs/wiki/status.md` (+ regenerated `wiki.generated.ts`), `FEATURES.md`, `CHANGELOG.md`, the spec's Decisions |
+
+`TakeoffCanvas.jsx` is not touched: the editor and the Report section are already mounted, and
+condition templates copy the whole cable setup.
+
+**Tests.** `web/test/cableBoxes.test.ts` (11): the field's validity and gate; CAT6A net
+31,752.34 × 1.12 = 35,562.62 LF at 1000 ft → 36 boxes, 36,000 purchased, 437.38 left over, with
+the summary rows and totals equal to the same takeoff without a size; three 400 LF conditions of
+one CAT6A → 2 boxes pooled where per-condition rounding gives 3, and 600 + 700 → 2 either way;
+one condition sizing its type, an exact multiple (2,000 at 1000 → 2, 0 left over), nothing linked
+→ 0; conflicting 1000 / 500 → the row blank with `package_conflict`, the exact warning, the other
+type unaffected (500 LF on a 2000 ft reel → 1, 1,500 left over), 304.8 m and 1000 ft the same
+size, the CSV row blank not 0; an unsized type and the blank type blank, with the blank-type
+warning only when it states a size; ×3 at 10% (400 → 1,320 → 2 boxes, 680 left over); metric
+(`Order m` 10,839.49, `Box/reel m` 304.8, 36, 10,972.8, 133.31); the exports (the CSV section
+appended after the base CSV, `cable.order` last in the JSON block, the *Cable order* tab last in
+both workbooks, the cover lines); every export of an invented cable takeoff (CSV and workbook,
+imperial and metric, report JSON, cable tables, cover legend) hashing to the SHA-256 printed on
+`28ea3cc`, with no size and with each of 0, −1000 and `"1000"`; a document round trip.
+`mcp/test/cable.test.ts` (+2): over the wire, three schema refusals writing nothing; a size on
+DATA-1 → the reply's row and `order` on `list_runs`, `takeoff_summary` and `export_report` (CAT6A
+292.32 → 1 box, 707.68 left over; CAT6 blank), totals unchanged; a type change keeps it; a 500 ft
+conflict → blank and the warning; one size → the two conditions pool into one box; export →
+import keeps it; the marked-set cover prints `Cable order: CAT6A: 1 box of 1,000 LF · …`; `null`
+clears it and `list_runs`, `takeoff_summary.cable` and `export_report.cable` return to their bytes
+from before; `undo_last` restores it. A direct `Session.editCondition` refuses 0, −5, NaN and a
+string.
+
+#### Check record (this container: Node 22, root, two other agents building in parallel)
+
+| Check | Result |
+|---|---|
+| `web` typecheck, lint, build | pass |
+| `web` cable test files (`test/cable*.test.ts`) | 102 of 102 pass (11 new) |
+| `web` `npm test` | 3,608 tests: 3,596 pass, 1 fail, 7 cancelled, 4 skipped. `pictures.test.ts` and 5 in `stageOcrModel.test.ts` as on the base commit; `planSearch.test.ts` (file timeout) and `sheetName.test.ts` "cost grows about linearly" (13.4× for 4× under load) pass alone, 115 of 115 |
+| `web/bench/results.json` | unchanged (not touched) |
+| `mcp` typecheck; all test files as CI runs them | pass; 322 tests, 321 pass, 1 fail (`safewrite` "an unreadable file fails CLOSED", root, as in §10) |
+| `mcp` check:tool-count (57 / 59 / 11), check:wiki, check:protocol-resources | pass after `-- --write` |
+| `protocol` `npm run check` | 62 tests pass; docs match 11 schemas (after `node protocol/scripts/check-docs.mjs --write`) |
+| `node scripts/check-doc-links.mjs` | pass |
+| Browser, built app, `make-cable-fixture.mts` fixture (scratch script, not committed) | 10 of 10: no Cable order table before a size; **Box/reel ft** blank; 1000 entered → the Report's table reads `CAT6A · 170.98 · 1000 · 1 · 1000 · 829.02`; a device-type change keeps 1000; clearing it removes the table; no console errors |
