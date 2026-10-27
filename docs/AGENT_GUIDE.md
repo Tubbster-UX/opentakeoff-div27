@@ -121,6 +121,20 @@ Between steps 3 and 4, `list_shapes` is the cheap inventory—ids, sheets, condi
 quantities, room labels, review state, and where each finish tag came from (`schedule` or
 `asserted`)—without pulling a whole `export_takeoff` payload.
 
+**Your work is auto-saved; resume it, don't redo it.** From `load_plan` on, every change is
+written to `<plan> - takeoff autosave.json` beside the plan (the `export_takeoff` payload plus an
+`autosave` marker key), so a client that goes away mid-bid doesn't take the takeoff with it.
+`load_plan`'s reply says where (`autosave.path`), and `takeoff_summary` says when it last landed
+(`autosave.saved_at`) or why it didn't (`autosave.error`—then `export_takeoff { path }`
+somewhere writable). When `load_plan` reports `autosave.found`, an earlier session's work for
+this plan is on disk and was **not** loaded: tell the user what it holds (its time and its
+shape and cable-run counts), and call `import_takeoff { path: autosave.found.path }` before
+changing anything if they want to resume. Changing something first doesn't lose it—the old
+file is moved aside and `takeoff_summary`'s `autosave.moved_aside` names where—but the session
+then starts from empty. Auto-save is a safety net, not the finish: steps 1–5 still end every
+takeoff. `OPENTAKEOFF_AUTOSAVE=0` in the server's environment turns it off;
+`OPENTAKEOFF_AUTOSAVE=<path>` writes somewhere else ([`MCP.md`](MCP.md#auto-save)).
+
 ## 4. Withheld is not a failure — it is the answer
 
 Four tools measure things they then decline to commit, and say why. The arrays they hand back are

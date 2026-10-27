@@ -121,6 +121,39 @@ Each tool call writes one JSON line to stderr with the tool name, duration,
 sheet, result size, and error flag. The trace never writes to stdout and never
 includes document text, shape vertices, or result payload content.
 
+### Auto-save
+
+From `load_plan` on, the session's takeoff is written to
+`<plan dir>/<plan> - takeoff autosave.json` after every change: the
+`export_takeoff` payload with one extra top-level key,
+`autosave: { saved_at, tool, plan }`, right after `schema`. That key marks
+the file as an autosave this server wrote; `import_takeoff` and the app's
+Import takeoff ignore it, and `export_takeoff` never carries it.
+
+Writes are coalesced (0.75 s after the last change, at most 2 s after the
+first), atomic (a temp file in the same folder, then rename), and repeated
+synchronously at exit, so stdin closing, SIGINT, SIGTERM or SIGHUP all leave
+the last change on disk. A write only happens when the payload changed. A
+failed write never fails a tool call: `takeoff_summary` reports it in
+`autosave.error` and stderr gets one line.
+
+`load_plan`'s reply carries `autosave.path`, and `autosave.found` when an
+earlier session's autosave is already there. It is never imported
+silently: `import_takeoff` that path to resume. A session that changes
+something without importing it first moves the earlier file aside to
+`… (before <time>).json` (named in `takeoff_summary`'s
+`autosave.moved_aside`). A file at the path that this server didn't write as
+an autosave is never overwritten; both replies report it instead.
+
+```bash
+OPENTAKEOFF_AUTOSAVE=0 npx -y opentakeoff-mcp                  # off
+OPENTAKEOFF_AUTOSAVE=/jobs/bid-27/takeoff.json npx -y opentakeoff-mcp   # this file
+OPENTAKEOFF_AUTOSAVE=/jobs/autosaves/ npx -y opentakeoff-mcp   # default name, this folder
+```
+
+In Docker, plans are mounted read-only, so point `OPENTAKEOFF_AUTOSAVE` at a
+writable mount or the replies will report the failed write.
+
 ### Staged tool exposure (opt-in)
 
 By default every client gets all <!--tool-count-->57<!--/tool-count--> tool schemas on `tools/list`—the flat
@@ -149,7 +182,7 @@ The [generated tool index](../docs/MCP_TOOL_INDEX.md) lists stages and required 
 
 | Tool | What it does |
 |---|---|
-| `load_plan` | Open a plan PDF from disk. Default replaces the whole session; **`merge: true` ADDS the document to the working set** (#152)—plans + schedule + addenda as one takeoff, sheet graph spanning the whole set, marked set covering every worked sheet. Returns per-sheet dims, title-block `sheet_number`, and the detected drawn scale where present. |
+| `load_plan` | Open a plan PDF from disk. Default replaces the whole session; **`merge: true` ADDS the document to the working set** (#152)—plans + schedule + addenda as one takeoff, sheet graph spanning the whole set, marked set covering every worked sheet. Returns per-sheet dims, title-block `sheet_number`, and the detected drawn scale where present. The reply's `autosave` names the file every change is written to and any earlier autosave found there, which it never loads: `import_takeoff` it to resume ([Auto-save](#auto-save)). |
 | `sheet_info` | One sheet's dims, vector segment count, scale status, detected suggestion, committed shape count. |
 | `set_scale` | Set a sheet's scale—exactly one of `label`, `upp`, `calibrate {p1, p2, feet}`, `use_detected`. **Lands unconfirmed** (`confirmed: false`) until a human confirms in the canvas—see Scale rules. |
 | `one_click` | **Temporarily gated — not registered unless `OPENTAKEOFF_ONE_CLICK=1`.** One-Click Area at (x, y): the sealed flood engine bounded by the plan linework, traced, vertices snapped—the SAME feet-true arguments the canvas passes at a click (gap sealing up to a door width, door-swing wedge inclusion, the half-foot minimum-passage rule), so an MCP trace and a canvas click at one seed measure the same square footage (pinned against the bench corpus goldens in `test/parity.test.ts`). Every trace carries the engine's account of itself: `confidence` 0–1 with `confidence_factors` naming each deduction (`gap_sealed_px`, `door_wedges`, `min_pass_delta`, …)—a review prioritizer, never a verification; a low score is a `view_sheet {overlay: true}` audit prompt, not a fact. On a SCANNED sheet (no usable linework) the flood falls back automatically to the rendered pixels—same engine as the canvas—with `raster_traced` disclosed on the reply and on the shape's origin (#154). Pass `condition` to commit (the full account stamps `origin` centrally at the commit); `role: "deduct"` subtracts. |
@@ -164,7 +197,7 @@ The [generated tool index](../docs/MCP_TOOL_INDEX.md) lists stages and required 
 | `count_marks` | Count value-annotated device marks or schedule-keyed equipment labels, report withheld mentions, and optionally commit pending count shapes. |
 | `symbol_sweep` | **Every instance of a repeated plan symbol, from ONE example**: marquee a tight `seed_rect` around a single drain/threshold/fixture symbol and the vector linework is searched deterministically for every other placement—translation plus 0/90/180/270 rotation and mirroring (both on by default). Score = length-weighted fraction of the seed's segments matched within `tolerance_px`; ≥ 0.92 is a match, the 0.75–0.92 band returns in `withheld` with reasons (never committed, never dropped silently), and the work cap is disclosed when it bites. **`scope: "set"` sweeps the whole working set, counting on PLAN-role sheets only** (the sheet graph decides; every excluded sheet disclosed in `skipped` with role and reason)—and the seed rect may sit on a detail or legend sheet, which then serves as the fingerprint SOURCE while staying excluded from counting: the estimator's "click the assembly in the detail, count it on the plans" gesture. Per-sheet results carry their own match/withheld lists, per-sheet cap accounting, and wall-clock `elapsed_ms`. `commit: true` + `condition` commits every match center as an EA count marker—the whole sweep (set-wide included) is one undo step, `origin.method "symbol_sweep"` with per-marker score, transform, and seed source (`origin.symbol.seed`). No scale required. **Counter-examples** (`exclude`, #259): rects around instances you do NOT mean, marqueed like the seed—the rect's own contents decide whether it rejects by extra contained linework or by the background line running THROUGH it that a real instance would break; every rejection disclosed in `rejected[]`, reinstatable with `place_count`, dead negatives refused with instructions. **Stroke-luminance gate** (`luminance_tolerance`, #260): for flattened exports where layers and pen weights are stripped but the file still states stroke color—a stated tolerance holds candidates to the seed's own pen, opt-in both ways, with `lum_gate` naming every placement the pen pulled under the bar. **Labels** (#308): for labeled families the sweep reads the drawing's own names—a fixture token written beside a placement or connected by its drawn leader (leader-following arms only on multi-pen sheets)—as `label`/`label_via` on every row plus `seed.label`; the reply flags shape-only matches in a labeled family, withheld rows carrying the seed's own tag, and matches the drawing names differently. Disclosure, never a recount. |
 | `sweep_schedule_row` | **Take off a schedule row's mark from the row itself**: pass the row's key (for example, `T1`) and the tool reads the row from the set's schedule tables (the row is the condition's cited source), anchors a fingerprint on the marker the tag is DRAWN as on a plan sheet (a deterministic pad ladder around the tag text; where the tag occurs more than once the fingerprint must recur at a second occurrence—`anchor.corroborated`—before it is trusted), and sweeps every plan-role sheet. **The count is geometry AND text agreeing**: drafting reuses one bubble shape across many marks, so a match counts only when the row's own tag sits within the marker footprint (its bbox rides the match as `tag_at` evidence); a match labeled with a sibling key is `excluded` and says whose it is, an unlabeled match is `withheld` as a question, a tag drawn with no matching marker is `text_only`. Refusal over guessing, each with the reason and the fix: no such row, an ambiguous key, a tag drawn on no plan sheet, no repeatable marker linework—a fingerprint is never guessed from text alone. `commit: true` commits the counted matches under the row's own key—one undo step, `origin.assignment {source: "schedule"}` plus the anchor and row citation on `origin.symbol.seed`. No scale required. |
-| `takeoff_summary` | Per-condition totals + grand totals, computed by the Report's rules. |
+| `takeoff_summary` | Per-condition totals + grand totals, computed by the Report's rules. Writes any pending auto-save first and carries `autosave: { path, saved_at }`, or `error` when the last write failed. |
 | `export_takeoff` | Includes calibration provenance (`scale_source`, `scale_confirmed`) when present and live RFIs in its declared output schema. The full `opentakeoff.takeoff_canvas.v1` payload—exactly what the app autosaves. Inline, and to disk with `path` (see **Writing to disk** below). |
 | `delete_shape` | Remove a committed shape by id. |
 | `propose_takeoff` | **Open a named batch** (#365). Every shape you commit from here on attaches to it (`origin.proposal_id`, stamped centrally at the commit—hand traces, sweeps, derives, `cut_out` alike), so the estimator sees ONE Accept pill for the batch instead of one per shape. `label` is what they read on the pill, `rationale` is what decided the batch; both required. Commits nothing itself. |
