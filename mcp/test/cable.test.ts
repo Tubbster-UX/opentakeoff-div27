@@ -502,7 +502,7 @@ test("duplicate device check across sheets: the demo plan loaded twice (overlay 
   assert.deepEqual([after.duplicates.cross_sheet, after.warnings.filter((w: string) => /share \d+ device position/.test(w))], [[], []]);
   assert.deepEqual(after.duplicates.reference.map((r: any) => r.groups.map((g: any) => [g.finish_tag_a, g.finish_tag_b, g.count, g.cable_side])), [[["CAM-1", "CAM-REF", 3, "a"]]]);
   assert.equal(after.summary.totals.ea, 3);
-
+});
 // ── item 5: parts per cable and per pull (docs/design/CABLE_SETUP_PLAN.md §14.5) ──
 
 test("edit_materials basis cables / pulls on DATA-1: the reply's computed lines and export_report's buy list carry the exact parts; ×N doubles them; a non-cable condition reads 0 with a reason", async () => {
