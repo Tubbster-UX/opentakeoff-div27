@@ -624,3 +624,47 @@ with its reason in the reply and the report; an ordinary `edit_materials` reply 
 | `protocol` check, doc links | pass |
 | Browser `verify-cable-runs.mjs` | 38 of 38, no console errors |
 | A marked set with no cable work vs `d680c88`, clock frozen | identical SHA-256 |
+
+### 15.3 The workbook from MCP
+
+Item 8: only the canvas Report wrote the `.xlsx` workbook, so a bidding agent rebuilt its tabs
+from `export_report`'s JSON by hand. `export_report { xlsx: true }` (or `xlsx_path`) now writes the
+same workbook, built by the same code: `reportWorkbook` for the tabs and `buildXlsx` for the
+bytes, both in `web/src/lib/xlsx.js`, as `export_marked_pdf` calls `markedset.js`. The default
+path is `<plan> - report.xlsx` beside the plan, after `export_marked_pdf`'s naming. The reply is
+the unchanged report document plus `xlsx: { path, tabs }`; without the option the reply and the
+files on disk are as before. No new tool (57 default / 59 gated / 11 setup).
+
+| File | Change |
+|---|---|
+| `web/src/lib/xlsx.js` | `buildXlsx(sheets, { producer })`: an opt-in stamp in `docProps/core.xml` (`dc:creator`) and `docProps/app.xml` (`Application`), with their content types and root relationships. The canvas passes no producer, so its download is unchanged. `xlsxProvenance(bytes)` reads the stamp and `lastModifiedBy` back, inflating only the two `docProps` parts |
+| `mcp/src/session.ts` | `reportBase()`, the prelude `exportReport` already ran (roll takeoff, cable takeoff, the materials ctx, the rows), now shared with `reportWorkbookArgs()`, which assembles what `ReportPanel.jsx`'s `exportXlsx` hands `reportWorkbook`: rows, BASE `sheetTotals`, `shapesDetail`, `sheetLabelGroupedRows` (floor × room), the cable takeoff, and the CSV profile at default visibility plus the spec, labor, roll and cable columns exactly when the canvas adds them. Sheet label: the sheet number, else the key (the cable block's label). Imperial, as `export_report` is |
+| `mcp/src/workbook.ts` (new) | Default path, the overwrite check, build with producer `OpenTakeoff`, the sanitized tab names. A stale install without `fflate` gets an error that says to run `npm install` |
+| `mcp/src/safewrite.ts` | `xlsx` kind and `XLSX_PRODUCER`: a workbook is ours only when it is a zip whose `dc:creator` and `Application` both read `OpenTakeoff` and that has no `lastModifiedBy`. Excel and LibreOffice rewrite `Application` and add `lastModifiedBy` on save, so a workbook the estimator priced and saved is refused, as is a canvas download (no stamp) |
+| `mcp/src/tools.ts`, `mcp/src/outputs.ts` | `export_report` gains `xlsx` and `xlsx_path`; `overwrite` covers both files; every destination is checked before either file is written; `xlsx: false` with `xlsx_path` and one path for both files are refused. Output schema: optional `xlsx` |
+| `mcp/package.json`, `mcp/package-lock.json` | `fflate` `^0.8.3`, already a web dependency at that version. The dist keeps packages external (`--packages=external`) and `buildXlsx` imports `fflate` lazily, so without the dependency the built server, run from `mcp/dist` with only `mcp/node_modules`, could not write a workbook. The lockfile entry is the one `npm install --package-lock-only --offline` produces; `npm ci --offline` from the edited lockfile installs `fflate` 0.8.3 |
+| Docs | `docs/MCP.md`, `mcp/README.md` (`export_report` row; Writing to disk), `docs/AGENT_GUIDE.md` (the standard finish, the cable section, one refusal row), `CHANGELOG.md`, `FEATURES.md` |
+| `mcp/test/xlsx.test.ts` (new, 6 tests) | Flooring session: the five tab names, and every cell of every tab equal to `reportWorkbook` for inputs assembled literally as `ReportPanel.jsx` does (CPT-1 150 SF, 165 with waste; Adhesive 3 gal; room 101 on floor × room); the JSON part of the reply equal to a plain `export_report`. The file: a zip read with `node:zlib` alone; `[Content_Types].xml`, `workbook.xml`, both `.rels`, every worksheet and both `docProps` parts well formed, every part with a content type. `xlsx_path` with `path`: the JSON file carries no `xlsx` block. Cable session: Cable summary and Cable runs after the five, cells equal, the summary's DATA-1 cable LF equal to the JSON's; tagging the route trunk adds Pathway, and the re-export replaces its own workbook. Refusals: a stranger's file (bytes untouched, the JSON not written either), a canvas download, a workbook re-saved by Excel (and with only `lastModifiedBy` added); `overwrite: true` replaces it; no plan loaded |
+| `web/test/xlsx.test.ts` (+2) | No producer: no `docProps` parts, no `docProps` content types or relationships. Producer: the stamp, content types and relationships; `xl/` parts identical with and without it; `xlsxProvenance` on stamped, unstamped and non-zip bytes; the producer name escaped |
+
+Not done: the session has no display-units setting, column picker, custom columns or label
+vocabulary, so the workbook is imperial with the CSV's default columns, ad hoc room labels
+sorted, as `export_report` is; a canvas workbook of the same takeoff with metric units or
+a customized column set differs in exactly those ways. The canvas download is not stamped (it
+is left byte-identical), so a canvas workbook at the MCP default path is refused rather than
+replaced.
+
+#### Check record (this container: Node 22, root, other agents building in parallel)
+
+| Check | Result |
+|---|---|
+| `mcp/test/xlsx.test.ts` | 6 of 6 |
+| `mcp` all test files as CI runs them | 326 tests: 325 pass, 1 fail (`safewrite` "an unreadable file fails CLOSED", root) |
+| `mcp` typecheck, check:tool-count (57 / 59 / 11), check:wiki, check:protocol-resources | pass; no regeneration needed |
+| `mcp` build, smoke:dist | pass; `dist/server-core.js` imports `fflate` only through the two lazy `import("fflate")` calls in `buildXlsx` and `xlsxProvenance` |
+| The dist with only mcp's dependencies | `npm ci --offline` from this branch's `mcp/package.json` and lockfile into a scratch folder, the built dist copied beside it, driven over stdio: `export_report { xlsx: true }` on a flooring + cable takeoff with a trunk route wrote the eight tabs, and a second export replaced it. The same dist against an install without `fflate` returns the `npm install` error and writes nothing |
+| Canvas `buildXlsx` bytes, `28ea3cc` vs this branch, clock frozen | identical SHA-256 |
+| `web` typecheck, lint, build | pass; `web/bench/results.json` and `oneclick.ts` untouched |
+| `web/test/xlsx.test.ts` | 17 of 17 |
+| `web` `npm test` | 3,597 tests: 3,584 pass, 1 fail, 8 cancelled, 4 skipped, at load 12. The fail is `sheetName.test.ts` "cost grows about linearly" (a timing test); the cancellations are `pictures.test.ts`, 5 in `stageOcrModel.test.ts`, and the `ocrPageRead.test.ts` and `planSearch.test.ts` file timeouts. Run alone: `sheetName` 10 of 10, `ocrPageRead` 96 of 96, `planSearch` 105 of 105 |
+| `protocol` `npm run check`, `node scripts/check-doc-links.mjs` | pass (62 tests; 11 schemas); doc links pass |
