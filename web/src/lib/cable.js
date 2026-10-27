@@ -82,6 +82,93 @@ export function normalizeDeviceType(t) {
  *  says so rather than guessing the medium from free-text cable_type. */
 export const TIA_MAX_LINK_FT = 295;
 
+/** Cable medium and per-condition length limits (item 6). A cable setup MAY
+ *  state what its cable is — `medium`: "copper" | "fiber" | "coax" (absent =
+ *  unspecified) — and an explicit limit, `max_link_ft` (feet, > 0, from the
+ *  project spec or the system's datasheet). Neither is ever inferred: the
+ *  medium is never read from the free-text cable_type, and no medium mints a
+ *  limit. The limit a run is checked against (cableLinkLimit):
+ *    max_link_ft when stated                         → "stated"
+ *    else copper, or medium not stated               → 295 ft, "tia_568_copper"
+ *                                                      (exactly the check before this field)
+ *    else fiber or coax                              → no check, "none" — they have
+ *      no single limit (it depends on the application and the fiber grade), so
+ *      the estimator states one with max_link_ft.
+ *  The check is a flag: it never changes a quantity. */
+export const CABLE_MEDIA = Object.freeze(["copper", "fiber", "coax"]);
+export const CABLE_MEDIUM_LABELS = Object.freeze({ copper: "Copper", fiber: "Fiber", coax: "Coax" });
+export const LIMIT_SOURCES = Object.freeze({ STATED: "stated", TIA: "tia_568_copper", NONE: "none" });
+export function isCableMedium(m) { return CABLE_MEDIA.includes(m); }
+/** A length limit in feet: a finite number above 0. */
+export function isLinkLimit(v) { return typeof v === "number" && Number.isFinite(v) && v > 0; }
+/** The setup's stated medium, or null (absent or not one of CABLE_MEDIA). */
+export function cableMediumOf(setup) { return isCableMedium(setup?.medium) ? setup.medium : null; }
+/** The setup's stated max_link_ft, or null (absent or not a length > 0). */
+export function statedLinkLimit(setup) { return isLinkLimit(setup?.max_link_ft) ? setup.max_link_ft : null; }
+
+/** The limit a run on this setup is checked against.
+ *  @returns {{ limit_ft: number | null, limit_source: "stated" | "tia_568_copper" | "none" }} */
+export function cableLinkLimit(setup) {
+  const stated = statedLinkLimit(setup);
+  if (stated != null) return { limit_ft: stated, limit_source: LIMIT_SOURCES.STATED };
+  const m = cableMediumOf(setup);
+  if (m === "fiber" || m === "coax") return { limit_ft: null, limit_source: LIMIT_SOURCES.NONE };
+  return { limit_ft: TIA_MAX_LINK_FT, limit_source: LIMIT_SOURCES.TIA };
+}
+
+/** True once any cable condition states a valid medium or limit — the gate
+ *  for every medium/limit output (the per-run limit_ft / limit_source, the
+ *  limit-aware headers and wording), so a cable takeoff that states neither
+ *  exports exactly as it did before the fields existed. */
+export function usesCableLimits(conditions) {
+  return (conditions || []).some((c) => hasCableSetup(c) && (cableMediumOf(c.cable_setup) != null || statedLinkLimit(c.cable_setup) != null));
+}
+
+/** The text a flag names its limit by: "295 ft (TIA-568 copper permanent
+ *  link, 90 m)" (today's words, kept), or "the stated 500 ft limit for
+ *  FIBER-1". null when nothing is checked. */
+export function cableLimitText(limit, finishTag) {
+  if (!limit || limit.limit_ft == null) return null;
+  return limit.limit_source === LIMIT_SOURCES.STATED
+    ? `the stated ${round2(limit.limit_ft)} ft limit for ${finishTag}`
+    : `${TIA_MAX_LINK_FT} ft (TIA-568 copper permanent link, 90 m)`;
+}
+
+/** A medium as an agent or a person might type it, canonical ("Fiber " →
+ *  "fiber"), or null. Only the three names: nothing is inferred. */
+export function normalizeCableMedium(m) {
+  if (typeof m !== "string") return null;
+  const k = m.trim().toLowerCase();
+  return isCableMedium(k) ? k : null;
+}
+
+/** Why a medium / max_link_ft patch cannot be written, or null. `undefined`
+ *  leaves a field alone and `null` clears it. */
+export function cableLimitRefusal({ medium, max_link_ft } = {}) {
+  if (medium !== undefined && medium !== null && normalizeCableMedium(medium) == null) {
+    return `cable_setup.medium ${JSON.stringify(medium)} is not a medium — use "copper", "fiber" or "coax" (or null to clear it). State it from the spec; it is never read from cable_type.`;
+  }
+  if (max_link_ft !== undefined && max_link_ft !== null && !isLinkLimit(max_link_ft)) {
+    return `cable_setup.max_link_ft ${JSON.stringify(max_link_ft)} is not a length limit — give the limit in feet, greater than 0, from the project spec or the system's datasheet (or null to clear it).`;
+  }
+  return null;
+}
+
+/** The setup with `medium` / `max_link_ft` set, or removed when null or ""
+ *  (undefined leaves a field as it is). Pure: returns a new object, and a
+ *  new key goes at the end, so a setup without either keeps its key order. */
+export function withCableLimit(setup, { medium, max_link_ft } = {}) {
+  const out = { ...(setup || {}) };
+  if (medium !== undefined) {
+    const m = normalizeCableMedium(medium);
+    if (m) out.medium = m; else delete out.medium;
+  }
+  if (max_link_ft !== undefined) {
+    if (isLinkLimit(max_link_ft)) out.max_link_ft = max_link_ft; else delete out.max_link_ft;
+  }
+  return out;
+}
+
 /** A fresh cable setup for a device type: the type's starting values plus
  *  `patch` on top. Unknown types fall back to custom (blank), never throw. */
 export function mintCableSetup(deviceType, patch = {}) {
@@ -316,7 +403,10 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
   const sheetLabel = typeof opts.sheetLabel === "function" ? opts.sheetLabel : (k) => k;
   const unconfirmedSheets = new Set();   // route sheets of LINKED runs whose scale no person confirmed
   let unconfirmedRuns = 0;
-  const overLength = [];                 // linked runs past TIA_MAX_LINK_FT per cable
+  const overLength = [];                 // linked runs past their limit per cable (cableLinkLimit)
+  // medium / max_link_ft (item 6): until a cable condition states one, every
+  // run is checked at TIA_MAX_LINK_FT and every output reads as it did
+  const limitsOn = usesCableLimits(conditions);
   const holds = [];
   const resolved = [];
   const warnings = [];
@@ -406,6 +496,8 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
     const status = reasons.length ? "broken" : withheld.length ? "withheld" : "linked";
     const cables = validCablesOverride(run.cables_override)
       ? run.cables_override : (setup ? setup.cables_per_location : null);
+    const limit = cableLinkLimit(setup);
+    const medium = cableMediumOf(setup);
     const base = {
       id: run.id,
       condition_id: cond?.id ?? condIds[0] ?? null,
@@ -432,14 +524,17 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
       ...(status !== "linked" ? { reason: (reasons.length ? reasons : withheld).join("; "), reasons: reasons.length ? reasons : withheld } : {}),
       ...(vOverride != null ? { vertical_override: vOverride } : {}),
       ...(validCablesOverride(run.cables_override) ? { cables_override: run.cables_override } : {}),
+      // the limit this run is checked against — present once any cable
+      // condition states a medium or a limit, on every run with a setup
+      ...(limitsOn && setup ? { ...(medium ? { medium } : {}), limit_ft: limit.limit_ft, limit_source: limit.limit_source } : {}),
     };
     if (status === "linked") {
       const perCable = routeLf + vertical + setup.loop_device_ft + setup.loop_tr_ft;
-      const over = perCable > TIA_MAX_LINK_FT;
+      const over = limit.limit_ft != null && perCable > limit.limit_ft;
       const flagNotes = [];
       if (over) {
-        overLength.push({ id: run.id, finish_tag: base.finish_tag, per_cable_lf: perCable });
-        flagNotes.push(`per cable ${round2(perCable)} ft exceeds ${TIA_MAX_LINK_FT} ft (TIA-568 copper permanent link, 90 m)`);
+        overLength.push({ id: run.id, finish_tag: base.finish_tag, per_cable_lf: perCable, limit, medium });
+        flagNotes.push(`per cable ${round2(perCable)} ft exceeds ${cableLimitText(limit, base.finish_tag)}`);
       }
       if (runUnconfirmed.size) {
         unconfirmedRuns += 1;
@@ -467,9 +562,45 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
   }
 
   // ── run-level warnings: over-length and unconfirmed-scale ───────────────
-  if (overLength.length) {
+  // a stored medium / max_link_ft that is not a valid value is ignored (the
+  // run is checked as if it were absent) and said, never silently dropped
+  for (const c of conditions || []) {
+    if (!hasCableSetup(c)) continue;
+    const cs = c.cable_setup;
+    const badMedium = cs.medium != null && !isCableMedium(cs.medium);
+    const badLimit = cs.max_link_ft != null && !isLinkLimit(cs.max_link_ft);
+    if (!badMedium && !badLimit) continue;
+    const used = cableLimitText(cableLinkLimit(cs), c.finish_tag);
+    const what = [badMedium ? `medium ${JSON.stringify(cs.medium)} is not copper, fiber or coax` : "", badLimit ? `max_link_ft ${JSON.stringify(cs.max_link_ft)} is not a length in feet above 0` : ""].filter(Boolean).join(", and ");
+    warnings.push(`Condition ${c.finish_tag}: cable_setup ${what} — ignored, so its runs are ${used ? `checked against ${used}` : "not length-checked"}. Correct it in the cable setup.`);
+  }
+  if (overLength.length && !limitsOn) {
+    // every condition on the default: today's words, exactly
     const shown = overLength.slice(0, 10).map((o) => `${o.finish_tag} ${o.id} ${round2(o.per_cable_lf)} ft`);
     warnings.push(`${overLength.length} linked run${overLength.length === 1 ? "" : "s"} exceed${overLength.length === 1 ? "s" : ""} ${TIA_MAX_LINK_FT} ft per cable, the TIA-568 limit for a 4-pair copper permanent link (90 m): ${shown.join("; ")}${overLength.length > 10 ? `; +${overLength.length - 10} more` : ""}. Check the route; if it stands, the run needs a closer TR, or a length test and an owner notice. Fiber and coax are not bound by this limit.`);
+  } else if (overLength.length) {
+    // a condition states a medium or a limit: one warning, the runs grouped
+    // by the limit each was checked against (the default first, then each
+    // stated value in the order first met)
+    const groups = new Map();
+    for (const o of overLength) {
+      const k = `${o.limit.limit_source}\u0000${o.limit.limit_ft}`;
+      if (!groups.has(k)) groups.set(k, { limit: o.limit, tags: [], runs: [] });
+      const g = groups.get(k);
+      if (!g.tags.includes(o.finish_tag)) g.tags.push(o.finish_tag);
+      g.runs.push(o);
+    }
+    const ordered = [...groups.values()].sort((a, b) => (a.limit.limit_source === LIMIT_SOURCES.TIA ? 0 : 1) - (b.limit.limit_source === LIMIT_SOURCES.TIA ? 0 : 1));
+    const parts = ordered.map((g) => {
+      const head = g.limit.limit_source === LIMIT_SOURCES.STATED
+        ? `Over the stated ${round2(g.limit.limit_ft)} ft limit (${g.tags.join(", ")})`
+        : `Over ${TIA_MAX_LINK_FT} ft (TIA-568 copper permanent link, 90 m)`;
+      const shown = g.runs.slice(0, 10).map((o) => `${o.finish_tag} ${o.id} ${round2(o.per_cable_lf)} ft`);
+      return `${head}: ${shown.join("; ")}${g.runs.length > 10 ? `; +${g.runs.length - 10} more` : ""}.`;
+    });
+    const asCopper = [...new Set(overLength.filter((o) => o.limit.limit_source === LIMIT_SOURCES.TIA && !o.medium).map((o) => o.finish_tag))];
+    const n = overLength.length;
+    warnings.push(`${n} linked run${n === 1 ? "" : "s"} exceed${n === 1 ? "s" : ""} ${n === 1 ? "its" : "their"} length limit per cable. ${parts.join(" ")}${asCopper.length ? ` ${asCopper.join(", ")} state${asCopper.length === 1 ? "s" : ""} no medium and no limit, so ${asCopper.length === 1 ? "it is" : "they are"} checked as copper.` : ""} Check the route; if it stands, the run needs a closer TR, or a length test and an owner notice.`);
   }
   if (unconfirmedRuns) {
     warnings.push(`${unconfirmedRuns} linked run${unconfirmedRuns === 1 ? "" : "s"} take${unconfirmedRuns === 1 ? "s" : ""} route length from a sheet whose scale no person has confirmed (${[...unconfirmedSheets].map(sheetLabel).join(", ")}). Every cable length there rests on that scale: confirm it in the canvas before pricing.`);
@@ -534,6 +665,13 @@ export function resolveCableRuns(conditions, shapes, runs, opts = {}) {
 
 // ── rollups ─────────────────────────────────────────────────────────────────
 
+/** A condition's medium (when stated) and the limit its runs are checked
+ *  against, as a summary row carries them once limits are in use. */
+const limitFields = (c) => {
+  const m = cableMediumOf(c?.cable_setup);
+  const l = cableLinkLimit(c?.cable_setup);
+  return { ...(m ? { medium: m } : {}), limit_ft: l.limit_ft, limit_source: l.limit_source };
+};
 const zeroQty = () => ({ ea: 0, pulls: 0, cables: 0, route_lf: 0, cable_lf: 0, cable_lf_order: 0, unlinked_devices: 0, held_devices: 0, pending_runs: 0, over_length_runs: 0 });
 const QTY_KEYS = Object.keys(zeroQty());
 const addQty = (a, b) => { for (const k of QTY_KEYS) a[k] += b[k] || 0; return a; };
@@ -554,6 +692,9 @@ const roundQty = (q) => ({ ...q, route_lf: round2(q.route_lf), cable_lf: round2(
  */
 export function cableSummary(resolved, conditions, shapes) {
   const condById = new Map((conditions || []).map((c) => [c.id, c]));
+  // medium / limit per row, once any cable condition states one (item 6):
+  // every run on a row shares its condition, so it shares its limit too
+  const limitsOn = usesCableLimits(conditions);
   const cableConds = (conditions || []).filter(hasCableSetup);
   // device EA per cable condition — the count the Report's EA column shows
   const eaByCond = new Map();
@@ -577,6 +718,7 @@ export function cableSummary(resolved, conditions, shapes) {
       row = {
         condition_id: r.condition_id, finish_tag: r.finish_tag, device_type: r.device_type, cable_type: r.cable_type,
         tr_id: r.tr_id, tr_name: r.tr_name, multiplier: mult, waste_pct: waste,
+        ...(limitsOn ? limitFields(c) : {}),
         ...zeroQty(), leg_warning: false,
       };
       rowsByKey.set(rowKey(r), row);
@@ -606,6 +748,7 @@ export function cableSummary(resolved, conditions, shapes) {
         condition_id: c.id, finish_tag: c.finish_tag, device_type: c.cable_setup.device_type,
         cable_type: typeof c.cable_setup.cable_type === "string" ? c.cable_setup.cable_type : "",
         tr_id: "", tr_name: "", multiplier: mult, waste_pct: Math.max(0, Number(c.waste_pct) || 0),
+        ...(limitsOn ? limitFields(c) : {}),
         ...zeroQty(), ea, unlinked_devices: unlinked, held_devices: heldN, leg_warning: false,
         ...(withheld.length ? { withheld: withheld[0].reason, withheld_runs: withheld.length } : {}),
       });
@@ -916,6 +1059,9 @@ export function cableRunRows(takeoff, sheetLabel = null) {
     multiplier: condMult.get(r.condition_id) || 1,
     status: r.status, review_status: r.review, reason: r.reason || "",
     ...(r.vertical_override != null ? { vertical_override: r.vertical_override } : {}),
+    // the limit this run was checked against: only once a cable condition
+    // states a medium or a limit, so every other report is unchanged
+    ...(r.limit_source ? { ...(r.medium ? { medium: r.medium } : {}), limit_ft: r.limit_ft, limit_source: r.limit_source } : {}),
     ...(r.over_length ? { over_length: true } : {}),
     ...(r.scale_unconfirmed ? { scale_unconfirmed: true } : {}),
     ...(r.notes ? { notes: r.notes.join("; ") } : {}),
@@ -955,6 +1101,24 @@ export function cableReportBlock(takeoff, sheetLabel = null) {
 }
 
 export const CABLE_SUMMARY_HEADER = Object.freeze(["Condition", "Device type", "Cable type", "TR", "Multiplier", "Waste %", "Device EA", "Pulls", "Cables", "Measured route LF", "Cable LF (net)", "Cable LF (order, with waste)", "Unlinked devices", "Held devices", "Pending runs", `Runs over ${TIA_MAX_LINK_FT} ft`, "Note"]);
+/** Once a cable condition states a medium or a limit, runs are checked
+ *  against different limits, so the column names none: "Runs over length
+ *  limit", in the same position. */
+export const CABLE_SUMMARY_LIMIT_COLUMN = "Runs over length limit";
+/** Inserted before "Reason / notes" on the runs sheet (after Branch / Trunk
+ *  LF when present) once a cable condition states a medium or a limit. */
+export const CABLE_RUNS_LIMIT_HEADER = Object.freeze(["Limit ft", "Limit source"]);
+/** The Limit source cell: what the run was checked against, in words. */
+export function limitSourceLabel(r) {
+  if (r?.limit_source === LIMIT_SOURCES.STATED) return "stated (max_link_ft)";
+  if (r?.limit_source === LIMIT_SOURCES.NONE) return `none (${r.medium || "medium"}: no limit stated)`;
+  if (r?.limit_source === LIMIT_SOURCES.TIA) return r.medium ? "TIA-568 copper" : "TIA-568 copper (no medium stated)";
+  return "";
+}
+/** True when a cable takeoff's rows carry limits (usesCableLimits held when
+ *  it was figured) — every cable condition has a summary row, so a takeoff
+ *  with limits in use always has one that says so. */
+export function takeoffUsesLimits(takeoff) { return (takeoff?.summary?.rows || []).some((r) => r.limit_source); }
 export const CABLE_RUNS_HEADER = Object.freeze(["Run ID", "Condition", "Device type", "Cable type", "TR", "Device sheet", "Route sheet(s)", "TR sheet", "Route LF", "Vertical ft", "Loop at device ft", "Loop at TR ft", "Per-cable LF", "Cables", "Location LF", "Multiplier", "Status", "Review status", "Reason / notes"]);
 export const CABLE_UNLINKED_HEADER = Object.freeze(["Kind", "Shape", "Condition", "Sheet", "Length LF", "Reason"]);
 /** Inserted before "Reason / notes" on the runs sheet once a route condition
@@ -967,7 +1131,8 @@ export const CABLE_ORDER_HEADER = Object.freeze(["Cable type", "Order LF", "Box/
 const KIND_CELL = (k) => (k ? ROUTE_KIND_LABELS[k] : "unspecified");
 const NO_CABLE_TYPE = "(no cable type)";
 
-const rowNote = (r) => [r.withheld ? `withheld: ${r.withheld}` : "", r.leg_warning ? "route segment(s) carry rise/drop legs (ignored)" : "", r.over_length_runs ? `${r.over_length_runs} run${r.over_length_runs === 1 ? "" : "s"} over ${TIA_MAX_LINK_FT} ft per cable` : ""].filter(Boolean).join("; ");
+const overNote = (r) => (r.limit_source === LIMIT_SOURCES.STATED ? `the stated ${round2(r.limit_ft)} ft limit per cable` : `${TIA_MAX_LINK_FT} ft per cable`);
+const rowNote = (r) => [r.withheld ? `withheld: ${r.withheld}` : "", r.leg_warning ? "route segment(s) carry rise/drop legs (ignored)" : "", r.over_length_runs ? `${r.over_length_runs} run${r.over_length_runs === 1 ? "" : "s"} over ${overNote(r)}` : ""].filter(Boolean).join("; ");
 const NO_TR = "(no TR — no linked run)";
 
 /** The three cable tables as plain cell matrices — the CSV sections and the
@@ -979,7 +1144,9 @@ export function cableTables(takeoff, { sheetLabel = null, L = (v) => v, lengthUn
   if (!takeoff) return null;
   const lenHdr = (h) => h.replace(/\bLF\b/g, lengthUnit).replace(/\bft\b/g, lengthUnit === "LF" ? "ft" : "m");
   const conv = (v) => (v == null ? "" : L(v));
-  const summary = [CABLE_SUMMARY_HEADER.map(lenHdr)];
+  const limits = takeoffUsesLimits(takeoff);
+  const summaryHead = limits ? CABLE_SUMMARY_HEADER.map((h) => (h === `Runs over ${TIA_MAX_LINK_FT} ft` ? CABLE_SUMMARY_LIMIT_COLUMN : h)) : CABLE_SUMMARY_HEADER;
+  const summary = [summaryHead.map(lenHdr)];
   for (const r of takeoff.summary.rows) {
     summary.push([r.finish_tag, r.device_type, r.cable_type, r.tr_name || r.tr_id || NO_TR, r.multiplier, r.waste_pct, r.ea, r.pulls, r.cables, conv(r.route_lf), conv(r.cable_lf), conv(r.cable_lf_order), r.unlinked_devices, r.held_devices, r.pending_runs, r.over_length_runs, rowNote(r)]);
   }
@@ -989,10 +1156,10 @@ export function cableTables(takeoff, { sheetLabel = null, L = (v) => v, lengthUn
   summary.push(["TOTAL", "", "", "", "", "", ...qtyCells(takeoff.summary.totals)]);
   const split = !!takeoff.pathway;
   const runsHead = CABLE_RUNS_HEADER.map(lenHdr);
-  const runs = [split ? [...runsHead.slice(0, -1), ...CABLE_RUNS_SPLIT_HEADER.map(lenHdr), runsHead.at(-1)] : runsHead];
+  const runs = [[...runsHead.slice(0, -1), ...(split ? CABLE_RUNS_SPLIT_HEADER.map(lenHdr) : []), ...(limits ? CABLE_RUNS_LIMIT_HEADER.map(lenHdr) : []), runsHead.at(-1)]];
   for (const r of cableRunRows(takeoff, sheetLabel)) {
     runs.push([r.run_id, r.condition, r.device_type, r.cable_type, r.tr, r.device_sheets, r.sheets, r.tr_sheet, conv(r.route_lf), conv(r.vertical_ft), conv(r.loop_device_ft), conv(r.loop_tr_ft), conv(r.per_cable_lf), r.cables ?? "", conv(r.location_lf), r.multiplier, r.status, r.review_status,
-      ...(split ? [conv(r.branch_lf), conv(r.trunk_lf)] : []), [r.reason, r.notes].filter(Boolean).join("; ")]);
+      ...(split ? [conv(r.branch_lf), conv(r.trunk_lf)] : []), ...(limits ? [r.limit_source ? conv(r.limit_ft) : "", limitSourceLabel(r)] : []), [r.reason, r.notes].filter(Boolean).join("; ")]);
   }
   // Pathway (trunk/branch): what J-hooks, tray and sleeves are bought from —
   // each segment once, never per run. null when no route condition is tagged.

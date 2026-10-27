@@ -625,49 +625,74 @@ with its reason in the reply and the report; an ordinary `edit_materials` reply 
 | Browser `verify-cable-runs.mjs` | 38 of 38, no console errors |
 | A marked set with no cable work vs `d680c88`, clock frozen | identical SHA-256 |
 
-### 15.3 The workbook from MCP
+## 15. Second follow-up round (Oct 27, 2026)
 
-Item 8: only the canvas Report wrote the `.xlsx` workbook, so a bidding agent rebuilt its tabs
-from `export_report`'s JSON by hand. `export_report { xlsx: true }` (or `xlsx_path`) now writes the
-same workbook, built by the same code: `reportWorkbook` for the tabs and `buildXlsx` for the
-bytes, both in `web/src/lib/xlsx.js`, as `export_marked_pdf` calls `markedset.js`. The default
-path is `<plan> - report.xlsx` beside the plan, after `export_marked_pdf`'s naming. The reply is
-the unchanged report document plus `xlsx: { path, tabs }`; without the option the reply and the
-files on disk are as before. No new tool (57 default / 59 gated / 11 setup).
+Items 6–8 of the post-Phase 3 list, built in parallel by three agents on separate branches from `28ea3cc` and merged on `claude/div27-cable-setup-c6t9wu`. Each subsection keeps its own check record; the combined record is §15.4.
+
+### 15.1 Cable medium and length limits
+
+Item 6. Every linked run over 295 ft per cable carried the TIA-568 copper flag, whatever the
+cable was, because the library could not tell the medium from free-text `cable_type`. A cable
+setup can now state its `medium` (copper, fiber, coax) and a `max_link_ft`. A run is checked
+against the stated limit, else 295 ft for copper or no medium (unchanged), else not at all for
+fiber or coax. Nothing is inferred or minted, and the check never changes a quantity. The
+decisions are in the spec's Decisions ("Recorded while building item 6").
 
 | File | Change |
 |---|---|
-| `web/src/lib/xlsx.js` | `buildXlsx(sheets, { producer })`: an opt-in stamp in `docProps/core.xml` (`dc:creator`) and `docProps/app.xml` (`Application`), with their content types and root relationships. The canvas passes no producer, so its download is unchanged. `xlsxProvenance(bytes)` reads the stamp and `lastModifiedBy` back, inflating only the two `docProps` parts |
-| `mcp/src/session.ts` | `reportBase()`, the prelude `exportReport` already ran (roll takeoff, cable takeoff, the materials ctx, the rows), now shared with `reportWorkbookArgs()`, which assembles what `ReportPanel.jsx`'s `exportXlsx` hands `reportWorkbook`: rows, BASE `sheetTotals`, `shapesDetail`, `sheetLabelGroupedRows` (floor × room), the cable takeoff, and the CSV profile at default visibility plus the spec, labor, roll and cable columns exactly when the canvas adds them. Sheet label: the sheet number, else the key (the cable block's label). Imperial, as `export_report` is |
-| `mcp/src/workbook.ts` (new) | Default path, the overwrite check, build with producer `OpenTakeoff`, the sanitized tab names. A stale install without `fflate` gets an error that says to run `npm install` |
-| `mcp/src/safewrite.ts` | `xlsx` kind and `XLSX_PRODUCER`: a workbook is ours only when it is a zip whose `dc:creator` and `Application` both read `OpenTakeoff` and that has no `lastModifiedBy`. Excel and LibreOffice rewrite `Application` and add `lastModifiedBy` on save, so a workbook the estimator priced and saved is refused, as is a canvas download (no stamp) |
-| `mcp/src/tools.ts`, `mcp/src/outputs.ts` | `export_report` gains `xlsx` and `xlsx_path`; `overwrite` covers both files; every destination is checked before either file is written; `xlsx: false` with `xlsx_path` and one path for both files are refused. Output schema: optional `xlsx` |
-| `mcp/package.json`, `mcp/package-lock.json` | `fflate` `^0.8.3`, already a web dependency at that version. The dist keeps packages external (`--packages=external`) and `buildXlsx` imports `fflate` lazily, so without the dependency the built server, run from `mcp/dist` with only `mcp/node_modules`, could not write a workbook. The lockfile entry is the one `npm install --package-lock-only --offline` produces; `npm ci --offline` from the edited lockfile installs `fflate` 0.8.3 |
-| Docs | `docs/MCP.md`, `mcp/README.md` (`export_report` row; Writing to disk), `docs/AGENT_GUIDE.md` (the standard finish, the cable section, one refusal row), `CHANGELOG.md`, `FEATURES.md` |
-| `mcp/test/xlsx.test.ts` (new, 6 tests) | Flooring session: the five tab names, and every cell of every tab equal to `reportWorkbook` for inputs assembled literally as `ReportPanel.jsx` does (CPT-1 150 SF, 165 with waste; Adhesive 3 gal; room 101 on floor × room); the JSON part of the reply equal to a plain `export_report`. The file: a zip read with `node:zlib` alone; `[Content_Types].xml`, `workbook.xml`, both `.rels`, every worksheet and both `docProps` parts well formed, every part with a content type. `xlsx_path` with `path`: the JSON file carries no `xlsx` block. Cable session: Cable summary and Cable runs after the five, cells equal, the summary's DATA-1 cable LF equal to the JSON's; tagging the route trunk adds Pathway, and the re-export replaces its own workbook. Refusals: a stranger's file (bytes untouched, the JSON not written either), a canvas download, a workbook re-saved by Excel (and with only `lastModifiedBy` added); `overwrite: true` replaces it; no plan loaded |
-| `web/test/xlsx.test.ts` (+2) | No producer: no `docProps` parts, no `docProps` content types or relationships. Producer: the stamp, content types and relationships; `xl/` parts identical with and without it; `xlsxProvenance` on stamped, unstamped and non-zip bytes; the producer name escaped |
+| `web/src/lib/cable.js` | `CABLE_MEDIA`, `LIMIT_SOURCES`, `isCableMedium`, `isLinkLimit`, `cableMediumOf`, `statedLinkLimit`, `cableLinkLimit`, `usesCableLimits` (the gate), `cableLimitText`, `normalizeCableMedium`, `cableLimitRefusal`, `withCableLimit`; `resolveCableRuns` checks each linked run against its own limit, adds `medium` / `limit_ft` / `limit_source` to runs once the gate is open, words a stated limit's note, groups the warning by limit and warns on an invalid stored value; `cableSummary` rows carry the condition's limit; `cableRunRows` adds the three fields; `cableTables` renames the summary column *Runs over length limit* and inserts *Limit ft* / *Limit source* before *Reason / notes*; `CABLE_SUMMARY_LIMIT_COLUMN`, `CABLE_RUNS_LIMIT_HEADER`, `limitSourceLabel`, `takeoffUsesLimits` |
+| `web/src/lib/cableMarks.js` | The chip's over mark is the run's own limit (`>500`); the cover counts `N over their length limit per cable` once the gate is open |
+| `web/src/components/CableSetupEditor.jsx` | **Medium** select and **Limit** field (display units, placeholder 295 or *none*), a line naming the check; a device-type change keeps both |
+| `web/src/components/RunsPanel.jsx` | The `>N` flag and its tooltip use the run's own limit |
+| `mcp/src/session.ts`, `tools.ts`, `outputs.ts` | `edit_condition { cable_setup: { medium, max_link_ft } }`: refused before anything is written unless valid or `null`; `null` clears; a type change keeps both; the reply's `cable.limit`; `limit_ft` / `limit_source` / `medium` on `link_run` and `list_runs` rows (and through the library on summary rows and `export_report`). Descriptions updated. No new tool (57 / 59 / 11) |
+| `protocol/v1/condition.schema.json`, `protocol/INVENTORY.md`, `protocol/test/current-records.test.mjs` | `cable_setup.medium` (enum) and `max_link_ft` (number, exclusive minimum 0); an inventory row; a conforming record and two that do not. Generated: `protocol/README.md`, `mcp/src/protocol.generated.ts` |
+| `web/test/cableMedium.test.ts` (new), `web/test/fixtures/cableMedium.fixture.ts`, `cableMedium.base.json` (new) | Below |
+| `mcp/test/cable.test.ts` (+2), `mcp/test/fixtures/cableMediumScenario.ts`, `cableMediumScenario.base.json` (new) | Below |
+| `web/scripts/verify-cable-runs.mjs` | 3 checks: Fiber with no Limit clears the flag; Limit 350 flags `>350` with the stated-limit warning; clearing both restores `>295` |
+| Docs | the spec's data model, summary column and Decisions; `USER_GUIDE.md` (cable setup fields, *Flags you should not price past*, the chip); `AGENT_GUIDE.md` (two refusal-table rows: state medium and the spec's limit, never infer them); `MCP.md`; `mcp/README.md` (`edit_condition`, `link_run`, `list_runs` rows); `docs/wiki/status.md` (+ regenerated `wiki.generated.ts`); `FEATURES.md`; `CHANGELOG.md` |
 
-Not done: the session has no display-units setting, column picker, custom columns or label
-vocabulary, so the workbook is imperial with the CSV's default columns, ad hoc room labels
-sorted, as `export_report` is; a canvas workbook of the same takeoff with metric units or
-a customized column set differs in exactly those ways. The canvas download is not stamped (it
-is left byte-identical), so a canvas workbook at the MCP default path is refused rather than
-replaced.
+**Tests.** `web/test/cableMedium.test.ts` (12): the vocabulary and the gate (invalid values
+read as absent and do not open it; no device type mints either field); refusal wording, and
+`withCableLimit` clearing back to the original setup, key order included; no medium: 295 ft per
+cable not flagged, 296 flagged, today's note, warning, header, chip `>295` and cover line;
+copper: the same flags and note, each run carrying `limit_ft: 295`, the grouped warning; fiber
+with no limit: a 600 ft run unflagged, no warning, *Limit source* `none (fiber: no limit
+stated)`, and the same fiber text in `cable_type` with no medium stated still checked as copper;
+fiber with `max_link_ft` 500: the 600 ft run flagged `per cable 600 ft exceeds the stated 500 ft
+limit for FIBER-1`, the exact warning, *Runs over length limit* with every other column in
+place, the row note, the runs-sheet columns and cells, report JSON, CSV, workbook, chip `>500`,
+cover, and metric *Limit m* 152.4; 1000 per cable not over a stated 1000, 1001 over it and
+chipped `>1000`; coax unchecked without a limit and flagged with one; five media in one takeoff
+grouped into one warning; an invalid stored value warned; a document and template round trip.
+The byte-identity test runs `cableMediumOutputs` (resolved runs, summary, `byCond`, run rows,
+tables imperial and metric, report JSON, CSV imperial and metric, workbook imperial and metric,
+legend, sheet marks on two sheets, each plain and with a tagged trunk: 26 outputs) and
+compares the full CSV, the warnings and 26 SHA-256 values with `cableMedium.base.json`,
+captured by the same function from `28ea3cc`'s `web/src/lib` (extracted with `git archive`).
+`mcp/test/cable.test.ts` adds: over the wire, a 600 ft camera run flagged with today's reply
+and warning, then `medium: "Fiber"` (read as fiber, `cable.limit` none, unflagged, DATA-1's
+run carrying 295), refusals of `"glass"`, `0` (with a waste % in the same call, nothing
+written), `-300` and a string limit, `max_link_ft: 500` (flag, note, grouped warning, quantity
+unchanged, `export_report`, `takeoff_summary`, chip `>500` and the cover in the marked PDF),
+a type change keeping both, `null` clearing each, `undo_last`, and a fresh opt-in minting
+neither; and a scripted session using neither field (seeded ids) whose `edit_condition`,
+`link_run`, `hold_devices`, `list_runs`, `takeoff_summary.cable`, `export_report.cable` and
+marked-set text equal, byte for byte, the replies captured from `28ea3cc`'s server.
 
-#### Check record (this container: Node 22, root, other agents building in parallel)
+#### Check record (this container: Node 22, root, shared with two other agents)
 
 | Check | Result |
 |---|---|
-| `mcp/test/xlsx.test.ts` | 6 of 6 |
-| `mcp` all test files as CI runs them | 326 tests: 325 pass, 1 fail (`safewrite` "an unreadable file fails CLOSED", root) |
-| `mcp` typecheck, check:tool-count (57 / 59 / 11), check:wiki, check:protocol-resources | pass; no regeneration needed |
-| `mcp` build, smoke:dist | pass; `dist/server-core.js` imports `fflate` only through the two lazy `import("fflate")` calls in `buildXlsx` and `xlsxProvenance` |
-| The dist with only mcp's dependencies | `npm ci --offline` from this branch's `mcp/package.json` and lockfile into a scratch folder, the built dist copied beside it, driven over stdio: `export_report { xlsx: true }` on a flooring + cable takeoff with a trunk route wrote the eight tabs, and a second export replaced it. The same dist against an install without `fflate` returns the `npm install` error and writes nothing |
-| Canvas `buildXlsx` bytes, `28ea3cc` vs this branch, clock frozen | identical SHA-256 |
-| `web` typecheck, lint, build | pass; `web/bench/results.json` and `oneclick.ts` untouched |
-| `web/test/xlsx.test.ts` | 17 of 17 |
-| `web` `npm test` | 3,597 tests: 3,584 pass, 1 fail, 8 cancelled, 4 skipped, at load 12. The fail is `sheetName.test.ts` "cost grows about linearly" (a timing test); the cancellations are `pictures.test.ts`, 5 in `stageOcrModel.test.ts`, and the `ocrPageRead.test.ts` and `planSearch.test.ts` file timeouts. Run alone: `sheetName` 10 of 10, `ocrPageRead` 96 of 96, `planSearch` 105 of 105 |
-| `protocol` `npm run check`, `node scripts/check-doc-links.mjs` | pass (62 tests; 11 schemas); doc links pass |
+| `web` typecheck, lint, build | pass |
+| `web` `test/cable*.test.ts` | 103 pass (91 before + 12) |
+| `web` `npm test` | 3,607 tests: 3,595 pass, 1 fail, 7 cancelled, 4 skipped. The failure is `sheetName.test.ts` "cost grows about linearly with the page's text" (a timing ratio under load) and one cancellation is `planSearch.test.ts` (20 s file timeout); both files pass alone (115 of 115). The rest are the known environment-only `pictures.test.ts` timeout and the 5 in `stageOcrModel.test.ts` |
+| `web/bench/results.json`, `oneclick.ts`, `TakeoffCanvas.jsx` | unchanged |
+| `mcp` typecheck; all test files as CI runs them | pass; 322 tests: 321 pass, 1 fail (`safewrite` "an unreadable file fails CLOSED", root, as in §10) |
+| `mcp` check:tool-count (57 / 59 / 11), check:wiki, check:protocol-resources | pass after `-- --write` |
+| `protocol` `npm run check` | 62 tests pass; docs match 11 schemas; matrix 16 cases |
+| `node scripts/check-doc-links.mjs` | pass (44 files) |
+| Browser: `verify-cable-runs.mjs` on the invented fixture | 41 of 41 (the 38 existing + 3 for Medium and Limit), no console errors |
+
 ### 15.2 Cable box and reel rounding
 
 Item 7: cable is bought in boxes (Cat 6A, 1000 ft) or reels (fiber, 1000 / 2000 ft), and the
@@ -728,3 +753,63 @@ string.
 | `protocol` `npm run check` | 62 tests pass; docs match 11 schemas (after `node protocol/scripts/check-docs.mjs --write`) |
 | `node scripts/check-doc-links.mjs` | pass |
 | Browser, built app, `make-cable-fixture.mts` fixture (scratch script, not committed) | 10 of 10: no Cable order table before a size; **Box/reel ft** blank; 1000 entered → the Report's table reads `CAT6A · 170.98 · 1000 · 1 · 1000 · 829.02`; a device-type change keeps 1000; clearing it removes the table; no console errors |
+
+### 15.3 The workbook from MCP
+
+Item 8: only the canvas Report wrote the `.xlsx` workbook, so a bidding agent rebuilt its tabs
+from `export_report`'s JSON by hand. `export_report { xlsx: true }` (or `xlsx_path`) now writes the
+same workbook, built by the same code: `reportWorkbook` for the tabs and `buildXlsx` for the
+bytes, both in `web/src/lib/xlsx.js`, as `export_marked_pdf` calls `markedset.js`. The default
+path is `<plan> - report.xlsx` beside the plan, after `export_marked_pdf`'s naming. The reply is
+the unchanged report document plus `xlsx: { path, tabs }`; without the option the reply and the
+files on disk are as before. No new tool (57 default / 59 gated / 11 setup).
+
+| File | Change |
+|---|---|
+| `web/src/lib/xlsx.js` | `buildXlsx(sheets, { producer })`: an opt-in stamp in `docProps/core.xml` (`dc:creator`) and `docProps/app.xml` (`Application`), with their content types and root relationships. The canvas passes no producer, so its download is unchanged. `xlsxProvenance(bytes)` reads the stamp and `lastModifiedBy` back, inflating only the two `docProps` parts |
+| `mcp/src/session.ts` | `reportBase()`, the prelude `exportReport` already ran (roll takeoff, cable takeoff, the materials ctx, the rows), now shared with `reportWorkbookArgs()`, which assembles what `ReportPanel.jsx`'s `exportXlsx` hands `reportWorkbook`: rows, BASE `sheetTotals`, `shapesDetail`, `sheetLabelGroupedRows` (floor × room), the cable takeoff, and the CSV profile at default visibility plus the spec, labor, roll and cable columns exactly when the canvas adds them. Sheet label: the sheet number, else the key (the cable block's label). Imperial, as `export_report` is |
+| `mcp/src/workbook.ts` (new) | Default path, the overwrite check, build with producer `OpenTakeoff`, the sanitized tab names. A stale install without `fflate` gets an error that says to run `npm install` |
+| `mcp/src/safewrite.ts` | `xlsx` kind and `XLSX_PRODUCER`: a workbook is ours only when it is a zip whose `dc:creator` and `Application` both read `OpenTakeoff` and that has no `lastModifiedBy`. Excel and LibreOffice rewrite `Application` and add `lastModifiedBy` on save, so a workbook the estimator priced and saved is refused, as is a canvas download (no stamp) |
+| `mcp/src/tools.ts`, `mcp/src/outputs.ts` | `export_report` gains `xlsx` and `xlsx_path`; `overwrite` covers both files; every destination is checked before either file is written; `xlsx: false` with `xlsx_path` and one path for both files are refused. Output schema: optional `xlsx` |
+| `mcp/package.json`, `mcp/package-lock.json` | `fflate` `^0.8.3`, already a web dependency at that version. The dist keeps packages external (`--packages=external`) and `buildXlsx` imports `fflate` lazily, so without the dependency the built server, run from `mcp/dist` with only `mcp/node_modules`, could not write a workbook. The lockfile entry is the one `npm install --package-lock-only --offline` produces; `npm ci --offline` from the edited lockfile installs `fflate` 0.8.3 |
+| Docs | `docs/MCP.md`, `mcp/README.md` (`export_report` row; Writing to disk), `docs/AGENT_GUIDE.md` (the standard finish, the cable section, one refusal row), `CHANGELOG.md`, `FEATURES.md` |
+| `mcp/test/xlsx.test.ts` (new, 6 tests) | Flooring session: the five tab names, and every cell of every tab equal to `reportWorkbook` for inputs assembled literally as `ReportPanel.jsx` does (CPT-1 150 SF, 165 with waste; Adhesive 3 gal; room 101 on floor × room); the JSON part of the reply equal to a plain `export_report`. The file: a zip read with `node:zlib` alone; `[Content_Types].xml`, `workbook.xml`, both `.rels`, every worksheet and both `docProps` parts well formed, every part with a content type. `xlsx_path` with `path`: the JSON file carries no `xlsx` block. Cable session: Cable summary and Cable runs after the five, cells equal, the summary's DATA-1 cable LF equal to the JSON's; tagging the route trunk adds Pathway, and the re-export replaces its own workbook. Refusals: a stranger's file (bytes untouched, the JSON not written either), a canvas download, a workbook re-saved by Excel (and with only `lastModifiedBy` added); `overwrite: true` replaces it; no plan loaded |
+| `web/test/xlsx.test.ts` (+2) | No producer: no `docProps` parts, no `docProps` content types or relationships. Producer: the stamp, content types and relationships; `xl/` parts identical with and without it; `xlsxProvenance` on stamped, unstamped and non-zip bytes; the producer name escaped |
+
+Not done: the session has no display-units setting, column picker, custom columns or label
+vocabulary, so the workbook is imperial with the CSV's default columns, ad hoc room labels
+sorted, as `export_report` is; a canvas workbook of the same takeoff with metric units or
+a customized column set differs in exactly those ways. The canvas download is not stamped (it
+is left byte-identical), so a canvas workbook at the MCP default path is refused rather than
+replaced.
+
+#### Check record (this container: Node 22, root, other agents building in parallel)
+
+| Check | Result |
+|---|---|
+| `mcp/test/xlsx.test.ts` | 6 of 6 |
+| `mcp` all test files as CI runs them | 326 tests: 325 pass, 1 fail (`safewrite` "an unreadable file fails CLOSED", root) |
+| `mcp` typecheck, check:tool-count (57 / 59 / 11), check:wiki, check:protocol-resources | pass; no regeneration needed |
+| `mcp` build, smoke:dist | pass; `dist/server-core.js` imports `fflate` only through the two lazy `import("fflate")` calls in `buildXlsx` and `xlsxProvenance` |
+| The dist with only mcp's dependencies | `npm ci --offline` from this branch's `mcp/package.json` and lockfile into a scratch folder, the built dist copied beside it, driven over stdio: `export_report { xlsx: true }` on a flooring + cable takeoff with a trunk route wrote the eight tabs, and a second export replaced it. The same dist against an install without `fflate` returns the `npm install` error and writes nothing |
+| Canvas `buildXlsx` bytes, `28ea3cc` vs this branch, clock frozen | identical SHA-256 |
+| `web` typecheck, lint, build | pass; `web/bench/results.json` and `oneclick.ts` untouched |
+| `web/test/xlsx.test.ts` | 17 of 17 |
+| `web` `npm test` | 3,597 tests: 3,584 pass, 1 fail, 8 cancelled, 4 skipped, at load 12. The fail is `sheetName.test.ts` "cost grows about linearly" (a timing test); the cancellations are `pictures.test.ts`, 5 in `stageOcrModel.test.ts`, and the `ocrPageRead.test.ts` and `planSearch.test.ts` file timeouts. Run alone: `sheetName` 10 of 10, `ocrPageRead` 96 of 96, `planSearch` 105 of 105 |
+| `protocol` `npm run check`, `node scripts/check-doc-links.mjs` | pass (62 tests; 11 schemas); doc links pass |
+
+### 15.4 Combined check record (items 6–8 merged; Node 22, root, run alone)
+
+| Check | Result |
+|---|---|
+| `web/test/cableCombined.test.ts` | 2 of 2: round one, plus copper checked at 295 / fiber at its stated 500 / coax unchecked, boxes per cable type, and the workbook's Cable summary, Cable runs and Cable order tabs on one takeoff |
+| `web` cable and workbook test files | 131 pass |
+| `web` `npm test` | 3,629 tests: 3,618 pass, 1 fail, 6 cancelled. The fail is a timing test in `ocrPageRead.test.ts`, which also fails intermittently on `28ea3cc` here (a different test of the same file on a second run); the cancellations are `pictures.test.ts` and 5 in `stageOcrModel.test.ts`, as on the base |
+| `web` typecheck, lint, build, OCR dist check; `web/bench/results.json` | pass; unchanged |
+| `mcp` all test files as CI runs them | 330 tests: 329 pass, 1 fail (`safewrite` "an unreadable file fails CLOSED", root) |
+| `mcp` typecheck, tool count (57 / 59 / 11), wiki, protocol resources, build, dist smoke | pass |
+| `protocol` check, doc links | pass |
+| Browser `verify-cable-runs.mjs` | 41 of 41, no console errors |
+| A marked set with no cable work vs `28ea3cc`, clock frozen | identical SHA-256 |
+
+After pulling, run `npm install` in `mcp/`: the workbook export needs `fflate` (the web app's own zip writer, same version).

@@ -238,7 +238,7 @@ test("flooring session: xlsx: true writes the canvas workbook beside the plan โ€
   const cpt = conditions.find((row: unknown[]) => row.includes("CPT-1")) as unknown[];
   assert.equal(cpt[header.indexOf("Floor SF")], 150);
   assert.equal(cpt[header.indexOf("Total SF w/Waste")], 165);
-  assert.equal(conditions.at(-1)[header.indexOf("Finish")], "TOTAL");
+  assert.equal(conditions.at(-1)![header.indexOf("Finish")], "TOTAL");
   const mats = expected[2].rows;
   assert.deepEqual(mats[1].slice(0, 4), ["CPT-1", "Adhesive", 3, "gal"], "150 SF measured รท 50 SF/gal");
   const room = expected[4].rows.find((row: unknown[]) => row[2] === "101") as unknown[];

@@ -93,7 +93,7 @@
         "object",
         "null"
       ],
-      "description": "Division 27 cable opt-in on a count condition (web/src/lib/cable.js): device_type, cables_per_location, cable_type, vertical_ft, loop_device_ft, loop_tr_ft, and the optional package_ft. Presence of a device_type makes the condition a device condition; null or absent opts out.",
+      "description": "Division 27 cable opt-in on a count condition (web/src/lib/cable.js): device_type, cables_per_location, cable_type, vertical_ft, loop_device_ft, loop_tr_ft, and optionally medium, max_link_ft and package_ft. Presence of a device_type makes the condition a device condition; null or absent opts out.",
       "properties": {
         "device_type": {
           "type": "string"
@@ -130,6 +130,19 @@
           "type": "number",
           "exclusiveMinimum": 0,
           "description": "Optional feet per box or reel the cable is bought in. Never minted; absent = not stated. Boxes are figured per cable_type from the pooled order LF (waste and multiplier in): ceil(order LF / package_ft)."
+        },
+        "medium": {
+          "enum": [
+            "copper",
+            "fiber",
+            "coax"
+          ],
+          "description": "Optional: what the cable is, stated from the project spec (never read from cable_type). Absent = unspecified, checked as copper."
+        },
+        "max_link_ft": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Optional: the longest link per cable the project spec or the system's datasheet allows, in feet. Every run on the condition is checked against it; absent = 295 ft (TIA-568 copper) for copper or no medium, and no check for fiber or coax. A flag only: it never changes a quantity."
         }
       },
       "additionalProperties": true

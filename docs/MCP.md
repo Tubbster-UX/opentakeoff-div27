@@ -239,7 +239,12 @@ Fifty-two tools, in the order an agent tends to reach for them:
   length)—and rolls the summary up per condition × TR, by TR and
   by cable type; `unlink_run` removes a link, shapes untouched. `hold_devices` records devices
   that deliberately get no run, with the reason—still out of totals, listed as held instead of
-  unlinked. A run over 295 ft per cable (TIA-568 copper) is flagged and warned, and a route on an
+  unlinked. A run over its length limit per cable is flagged and warned: the condition's
+  `cable_setup.max_link_ft` when stated, else 295 ft (TIA-568 copper) for copper or no stated
+  `medium`; fiber and coax with no stated limit are not checked. State `medium` and the spec's
+  `max_link_ft` with `edit_condition` (never inferred from `cable_type`, never minted; `null`
+  clears either); once any condition states one, each run carries `limit_ft` and
+  `limit_source`, and a route on an
   agent-set scale no person confirmed is flagged. `list_runs` also carries a `duplicates` block
   and warnings for the same device counted twice: two markers on cable conditions within 1 ft
   on one sheet, or overlay plans (two sheets of one page size whose device markers coincide, 3

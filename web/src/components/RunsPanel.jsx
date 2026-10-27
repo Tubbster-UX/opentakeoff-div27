@@ -14,7 +14,7 @@
 // puts on its undo stack.
 import { useState } from "react";
 import { Icon } from "../brand/icons.jsx";
-import { DEVICE_TYPE_LABELS, isTrCondition, TIA_MAX_LINK_FT } from "../lib/cable.js";
+import { DEVICE_TYPE_LABELS, isTrCondition, TIA_MAX_LINK_FT, LIMIT_SOURCES } from "../lib/cable.js";
 import { lenVal, lenUnit, heightVal, heightUnit, heightInputToFeet } from "../lib/units";
 import { HatchSwatch } from "./hatches.jsx";
 
@@ -173,8 +173,10 @@ export default function RunsPanel({ takeoff, conditions, shapes, units = "imperi
           title={`${r.id}\nroute ${L(r.route_lf)} over ${r.route_shape_ids.length} segment(s)${split ? `\nbranch ${L(r.branch_lf)} · trunk ${L(r.trunk_lf)}${r.other_lf ? ` · unspecified ${L(r.other_lf)}` : ""}` : ""}${r.reason ? `\n${r.status}: ${r.reason}` : ""}${r.notes ? `\n${r.notes.join("\n")}` : ""}`}>
           → {r.tr_name || r.tr_id || "?"} · {r.status === "linked" ? `${L(r.per_cable_lf)} × ${r.cables}` : r.status}
         </span>
-        {r.over_length && <span data-cable-flag="over-length" title={`Per cable ${L(r.per_cable_lf)} exceeds ${TIA_MAX_LINK_FT} ft — the TIA-568 copper permanent-link limit (90 m). It still counts: check the route; if it stands, it needs a closer TR or a length test and owner notice.`}
-          style={{ ...mono, fontSize: 9.5, padding: "0 4px", border: "1px solid #b66b00", color: "#b66b00", flexShrink: 0 }}>&gt;{TIA_MAX_LINK_FT}</span>}
+        {r.over_length && <span data-cable-flag="over-length" title={r.limit_source === LIMIT_SOURCES.STATED
+            ? `Per cable ${L(r.per_cable_lf)} exceeds the stated ${r2(r.limit_ft)} ft limit for ${r.finish_tag} (its cable setup's Limit, from the spec or the datasheet). It still counts: check the route; if it stands, it needs a closer TR or a length test and owner notice.`
+            : `Per cable ${L(r.per_cable_lf)} exceeds ${TIA_MAX_LINK_FT} ft — the TIA-568 copper permanent-link limit (90 m). It still counts: check the route; if it stands, it needs a closer TR or a length test and owner notice.`}
+          style={{ ...mono, fontSize: 9.5, padding: "0 4px", border: "1px solid #b66b00", color: "#b66b00", flexShrink: 0 }}>&gt;{r.limit_source === LIMIT_SOURCES.STATED ? r2(r.limit_ft) : TIA_MAX_LINK_FT}</span>}
         {r.pending && <button onClick={() => onAccept([r.id])} title="Accept this agent-linked run (its route segments keep their own review status)" style={smallBtn("pos")}>Accept</button>}
         {onOverride && r.condition_id && condById.has(r.condition_id) && (
           <button data-cable-override={r.id} onClick={() => setEditing((e) => (e === r.id ? null : r.id))}

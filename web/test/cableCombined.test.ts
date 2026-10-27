@@ -62,3 +62,41 @@ test("one takeoff, every follow-up: own vertical over branch + trunk, pathway co
   assert.equal(row[hdr.indexOf("Trunk LF")], 100);
   assert.match(String(row[hdr.indexOf("Reason / notes")]), /vertical 12 ft \(run override; condition 9 ft\)/);
 });
+
+// ── round two (items 6–8, plan §15): medium and stated limits, box/reel
+// rounding, and the workbook those tabs land in — together on one takeoff ──
+import { reportWorkbook } from "../src/lib/xlsx.js";
+
+test("one takeoff, round two: copper checked at 295, fiber at its stated 500, coax unchecked; boxes per cable type; the workbook carries every cable tab", () => {
+  const cu = cond("c-cu", "DATA-1", { waste_pct: 12, cable_setup: { ...mintCableSetup("wall_outlet", { cables_per_location: 2, cable_type: "CAT6A", vertical_ft: 9, loop_device_ft: 3, loop_tr_ft: 26 }), medium: "copper", package_ft: 1000 } });
+  const fi = cond("c-fi", "FIBER-1", { waste_pct: 12, cable_setup: { ...mintCableSetup("custom", { cables_per_location: 1, cable_type: "OM4", vertical_ft: 10, loop_device_ft: 20, loop_tr_ft: 30 }), medium: "fiber", max_link_ft: 500, package_ft: 2000 } });
+  const cx = cond("c-cx", "CATV-1", { waste_pct: 0, cable_setup: { ...mintCableSetup("custom", { cables_per_location: 1, cable_type: "RG6", vertical_ft: 10, loop_device_ft: 0, loop_tr_ft: 0 }), medium: "coax" } });
+  const route = cond("c-r", "ROUTE", { role: "route" });
+  const conds = [cu, fi, cx, TR, route];
+  const shapes = [
+    count("tr", "c-tr", [0.05, 0.5]), count("cu1", "c-cu", [0.5, 0.2]), count("fi1", "c-fi", [0.5, 0.4]), count("cx1", "c-cx", [0.5, 0.8]),
+    line("r-cu", "c-r", 262, 0.2), line("r-fi", "c-r", 540, 0.4), line("r-cx", "c-r", 700, 0.8),
+  ];
+  const runs = [
+    { ...mintCableRun({ device_shape_ids: ["cu1"], route_shape_ids: ["r-cu"], tr_id: "tr" }), id: "run-cu" },
+    { ...mintCableRun({ device_shape_ids: ["fi1"], route_shape_ids: ["r-fi"], tr_id: "tr" }), id: "run-fi" },
+    { ...mintCableRun({ device_shape_ids: ["cx1"], route_shape_ids: ["r-cx"], tr_id: "tr" }), id: "run-cx" },
+  ];
+  const t: any = computeCableTakeoff(conds, shapes, runs);
+  const run = (id: string) => t.resolved.runs.find((r: any) => r.id === id);
+  // item 6: copper 262 + 9 + 3 + 26 = 300 > 295 (TIA); fiber 540 + 60 = 600 > its stated 500; coax 710, no limit → unflagged
+  assert.deepEqual([run("run-cu").per_cable_lf, run("run-cu").over_length, run("run-cu").limit_ft, run("run-cu").limit_source], [300, true, 295, "tia_568_copper"]);
+  assert.deepEqual([run("run-fi").per_cable_lf, run("run-fi").over_length, run("run-fi").limit_ft, run("run-fi").limit_source], [600, true, 500, "stated"]);
+  assert.deepEqual([run("run-cx").per_cable_lf, run("run-cx").over_length, run("run-cx").limit_source], [710, undefined, "none"]);
+  assert.equal(t.summary.totals.pulls, 3, "a flag never withholds a run");
+  // item 7: CAT6A 300 × 2 = 600 net, × 1.12 = 672 order → 1 box of 1000, 328 left; OM4 600 × 1.12 = 672 → 1 reel of 2000, 1328 left; RG6 unsized → blank
+  const order = (k: string) => t.order.rows.find((r: any) => r.cable_type === k);
+  assert.deepEqual([order("CAT6A").order_lf, order("CAT6A").boxes, order("CAT6A").purchased_lf, order("CAT6A").leftover_lf], [672, 1, 1000, 328]);
+  assert.deepEqual([order("OM4").order_lf, order("OM4").boxes, order("OM4").purchased_lf, order("OM4").leftover_lf], [672, 1, 2000, 1328]);
+  assert.deepEqual([order("RG6").order_lf, order("RG6").boxes], [710, null]);
+  // item 8's builder: the canvas workbook (and so the MCP one) carries every cable tab
+  const tabs = reportWorkbook({ rows: [], bySheet: [], shapeRows: [], cable: t }).map((s: any) => s.name);
+  for (const tab of ["Cable summary", "Cable runs", "Cable order"]) assert.ok(tabs.includes(tab), `${tab} in ${tabs.join(", ")}`);
+  const runsTab = reportWorkbook({ rows: [], bySheet: [], shapeRows: [], cable: t }).find((s: any) => s.name === "Cable runs")!.rows;
+  assert.ok(runsTab[0].includes("Limit ft"), runsTab[0].join(" | "));
+});

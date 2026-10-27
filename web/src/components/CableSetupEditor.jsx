@@ -17,11 +17,18 @@
 // box or reel); the Report's Cable order table rounds each cable type's
 // order LF up to whole boxes from it.
 //
+// Medium (Unspecified / Copper / Fiber / Coax) and Limit (the spec's or the
+// datasheet's max link length, feet) set what each run's per-cable LF is
+// checked against: a stated Limit, else 295 ft for copper or no medium, else
+// no check for fiber and coax. Nothing is pre-filled and nothing is read from
+// the Type text; the check is a flag and never changes a quantity.
+//
 // Required values left empty show inline, in the danger color, with the
 // reason the library withholds the condition's runs. Field edits follow the
 // condition editor's convention (not on the undo stack), like roll goods.
 // All defaults and validation come from lib/cable.js — nothing is computed here.
-import { DEVICE_TYPES, DEVICE_TYPE_LABELS, CABLE_DEFAULTS, ROUTE_KINDS, ROUTE_KIND_LABELS, mintCableSetup, hasCableSetup, cableSetupProblems, routeKindOf, packageFt } from "../lib/cable.js";
+import { DEVICE_TYPES, DEVICE_TYPE_LABELS, CABLE_DEFAULTS, ROUTE_KINDS, ROUTE_KIND_LABELS, mintCableSetup, hasCableSetup, cableSetupProblems, routeKindOf, packageFt,
+  CABLE_MEDIA, CABLE_MEDIUM_LABELS, LIMIT_SOURCES, TIA_MAX_LINK_FT, cableLinkLimit, cableMediumOf, statedLinkLimit, withCableLimit } from "../lib/cable.js";
 import { lenVal, lenUnit, heightVal, heightInputToFeet, heightUnit } from "../lib/units";
 
 const box = { display: "flex", flexDirection: "column", gap: 5, paddingTop: 6, marginTop: 1, borderTop: "1px solid var(--ink-faint)" };
@@ -126,13 +133,23 @@ export default function CableSetupEditor({ cond: c, onUpdateCond, row = null, ca
   const tot = cableRows.reduce((t, r) => ({ ea: t.ea + r.ea, pulls: t.pulls + r.pulls, cables: t.cables + r.cables, lf: t.lf + r.cable_lf, order: t.order + r.cable_lf_order, unl: t.unl + r.unlinked_devices }), { ea: 0, pulls: 0, cables: 0, lf: 0, order: 0, unl: 0 });
   const isDefault = (k) => CABLE_DEFAULTS[cs.device_type]?.[k] != null && cs[k] === CABLE_DEFAULTS[cs.device_type][k];
   const anyDefault = ["vertical_ft", "loop_device_ft", "loop_tr_ft"].some(isDefault);
+  // the length check each run on this condition gets (lib/cable.js cableLinkLimit)
+  const medium = cableMediumOf(cs);
+  const limit = cableLinkLimit(cs);
+  const limitHint = limit.limit_source === LIMIT_SOURCES.STATED
+    ? `Length check: the stated ${shown(limit.limit_ft)} ${hu} limit per cable (from the spec or the datasheet).`
+    : limit.limit_source === LIMIT_SOURCES.NONE
+      ? `No length check: ${medium} has no single limit (${medium === "fiber" ? "it depends on the application and the fiber grade" : "it depends on the cable and the system"}). Enter the spec's limit.`
+      : medium
+        ? "Length check: 295 ft per cable (TIA-568 copper permanent link, 90 m). Enter the spec's limit to replace it."
+        : "Length check: 295 ft per cable, as copper (TIA-568 permanent link, 90 m). Pick the medium, or enter the spec's limit.";
   return (
     <div style={box}>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <span style={cap} title="Division 27 cable setup — per cable LF = measured route + vertical + both loops">Cable</span>
         <select name="condition-cable-device-type" value={cs.device_type} style={sel}
-          title="Device type — changing it re-fills the starting values (cables per location, cable type and box/reel size are kept)"
-          onChange={(e) => onUpdateCond({ cable_setup: mintCableSetup(e.target.value, { cables_per_location: cs.cables_per_location, cable_type: cs.cable_type, package_ft: packageFt(cs) ?? undefined }) })}>
+          title="Device type — changing it re-fills the starting values (cables per location, cable type, box/reel size, medium and limit are kept)"
+          onChange={(e) => onUpdateCond({ cable_setup: withCableLimit(mintCableSetup(e.target.value, { cables_per_location: cs.cables_per_location, cable_type: cs.cable_type, package_ft: packageFt(cs) ?? undefined }), { medium: cableMediumOf(cs), max_link_ft: statedLinkLimit(cs) }) })}>
           {DEVICE_TYPES.map((t) => <option key={t} value={t}>{DEVICE_TYPE_LABELS[t]}</option>)}
         </select>
         <button onClick={() => onUpdateCond({ cable_setup: undefined })} title="Remove the cable setup (runs on this condition read broken; the markers stay)" style={xBtn}>✕</button>
@@ -159,6 +176,26 @@ export default function CableSetupEditor({ cond: c, onUpdateCond, row = null, ca
         <input name="condition-cable-loop-tr" type="number" min="0" step="0.5" value={shown(cs.loop_tr_ft)} style={num(bad("loop_tr_ft"))} onChange={(e) => setFt("loop_tr_ft", e.target.value)} />
         <span style={{ color: "var(--ink-muted)" }}>{hu}</span>
       </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+        <span style={{ color: "var(--ink-muted)" }} title="What the cable is, from the spec — never read from the Type text. Copper (or unspecified) runs are checked at 295 ft; fiber and coax have no single limit">Medium</span>
+        <select name="condition-cable-medium" value={medium || ""} style={sel}
+          title="Copper or unspecified: checked at 295 ft (TIA-568) unless a Limit is entered. Fiber, coax: no check until a Limit is entered"
+          onChange={(e) => onUpdateCond({ cable_setup: withCableLimit(cs, { medium: e.target.value || null }) })}>
+          <option value="">Unspecified</option>
+          {CABLE_MEDIA.map((m) => <option key={m} value={m}>{CABLE_MEDIUM_LABELS[m]}</option>)}
+        </select>
+        <span style={{ color: "var(--ink-muted)" }} title="The longest link the project spec or the system's datasheet allows, per cable. Blank = the medium's default">Limit</span>
+        <input name="condition-cable-max-link" type="number" min="0" step="1" value={shown(statedLinkLimit(cs))}
+          placeholder={limit.limit_source === LIMIT_SOURCES.NONE ? "none" : String(r2(heightVal(TIA_MAX_LINK_FT, units)))}
+          style={{ ...num(false), width: 60 }}
+          onChange={(e) => {
+            const raw = e.target.value;
+            const ft = raw === "" ? null : heightInputToFeet(Number(raw) || 0, units);
+            onUpdateCond({ cable_setup: withCableLimit(cs, { max_link_ft: ft != null && ft > 0 ? ft : null }) });
+          }} />
+        <span style={{ color: "var(--ink-muted)" }}>{hu}</span>
+      </div>
+      <div data-cable-limit={limit.limit_source} style={{ color: "var(--ink-muted)", lineHeight: 1.4 }}>{limitHint}</div>
       {problems.map((p) => (
         <div key={p} data-cable-problem style={{ color: "var(--c-danger)", lineHeight: 1.4 }}>Runs withheld: {fieldLabels(p)}.</div>
       ))}

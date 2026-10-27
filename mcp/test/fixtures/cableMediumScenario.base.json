@@ -1,0 +1,973 @@
+{
+ "editData": {
+  "condition": "DATA-1",
+  "condition_id": "cnd-65e9e8bc-e83d-4975-8627-156c6830773b",
+  "waste_pct": 12,
+  "multiplier": 1,
+  "cable_setup": {
+   "device_type": "wall_outlet",
+   "cables_per_location": 2,
+   "cable_type": "CAT6A",
+   "vertical_ft": 23,
+   "loop_device_ft": 10,
+   "loop_tr_ft": 10
+  },
+  "cable": {
+   "problems": [],
+   "rows": [
+    {
+     "condition_id": "cnd-65e9e8bc-e83d-4975-8627-156c6830773b",
+     "finish_tag": "DATA-1",
+     "device_type": "wall_outlet",
+     "cable_type": "CAT6A",
+     "tr_id": "",
+     "tr_name": "",
+     "multiplier": 1,
+     "waste_pct": 12,
+     "ea": 2,
+     "pulls": 0,
+     "cables": 0,
+     "route_lf": 0,
+     "cable_lf": 0,
+     "cable_lf_order": 0,
+     "unlinked_devices": 2,
+     "held_devices": 0,
+     "pending_runs": 0,
+     "over_length_runs": 0,
+     "leg_warning": false
+    }
+   ],
+   "minted": {
+    "vertical_ft": 23,
+    "loop_device_ft": 10,
+    "loop_tr_ft": 10
+   },
+   "note": "starting values, not verified against spec — these came from the device type, not the project spec; confirm vertical_ft, loop_device_ft and loop_tr_ft (edit_condition patches them)"
+  }
+ },
+ "editCam": {
+  "condition": "CAM-1",
+  "condition_id": "cnd-3b7f0e83-8e52-4de7-888f-ee009aad5683",
+  "waste_pct": 12,
+  "multiplier": 2,
+  "cable_setup": {
+   "device_type": "camera",
+   "cables_per_location": 1,
+   "cable_type": "CAT6 outdoor",
+   "vertical_ft": 130.05,
+   "loop_device_ft": 15,
+   "loop_tr_ft": 10
+  },
+  "cable": {
+   "problems": [],
+   "rows": [
+    {
+     "condition_id": "cnd-3b7f0e83-8e52-4de7-888f-ee009aad5683",
+     "finish_tag": "CAM-1",
+     "device_type": "camera",
+     "cable_type": "CAT6 outdoor",
+     "tr_id": "",
+     "tr_name": "",
+     "multiplier": 2,
+     "waste_pct": 12,
+     "ea": 2,
+     "pulls": 0,
+     "cables": 0,
+     "route_lf": 0,
+     "cable_lf": 0,
+     "cable_lf_order": 0,
+     "unlinked_devices": 2,
+     "held_devices": 0,
+     "pending_runs": 0,
+     "over_length_runs": 0,
+     "leg_warning": false
+    }
+   ],
+   "minted": {
+    "cables_per_location": 1,
+    "loop_device_ft": 15,
+    "loop_tr_ft": 10
+   },
+   "note": "starting values, not verified against spec — these came from the device type, not the project spec; confirm vertical_ft, loop_device_ft and loop_tr_ft (edit_condition patches them)"
+  }
+ },
+ "editDoor": {
+  "condition": "EAC-1",
+  "condition_id": "cnd-b2a7b5cb-7f39-4160-825e-79923a5a3bfd",
+  "waste_pct": 0,
+  "multiplier": 1,
+  "cable_setup": {
+   "device_type": "access_door",
+   "cables_per_location": 1,
+   "cable_type": "fiber",
+   "vertical_ft": null,
+   "loop_device_ft": 15,
+   "loop_tr_ft": 10
+  },
+  "cable": {
+   "problems": [
+    "vertical_ft is required — enter the job's vertical (this device type has no starting value)"
+   ],
+   "rows": [
+    {
+     "condition_id": "cnd-b2a7b5cb-7f39-4160-825e-79923a5a3bfd",
+     "finish_tag": "EAC-1",
+     "device_type": "access_door",
+     "cable_type": "fiber",
+     "tr_id": "",
+     "tr_name": "",
+     "multiplier": 1,
+     "waste_pct": 0,
+     "ea": 1,
+     "pulls": 0,
+     "cables": 0,
+     "route_lf": 0,
+     "cable_lf": 0,
+     "cable_lf_order": 0,
+     "unlinked_devices": 1,
+     "held_devices": 0,
+     "pending_runs": 0,
+     "over_length_runs": 0,
+     "leg_warning": false
+    }
+   ],
+   "device_type_alias": "device_type \"access_control\" read as \"access_door\" — the document stores the canonical type",
+   "minted": {
+    "cables_per_location": 1,
+    "loop_device_ft": 15,
+    "loop_tr_ft": 10
+   },
+   "note": "starting values, not verified against spec — these came from the device type, not the project spec; confirm vertical_ft, loop_device_ft and loop_tr_ft (edit_condition patches them)"
+  }
+ },
+ "linkW": {
+  "run_id": "run-4512fad1-e8e5-4998-8d48-48eab088a3ce",
+  "status": "linked",
+  "condition": "DATA-1",
+  "device_type": "wall_outlet",
+  "cable_type": "CAT6A",
+  "tr": "MDF",
+  "sheets": [
+   "sample-plan.pdf"
+  ],
+  "device_sheets": [
+   "sample-plan.pdf"
+  ],
+  "tr_sheet": "sample-plan.pdf",
+  "route_lf": 87.5,
+  "vertical_ft": 23,
+  "loop_device_ft": 10,
+  "loop_tr_ft": 10,
+  "per_cable_lf": 130.5,
+  "cables": 2,
+  "location_lf": 261,
+  "reviewed": false,
+  "scale_unconfirmed": true,
+  "notes": [
+   "route scale on A-101 not confirmed by a person"
+  ],
+  "note": "Pending human review (it counts in totals, as every pending agent shape does). Lengths resolve from the linked shapes: a recalibration or an edit re-flows this run; deleting a linked shape breaks it, listed under unlinked."
+ },
+ "linkC": {
+  "run_id": "run-227facd1-4efd-43c0-8837-5f85bd9378e0",
+  "status": "linked",
+  "condition": "CAM-1",
+  "device_type": "camera",
+  "cable_type": "CAT6 outdoor",
+  "tr": "MDF",
+  "sheets": [
+   "sample-plan.pdf"
+  ],
+  "device_sheets": [
+   "sample-plan.pdf"
+  ],
+  "tr_sheet": "sample-plan.pdf",
+  "route_lf": 140,
+  "vertical_ft": 130.05,
+  "loop_device_ft": 15,
+  "loop_tr_ft": 10,
+  "per_cable_lf": 295.05,
+  "cables": 1,
+  "location_lf": 295.05,
+  "reviewed": false,
+  "over_length": true,
+  "scale_unconfirmed": true,
+  "notes": [
+   "per cable 295.05 ft exceeds 295 ft (TIA-568 copper permanent link, 90 m)",
+   "route scale on A-101 not confirmed by a person"
+  ],
+  "note": "Pending human review (it counts in totals, as every pending agent shape does). Lengths resolve from the linked shapes: a recalibration or an edit re-flows this run; deleting a linked shape breaks it, listed under unlinked."
+ },
+ "hold": {
+  "hold_id": "hold-3a50a37d-2cfa-4dd7-83cd-1730d1d0ab7e",
+  "reason": "by others",
+  "held": 1,
+  "by_condition": [
+   {
+    "condition": "DATA-1",
+    "devices": 1
+   }
+  ],
+  "unlinked_devices": 1,
+  "reviewed": false,
+  "note": "Pending human review. Held devices stay out of every total (a hold adds no length) and are listed as held with this reason in list_runs, export_report and the marked set. unlink_run with this hold_id releases them."
+ },
+ "editPatch": {
+  "condition": "DATA-1",
+  "condition_id": "cnd-65e9e8bc-e83d-4975-8627-156c6830773b",
+  "waste_pct": 12,
+  "multiplier": 1,
+  "cable_setup": {
+   "device_type": "wall_outlet",
+   "cables_per_location": 2,
+   "cable_type": "CAT6A",
+   "vertical_ft": 23,
+   "loop_device_ft": 10,
+   "loop_tr_ft": 12
+  },
+  "cable": {
+   "problems": [],
+   "rows": [
+    {
+     "condition_id": "cnd-65e9e8bc-e83d-4975-8627-156c6830773b",
+     "finish_tag": "DATA-1",
+     "device_type": "wall_outlet",
+     "cable_type": "CAT6A",
+     "tr_id": "shp-d4b255c9-5d58-4213-82cc-7e5074b1f7e9",
+     "tr_name": "MDF",
+     "multiplier": 1,
+     "waste_pct": 12,
+     "ea": 2,
+     "pulls": 1,
+     "cables": 2,
+     "route_lf": 87.5,
+     "cable_lf": 265,
+     "cable_lf_order": 296.8,
+     "unlinked_devices": 0,
+     "held_devices": 1,
+     "pending_runs": 1,
+     "over_length_runs": 0,
+     "leg_warning": false
+    }
+   ]
+  }
+ },
+ "listRuns": {
+  "runs": [
+   {
+    "run_id": "run-4512fad1-e8e5-4998-8d48-48eab088a3ce",
+    "status": "linked",
+    "condition": "DATA-1",
+    "device_type": "wall_outlet",
+    "cable_type": "CAT6A",
+    "tr": "MDF",
+    "tr_id": "shp-d4b255c9-5d58-4213-82cc-7e5074b1f7e9",
+    "device_shape_ids": [
+     "shp-7eb95bc2-994d-49a4-8ad8-b918ff510af0"
+    ],
+    "route_shape_ids": [
+     "shp-8fc72a80-9900-4ad5-8b6d-c72c1f042629"
+    ],
+    "sheets": [
+     "sample-plan.pdf"
+    ],
+    "device_sheets": [
+     "sample-plan.pdf"
+    ],
+    "tr_sheet": "sample-plan.pdf",
+    "route_lf": 87.5,
+    "scale_unconfirmed": true,
+    "vertical_ft": 23,
+    "loop_device_ft": 10,
+    "loop_tr_ft": 12,
+    "per_cable_lf": 132.5,
+    "cables": 2,
+    "location_lf": 265,
+    "review": "pending",
+    "notes": [
+     "route scale on A-101 not confirmed by a person"
+    ]
+   },
+   {
+    "run_id": "run-227facd1-4efd-43c0-8837-5f85bd9378e0",
+    "status": "linked",
+    "condition": "CAM-1",
+    "device_type": "camera",
+    "cable_type": "CAT6 outdoor",
+    "tr": "MDF",
+    "tr_id": "shp-d4b255c9-5d58-4213-82cc-7e5074b1f7e9",
+    "device_shape_ids": [
+     "shp-f027bb99-816a-4342-8ba6-6ff0384d6cb0"
+    ],
+    "route_shape_ids": [
+     "shp-c53242ca-1104-46f1-8378-2684f57817c0"
+    ],
+    "sheets": [
+     "sample-plan.pdf"
+    ],
+    "device_sheets": [
+     "sample-plan.pdf"
+    ],
+    "tr_sheet": "sample-plan.pdf",
+    "route_lf": 140,
+    "over_length": true,
+    "scale_unconfirmed": true,
+    "vertical_ft": 130.05,
+    "loop_device_ft": 15,
+    "loop_tr_ft": 10,
+    "per_cable_lf": 295.05,
+    "cables": 1,
+    "location_lf": 295.05,
+    "review": "pending",
+    "notes": [
+     "per cable 295.05 ft exceeds 295 ft (TIA-568 copper permanent link, 90 m)",
+     "route scale on A-101 not confirmed by a person"
+    ]
+   }
+  ],
+  "unlinked": {
+   "devices": [
+    {
+     "shape_id": "shp-9df774e8-de3a-48de-8948-43cbe969c88f",
+     "condition_id": "cnd-b2a7b5cb-7f39-4160-825e-79923a5a3bfd",
+     "finish_tag": "EAC-1",
+     "sheet_id": "sample-plan.pdf",
+     "reason": "no run links this device",
+     "sheet": "sample-plan.pdf"
+    }
+   ],
+   "routes": [
+    {
+     "shape_id": "shp-c9b426d8-772b-467a-8a85-118976642ccd",
+     "condition_id": "cnd-d865076e-32bf-4dbd-8332-053c6c50fb00",
+     "finish_tag": "ROUTE",
+     "sheet_id": "sample-plan.pdf",
+     "length_lf": 40,
+     "reason": "no run links this segment",
+     "sheet": "sample-plan.pdf"
+    }
+   ]
+  },
+  "held": [
+   {
+    "shape_id": "shp-dda26f2c-4ca5-4379-8097-4400da558624",
+    "condition_id": "cnd-65e9e8bc-e83d-4975-8627-156c6830773b",
+    "finish_tag": "DATA-1",
+    "sheet_id": "sample-plan.pdf",
+    "hold_id": "hold-3a50a37d-2cfa-4dd7-83cd-1730d1d0ab7e",
+    "reason": "by others",
+    "review": "pending",
+    "sheet": "sample-plan.pdf"
+   }
+  ],
+  "holds": [
+   {
+    "id": "hold-3a50a37d-2cfa-4dd7-83cd-1730d1d0ab7e",
+    "reason": "by others",
+    "device_shape_ids": [
+     "shp-dda26f2c-4ca5-4379-8097-4400da558624"
+    ],
+    "held": 1,
+    "review": "pending",
+    "pending": true
+   }
+  ],
+  "warnings": [
+   "1 linked run exceeds 295 ft per cable, the TIA-568 limit for a 4-pair copper permanent link (90 m): CAM-1 run-227facd1-4efd-43c0-8837-5f85bd9378e0 295.05 ft. Check the route; if it stands, the run needs a closer TR, or a length test and an owner notice. Fiber and coax are not bound by this limit.",
+   "2 linked runs take route length from a sheet whose scale no person has confirmed (A-101). Every cable length there rests on that scale: confirm it in the canvas before pricing."
+  ],
+  "duplicates": {
+   "same_sheet": [],
+   "cross_sheet": [],
+   "reference": [],
+   "not_compared": [],
+   "warnings": [],
+   "count": 0,
+   "thresholds": {
+    "same_sheet_ft": 1,
+    "same_sheet_fraction": 0.0035,
+    "page_size_tolerance": 0.01,
+    "scale_tolerance": 0.01,
+    "overlay_position_fraction": 0.0075,
+    "overlay_min_positions": 3,
+    "overlay_min_share": 0.5
+   }
+  },
+  "summary": {
+   "rows": [
+    {
+     "condition_id": "cnd-65e9e8bc-e83d-4975-8627-156c6830773b",
+     "finish_tag": "DATA-1",
+     "device_type": "wall_outlet",
+     "cable_type": "CAT6A",
+     "tr_id": "shp-d4b255c9-5d58-4213-82cc-7e5074b1f7e9",
+     "tr_name": "MDF",
+     "multiplier": 1,
+     "waste_pct": 12,
+     "ea": 2,
+     "pulls": 1,
+     "cables": 2,
+     "route_lf": 87.5,
+     "cable_lf": 265,
+     "cable_lf_order": 296.8,
+     "unlinked_devices": 0,
+     "held_devices": 1,
+     "pending_runs": 1,
+     "over_length_runs": 0,
+     "leg_warning": false
+    },
+    {
+     "condition_id": "cnd-3b7f0e83-8e52-4de7-888f-ee009aad5683",
+     "finish_tag": "CAM-1",
+     "device_type": "camera",
+     "cable_type": "CAT6 outdoor",
+     "tr_id": "shp-d4b255c9-5d58-4213-82cc-7e5074b1f7e9",
+     "tr_name": "MDF",
+     "multiplier": 2,
+     "waste_pct": 12,
+     "ea": 2,
+     "pulls": 2,
+     "cables": 2,
+     "route_lf": 280,
+     "cable_lf": 590.1,
+     "cable_lf_order": 660.91,
+     "unlinked_devices": 0,
+     "held_devices": 0,
+     "pending_runs": 1,
+     "over_length_runs": 1,
+     "leg_warning": false
+    },
+    {
+     "condition_id": "cnd-b2a7b5cb-7f39-4160-825e-79923a5a3bfd",
+     "finish_tag": "EAC-1",
+     "device_type": "access_door",
+     "cable_type": "fiber",
+     "tr_id": "",
+     "tr_name": "",
+     "multiplier": 1,
+     "waste_pct": 0,
+     "ea": 1,
+     "pulls": 0,
+     "cables": 0,
+     "route_lf": 0,
+     "cable_lf": 0,
+     "cable_lf_order": 0,
+     "unlinked_devices": 1,
+     "held_devices": 0,
+     "pending_runs": 0,
+     "over_length_runs": 0,
+     "leg_warning": false
+    }
+   ],
+   "by_tr": [
+    {
+     "tr_id": "shp-d4b255c9-5d58-4213-82cc-7e5074b1f7e9",
+     "tr_name": "MDF",
+     "ea": 4,
+     "pulls": 3,
+     "cables": 4,
+     "route_lf": 367.5,
+     "cable_lf": 855.1,
+     "cable_lf_order": 957.71,
+     "unlinked_devices": 0,
+     "held_devices": 1,
+     "pending_runs": 2,
+     "over_length_runs": 1
+    },
+    {
+     "tr_id": "",
+     "tr_name": "",
+     "ea": 1,
+     "pulls": 0,
+     "cables": 0,
+     "route_lf": 0,
+     "cable_lf": 0,
+     "cable_lf_order": 0,
+     "unlinked_devices": 1,
+     "held_devices": 0,
+     "pending_runs": 0,
+     "over_length_runs": 0
+    }
+   ],
+   "by_cable_type": [
+    {
+     "cable_type": "CAT6A",
+     "ea": 2,
+     "pulls": 1,
+     "cables": 2,
+     "route_lf": 87.5,
+     "cable_lf": 265,
+     "cable_lf_order": 296.8,
+     "unlinked_devices": 0,
+     "held_devices": 1,
+     "pending_runs": 1,
+     "over_length_runs": 0
+    },
+    {
+     "cable_type": "CAT6 outdoor",
+     "ea": 2,
+     "pulls": 2,
+     "cables": 2,
+     "route_lf": 280,
+     "cable_lf": 590.1,
+     "cable_lf_order": 660.91,
+     "unlinked_devices": 0,
+     "held_devices": 0,
+     "pending_runs": 1,
+     "over_length_runs": 1
+    },
+    {
+     "cable_type": "fiber",
+     "ea": 1,
+     "pulls": 0,
+     "cables": 0,
+     "route_lf": 0,
+     "cable_lf": 0,
+     "cable_lf_order": 0,
+     "unlinked_devices": 1,
+     "held_devices": 0,
+     "pending_runs": 0,
+     "over_length_runs": 0
+    }
+   ],
+   "totals": {
+    "ea": 5,
+    "pulls": 3,
+    "cables": 4,
+    "route_lf": 367.5,
+    "cable_lf": 855.1,
+    "cable_lf_order": 957.71,
+    "unlinked_devices": 1,
+    "held_devices": 1,
+    "pending_runs": 2,
+    "over_length_runs": 1
+   }
+  },
+  "count": 2
+ },
+ "summaryCable": {
+  "rows": [
+   {
+    "condition_id": "cnd-65e9e8bc-e83d-4975-8627-156c6830773b",
+    "finish_tag": "DATA-1",
+    "device_type": "wall_outlet",
+    "cable_type": "CAT6A",
+    "tr_id": "shp-d4b255c9-5d58-4213-82cc-7e5074b1f7e9",
+    "tr_name": "MDF",
+    "multiplier": 1,
+    "waste_pct": 12,
+    "ea": 2,
+    "pulls": 1,
+    "cables": 2,
+    "route_lf": 87.5,
+    "cable_lf": 265,
+    "cable_lf_order": 296.8,
+    "unlinked_devices": 0,
+    "held_devices": 1,
+    "pending_runs": 1,
+    "over_length_runs": 0,
+    "leg_warning": false
+   },
+   {
+    "condition_id": "cnd-3b7f0e83-8e52-4de7-888f-ee009aad5683",
+    "finish_tag": "CAM-1",
+    "device_type": "camera",
+    "cable_type": "CAT6 outdoor",
+    "tr_id": "shp-d4b255c9-5d58-4213-82cc-7e5074b1f7e9",
+    "tr_name": "MDF",
+    "multiplier": 2,
+    "waste_pct": 12,
+    "ea": 2,
+    "pulls": 2,
+    "cables": 2,
+    "route_lf": 280,
+    "cable_lf": 590.1,
+    "cable_lf_order": 660.91,
+    "unlinked_devices": 0,
+    "held_devices": 0,
+    "pending_runs": 1,
+    "over_length_runs": 1,
+    "leg_warning": false
+   },
+   {
+    "condition_id": "cnd-b2a7b5cb-7f39-4160-825e-79923a5a3bfd",
+    "finish_tag": "EAC-1",
+    "device_type": "access_door",
+    "cable_type": "fiber",
+    "tr_id": "",
+    "tr_name": "",
+    "multiplier": 1,
+    "waste_pct": 0,
+    "ea": 1,
+    "pulls": 0,
+    "cables": 0,
+    "route_lf": 0,
+    "cable_lf": 0,
+    "cable_lf_order": 0,
+    "unlinked_devices": 1,
+    "held_devices": 0,
+    "pending_runs": 0,
+    "over_length_runs": 0,
+    "leg_warning": false
+   }
+  ],
+  "by_tr": [
+   {
+    "tr_id": "shp-d4b255c9-5d58-4213-82cc-7e5074b1f7e9",
+    "tr_name": "MDF",
+    "ea": 4,
+    "pulls": 3,
+    "cables": 4,
+    "route_lf": 367.5,
+    "cable_lf": 855.1,
+    "cable_lf_order": 957.71,
+    "unlinked_devices": 0,
+    "held_devices": 1,
+    "pending_runs": 2,
+    "over_length_runs": 1
+   },
+   {
+    "tr_id": "",
+    "tr_name": "",
+    "ea": 1,
+    "pulls": 0,
+    "cables": 0,
+    "route_lf": 0,
+    "cable_lf": 0,
+    "cable_lf_order": 0,
+    "unlinked_devices": 1,
+    "held_devices": 0,
+    "pending_runs": 0,
+    "over_length_runs": 0
+   }
+  ],
+  "by_cable_type": [
+   {
+    "cable_type": "CAT6A",
+    "ea": 2,
+    "pulls": 1,
+    "cables": 2,
+    "route_lf": 87.5,
+    "cable_lf": 265,
+    "cable_lf_order": 296.8,
+    "unlinked_devices": 0,
+    "held_devices": 1,
+    "pending_runs": 1,
+    "over_length_runs": 0
+   },
+   {
+    "cable_type": "CAT6 outdoor",
+    "ea": 2,
+    "pulls": 2,
+    "cables": 2,
+    "route_lf": 280,
+    "cable_lf": 590.1,
+    "cable_lf_order": 660.91,
+    "unlinked_devices": 0,
+    "held_devices": 0,
+    "pending_runs": 1,
+    "over_length_runs": 1
+   },
+   {
+    "cable_type": "fiber",
+    "ea": 1,
+    "pulls": 0,
+    "cables": 0,
+    "route_lf": 0,
+    "cable_lf": 0,
+    "cable_lf_order": 0,
+    "unlinked_devices": 1,
+    "held_devices": 0,
+    "pending_runs": 0,
+    "over_length_runs": 0
+   }
+  ],
+  "totals": {
+   "ea": 5,
+   "pulls": 3,
+   "cables": 4,
+   "route_lf": 367.5,
+   "cable_lf": 855.1,
+   "cable_lf_order": 957.71,
+   "unlinked_devices": 1,
+   "held_devices": 1,
+   "pending_runs": 2,
+   "over_length_runs": 1
+  },
+  "unlinked_devices": 1,
+  "unlinked_routes": 1,
+  "held_devices": 1,
+  "warnings": [
+   "1 linked run exceeds 295 ft per cable, the TIA-568 limit for a 4-pair copper permanent link (90 m): CAM-1 run-227facd1-4efd-43c0-8837-5f85bd9378e0 295.05 ft. Check the route; if it stands, the run needs a closer TR, or a length test and an owner notice. Fiber and coax are not bound by this limit.",
+   "2 linked runs take route length from a sheet whose scale no person has confirmed (A-101). Every cable length there rests on that scale: confirm it in the canvas before pricing."
+  ]
+ },
+ "reportCable": {
+  "summary": [
+   {
+    "condition_id": "cnd-65e9e8bc-e83d-4975-8627-156c6830773b",
+    "finish_tag": "DATA-1",
+    "device_type": "wall_outlet",
+    "cable_type": "CAT6A",
+    "tr_id": "shp-d4b255c9-5d58-4213-82cc-7e5074b1f7e9",
+    "tr_name": "MDF",
+    "multiplier": 1,
+    "waste_pct": 12,
+    "ea": 2,
+    "pulls": 1,
+    "cables": 2,
+    "route_lf": 87.5,
+    "cable_lf": 265,
+    "cable_lf_order": 296.8,
+    "unlinked_devices": 0,
+    "held_devices": 1,
+    "pending_runs": 1,
+    "over_length_runs": 0,
+    "leg_warning": false
+   },
+   {
+    "condition_id": "cnd-3b7f0e83-8e52-4de7-888f-ee009aad5683",
+    "finish_tag": "CAM-1",
+    "device_type": "camera",
+    "cable_type": "CAT6 outdoor",
+    "tr_id": "shp-d4b255c9-5d58-4213-82cc-7e5074b1f7e9",
+    "tr_name": "MDF",
+    "multiplier": 2,
+    "waste_pct": 12,
+    "ea": 2,
+    "pulls": 2,
+    "cables": 2,
+    "route_lf": 280,
+    "cable_lf": 590.1,
+    "cable_lf_order": 660.91,
+    "unlinked_devices": 0,
+    "held_devices": 0,
+    "pending_runs": 1,
+    "over_length_runs": 1,
+    "leg_warning": false
+   },
+   {
+    "condition_id": "cnd-b2a7b5cb-7f39-4160-825e-79923a5a3bfd",
+    "finish_tag": "EAC-1",
+    "device_type": "access_door",
+    "cable_type": "fiber",
+    "tr_id": "",
+    "tr_name": "",
+    "multiplier": 1,
+    "waste_pct": 0,
+    "ea": 1,
+    "pulls": 0,
+    "cables": 0,
+    "route_lf": 0,
+    "cable_lf": 0,
+    "cable_lf_order": 0,
+    "unlinked_devices": 1,
+    "held_devices": 0,
+    "pending_runs": 0,
+    "over_length_runs": 0,
+    "leg_warning": false
+   }
+  ],
+  "by_tr": [
+   {
+    "tr_id": "shp-d4b255c9-5d58-4213-82cc-7e5074b1f7e9",
+    "tr_name": "MDF",
+    "ea": 4,
+    "pulls": 3,
+    "cables": 4,
+    "route_lf": 367.5,
+    "cable_lf": 855.1,
+    "cable_lf_order": 957.71,
+    "unlinked_devices": 0,
+    "held_devices": 1,
+    "pending_runs": 2,
+    "over_length_runs": 1
+   },
+   {
+    "tr_id": "",
+    "tr_name": "",
+    "ea": 1,
+    "pulls": 0,
+    "cables": 0,
+    "route_lf": 0,
+    "cable_lf": 0,
+    "cable_lf_order": 0,
+    "unlinked_devices": 1,
+    "held_devices": 0,
+    "pending_runs": 0,
+    "over_length_runs": 0
+   }
+  ],
+  "by_cable_type": [
+   {
+    "cable_type": "CAT6A",
+    "ea": 2,
+    "pulls": 1,
+    "cables": 2,
+    "route_lf": 87.5,
+    "cable_lf": 265,
+    "cable_lf_order": 296.8,
+    "unlinked_devices": 0,
+    "held_devices": 1,
+    "pending_runs": 1,
+    "over_length_runs": 0
+   },
+   {
+    "cable_type": "CAT6 outdoor",
+    "ea": 2,
+    "pulls": 2,
+    "cables": 2,
+    "route_lf": 280,
+    "cable_lf": 590.1,
+    "cable_lf_order": 660.91,
+    "unlinked_devices": 0,
+    "held_devices": 0,
+    "pending_runs": 1,
+    "over_length_runs": 1
+   },
+   {
+    "cable_type": "fiber",
+    "ea": 1,
+    "pulls": 0,
+    "cables": 0,
+    "route_lf": 0,
+    "cable_lf": 0,
+    "cable_lf_order": 0,
+    "unlinked_devices": 1,
+    "held_devices": 0,
+    "pending_runs": 0,
+    "over_length_runs": 0
+   }
+  ],
+  "totals": {
+   "ea": 5,
+   "pulls": 3,
+   "cables": 4,
+   "route_lf": 367.5,
+   "cable_lf": 855.1,
+   "cable_lf_order": 957.71,
+   "unlinked_devices": 1,
+   "held_devices": 1,
+   "pending_runs": 2,
+   "over_length_runs": 1
+  },
+  "runs": [
+   {
+    "run_id": "run-4512fad1-e8e5-4998-8d48-48eab088a3ce",
+    "condition": "DATA-1",
+    "device_type": "wall_outlet",
+    "cable_type": "CAT6A",
+    "tr": "MDF",
+    "sheets": "A-101",
+    "sheet_ids": [
+     "sample-plan.pdf"
+    ],
+    "device_sheets": "A-101",
+    "device_sheet_ids": [
+     "sample-plan.pdf"
+    ],
+    "tr_sheet": "A-101",
+    "tr_sheet_id": "sample-plan.pdf",
+    "route_lf": 87.5,
+    "vertical_ft": 23,
+    "loop_device_ft": 10,
+    "loop_tr_ft": 12,
+    "per_cable_lf": 132.5,
+    "cables": 2,
+    "location_lf": 265,
+    "multiplier": 1,
+    "status": "linked",
+    "review_status": "pending",
+    "reason": "",
+    "scale_unconfirmed": true,
+    "notes": "route scale on A-101 not confirmed by a person"
+   },
+   {
+    "run_id": "run-227facd1-4efd-43c0-8837-5f85bd9378e0",
+    "condition": "CAM-1",
+    "device_type": "camera",
+    "cable_type": "CAT6 outdoor",
+    "tr": "MDF",
+    "sheets": "A-101",
+    "sheet_ids": [
+     "sample-plan.pdf"
+    ],
+    "device_sheets": "A-101",
+    "device_sheet_ids": [
+     "sample-plan.pdf"
+    ],
+    "tr_sheet": "A-101",
+    "tr_sheet_id": "sample-plan.pdf",
+    "route_lf": 140,
+    "vertical_ft": 130.05,
+    "loop_device_ft": 15,
+    "loop_tr_ft": 10,
+    "per_cable_lf": 295.05,
+    "cables": 1,
+    "location_lf": 295.05,
+    "multiplier": 2,
+    "status": "linked",
+    "review_status": "pending",
+    "reason": "",
+    "over_length": true,
+    "scale_unconfirmed": true,
+    "notes": "per cable 295.05 ft exceeds 295 ft (TIA-568 copper permanent link, 90 m); route scale on A-101 not confirmed by a person"
+   }
+  ],
+  "unlinked": {
+   "devices": [
+    {
+     "shape_id": "shp-9df774e8-de3a-48de-8948-43cbe969c88f",
+     "condition_id": "cnd-b2a7b5cb-7f39-4160-825e-79923a5a3bfd",
+     "finish_tag": "EAC-1",
+     "sheet_id": "sample-plan.pdf",
+     "reason": "no run links this device",
+     "sheet": "A-101"
+    }
+   ],
+   "routes": [
+    {
+     "shape_id": "shp-c9b426d8-772b-467a-8a85-118976642ccd",
+     "condition_id": "cnd-d865076e-32bf-4dbd-8332-053c6c50fb00",
+     "finish_tag": "ROUTE",
+     "sheet_id": "sample-plan.pdf",
+     "length_lf": 40,
+     "reason": "no run links this segment",
+     "sheet": "A-101"
+    }
+   ]
+  },
+  "held": [
+   {
+    "shape_id": "shp-dda26f2c-4ca5-4379-8097-4400da558624",
+    "condition_id": "cnd-65e9e8bc-e83d-4975-8627-156c6830773b",
+    "finish_tag": "DATA-1",
+    "sheet_id": "sample-plan.pdf",
+    "hold_id": "hold-3a50a37d-2cfa-4dd7-83cd-1730d1d0ab7e",
+    "reason": "by others",
+    "review": "pending",
+    "sheet": "A-101"
+   }
+  ],
+  "holds": [
+   {
+    "id": "hold-3a50a37d-2cfa-4dd7-83cd-1730d1d0ab7e",
+    "reason": "by others",
+    "device_shape_ids": [
+     "shp-dda26f2c-4ca5-4379-8097-4400da558624"
+    ],
+    "held": 1,
+    "review": "pending",
+    "pending": true
+   }
+  ],
+  "warnings": [
+   "1 linked run exceeds 295 ft per cable, the TIA-568 limit for a 4-pair copper permanent link (90 m): CAM-1 run-227facd1-4efd-43c0-8837-5f85bd9378e0 295.05 ft. Check the route; if it stands, the run needs a closer TR, or a length test and an owner notice. Fiber and coax are not bound by this limit.",
+   "2 linked runs take route length from a sheet whose scale no person has confirmed (A-101). Every cable length there rests on that scale: confirm it in the canvas before pricing."
+  ]
+ },
+ "markedText": [
+  "OpenTakeoff · Marked Set\n\nInvented Div 27\n\n1 marked sheet · 8 takeoff items · quantities net of deducts, waste-adjusted where noted\n\nFinish assignment: 8 agent-asserted · 8 pending human review\n\nCable runs: 3 pulls linked · 2 runs pending review · 1 unlinked device · 1 held device · 1 over 295 ft per cable\n\nCONDITIONS\n\nTR\n \n1 EA\n \ndiag\n\ntelecom room: where the runs home\n\nDATA-1\n \n2 EA\n \ndiag2\n\n1 pull · 2 cables · 265 LF cable net · 296.8 LF order at 12% waste · 1 held\n\nCAM-1 ×2\n \n2 EA\n \ncross\n\n2 pulls · 2 cables · 590.1 LF cable net · 660.9 LF order at 12% waste\n\nEAC-1\n \n1 EA\n \ndiagdense\n\n0 pulls · 0 cables · 0 LF cable net · 0 LF order at 0% waste · 1 unlinked\n\nROUTE\n \n267.5 LF\n \nhoriz\n\ncable route pathway, not a cable quantity: cable LF is figured per run on each device condition\n\nRoute chips: run ID · device condition · per-cable LF (the Cable runs sheet lists every run in full); each device tag carries its run ID. Amber ring:\n\nunlinked device. Grey ring: held device.\n\n! 1 linked run exceeds 295 ft per cable, the TIA-568 limit for a 4-pair copper permanent link (90 m): CAM-1\n\nrun-227facd1-4efd-43c0-8837-5f85bd9378e0 295.05 ft. Check the route; if it stands, the run needs a closer TR, or a length test and an owner\n\nnotice. Fiber and coax are not bound by this limit.\n\n! 2 linked runs take route length from a sheet whose scale no person has confirmed (A-101). Every cable length there rests on that scale:\n\nconfirm it in the canvas before pricing.\n\nBY SHEET\n\nA-101 · p1 · page 1 · 8 item(s)\n\nTR 1 EA\n\nDATA-1 2 EA\n\nCAM-1 ×2 1 EA\n\nEAC-1 1 EA\n\nROUTE 267.5 LF\n\nBy-sheet rows show measured (base) quantities; xN multipliers apply at condition level\n\nGenerated <date>",
+  "OFFICE 101\n \nOFFICE 102\nBREAK 103\n \nCORRIDOR 104\n\nA-101\n\nSCALE: 1/4\" = 1’-0\"\n\nROUTE · 40 LF\n\nMDF\n\nrun-4512fa\n \nrun-227fac\n\nrun-4512fa · DATA-1 · 132.5 LF\n\nrun-227fac · CAM-1 · 295.1 LF >295\n\nA-101 · p1 · marked set\n\nMachine-traced via OpenTakeoff MCP — 8 shapes pending human review"
+ ]
+}

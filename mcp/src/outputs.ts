@@ -440,7 +440,16 @@ const cableSetupShape = z.object({
   device_type: z.string(), cables_per_location: z.number(), cable_type: z.string(),
   vertical_ft: z.number().nullable(), loop_device_ft: z.number().nullable(), loop_tr_ft: z.number().nullable(),
   package_ft: z.number().optional().describe("Feet per box or reel — present once stated"),
+  medium: z.enum(["copper", "fiber", "coax"]).optional().describe("Present when stated: what the cable is (never read from cable_type)"),
+  max_link_ft: z.number().optional().describe("Present when stated: the spec's or datasheet's longest link per cable, feet — every run on the condition is checked against it"),
 }).passthrough();
+// medium / per-condition length limit (item 6): present once any cable
+// condition states a medium or a limit, so every other reply is unchanged
+const runLimitFields = {
+  medium: z.enum(["copper", "fiber", "coax"]).optional().describe("The condition's stated medium (absent = not stated)"),
+  limit_ft: z.number().nullable().optional().describe("The per-cable limit this run was checked against, feet: the condition's max_link_ft, else 295 (TIA-568 copper) for copper or no medium; null = not checked (fiber or coax with no stated limit). Present once any cable condition states a medium or a limit"),
+  limit_source: z.enum(["stated", "tia_568_copper", "none"]).optional().describe("stated = the condition's max_link_ft; tia_568_copper = the 295 ft default; none = fiber or coax with no stated limit, not length-checked"),
+};
 const cableQty = {
   ea: z.number().describe("Device markers on the condition (×N)"),
   pulls: z.number().describe("Linked runs — one pull per location (×N)"),
@@ -451,7 +460,7 @@ const cableQty = {
   unlinked_devices: z.number().describe("Device markers with no linked run and no hold (×N)"),
   held_devices: z.number().describe("Device markers held by hold_devices — no run by decision, with a reason (×N). EA − pulls = unlinked_devices + held_devices"),
   pending_runs: z.number().int().describe("Linked runs still pending human review — they COUNT in every figure above, as pending shapes do"),
-  over_length_runs: z.number().int().describe("Linked runs over 295 ft per cable (TIA-568 copper permanent link) — counted, flagged"),
+  over_length_runs: z.number().int().describe("Linked runs over their length limit per cable (295 ft TIA-568 copper unless the condition states max_link_ft; fiber/coax with no stated limit are not checked) — counted, flagged"),
 };
 export const cableSummaryRow = z.object({
   condition_id: z.string(), finish_tag: z.string(), device_type: z.string(), cable_type: z.string(),
@@ -460,6 +469,7 @@ export const cableSummaryRow = z.object({
   leg_warning: z.boolean().describe("true when a route segment on this row carries rise/drop legs (ignored here — the regular report's LF for that segment's condition is not a cable length)"),
   withheld: z.string().optional().describe("Why this condition's runs are withheld (a required setup value missing)"),
   withheld_runs: z.number().int().optional(),
+  ...runLimitFields,
 }).passthrough();
 const cableGroupRow = z.object({ ...cableQty }).passthrough();
 // trunk / branch (route_kind on a route condition): present only once one is tagged
@@ -504,7 +514,8 @@ const cableRunRow = z.object({
   tr: z.string().describe("The TR marker's label, or its id when unlabeled"), tr_id: z.string(),
   device_shape_ids: z.array(z.string()), route_shape_ids: z.array(z.string()).describe("In order"), sheets: z.array(z.string()).describe("The route segments' sheets"),
   device_sheets: z.array(z.string()).describe("The device marker's sheet"), tr_sheet: z.string().describe("The TR marker's sheet (empty when the TR is gone)"),
-  over_length: z.literal(true).optional().describe("Per-cable LF exceeds 295 ft (TIA-568 copper permanent link, 90 m) — counted; check the route"),
+  ...runLimitFields,
+  over_length: z.literal(true).optional().describe("Per-cable LF exceeds the run's limit (limit_ft when present, else 295 ft: TIA-568 copper permanent link, 90 m) — counted; check the route"),
   scale_unconfirmed: z.literal(true).optional().describe("A route segment sits on a sheet whose agent-set scale no person has confirmed"),
   route_lf: z.number().describe("Σ segment plan lengths, each at its own sheet's scale — reported on a broken run too, never zeroed"),
   ...routeSplitFields,
@@ -567,7 +578,8 @@ export const linkRunOutput = {
   vertical_override: z.number().optional().describe("Present when this call stated vertical_ft: the run's own vertical, replacing the condition's for this location only"),
   cables_override: z.number().int().optional().describe("Present when this call stated cables_override"),
   reviewed: z.literal(false),
-  over_length: z.literal(true).optional().describe("Per-cable LF exceeds 295 ft (TIA-568 copper permanent link) — the run counts; check the route"),
+  ...runLimitFields,
+  over_length: z.literal(true).optional().describe("Per-cable LF exceeds the run's limit (limit_ft when present, else 295 ft: TIA-568 copper permanent link) — the run counts; check the route"),
   scale_unconfirmed: z.literal(true).optional().describe("A route segment's sheet scale was set by an agent and no person has confirmed it"),
   notes: z.array(z.string()).optional(),
   note: z.string(),
@@ -998,6 +1010,13 @@ export const editConditionOutput = {
     order: cableOrderRow.optional().describe("The condition's CABLE TYPE row of the box/reel order (boxes pool across every condition of the type) — present once any condition states package_ft"),
     minted: z.record(z.number()).optional().describe("On a fresh opt-in or a device-type change: every setup value this call did NOT state and the device type's starting table supplied (cables_per_location, vertical_ft, loop_device_ft, loop_tr_ft). Starting values, not verified against spec — confirm each against the project spec"),
     note: z.string().optional().describe("Present with minted: the starting-values caveat"),
+    limit: z.object({
+      medium: z.enum(["copper", "fiber", "coax"]).optional(),
+      limit_ft: z.number().nullable().describe("The per-cable limit every run on this condition is checked against, feet; null = not checked"),
+      limit_source: z.enum(["stated", "tia_568_copper", "none"]),
+      note: z.string(),
+      medium_read_as: z.string().optional().describe("Present when the medium was given in another case (\"Fiber\" → \"fiber\")"),
+    }).optional().describe("The length check, present once the setup states a medium or max_link_ft or this call set or cleared one"),
   }).optional().describe("Present when the condition carries a cable setup"),
 };
 
