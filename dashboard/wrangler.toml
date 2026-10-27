@@ -1,0 +1,37 @@
+# Brink dashboard: one Worker serving the static app (dist/), a read-only JSON
+# API over Hyperdrive, and the live WebSocket relay (Durable Object).
+# Local only for now: `npm run dev`. Nothing in this repository deploys it.
+name = "brink-dashboard"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+# /api/* always reaches the Worker (JSON and the WebSocket upgrade), never the SPA fallback.
+run_worker_first = ["/api/*"]
+
+[[durable_objects.bindings]]
+name = "RELAY"
+class_name = "RealtimeRelay"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RealtimeRelay"]
+
+# Hyperdrive in front of Supabase Postgres (session pooler or direct connection).
+# `id` is a placeholder: the owner creates the config (`wrangler hyperdrive create`)
+# and puts its id here before any deploy. `wrangler dev` does not use `id`; it
+# connects straight to localConnectionString (local Supabase from
+# `npx supabase start` in brink-merge/). Override it without editing this file:
+#   CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=postgres://... npm run dev
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "00000000000000000000000000000000"
+localConnectionString = "postgres://postgres:postgres@127.0.0.1:54322/postgres"
+
+# SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are secrets: .dev.vars locally
+# (copy .dev.vars.example); on a real account the owner sets them with
+# `wrangler secret put`.
