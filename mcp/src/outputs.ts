@@ -439,6 +439,7 @@ export const withdrawConditionEditOutput = {
 const cableSetupShape = z.object({
   device_type: z.string(), cables_per_location: z.number(), cable_type: z.string(),
   vertical_ft: z.number().nullable(), loop_device_ft: z.number().nullable(), loop_tr_ft: z.number().nullable(),
+  package_ft: z.number().optional().describe("Feet per box or reel — present once stated"),
 }).passthrough();
 const cableQty = {
   ea: z.number().describe("Device markers on the condition (×N)"),
@@ -475,6 +476,22 @@ const pathwayQty = {
   linked_runs: z.number().int().describe("Distinct linked runs using at least one segment"),
   pathway_lf_total: z.number().describe("pathway_lf × the condition's multiplier — the basis a linear materials row on the condition (J-hooks, per = spacing) divides, less any rise/drop legs"),
 };
+// boxes / reels per cable type (package_ft on a cable_setup): present only
+// once a condition states one, so a cable reply without it is unchanged
+export const cableOrderRow = z.object({
+  cable_type: z.string().describe('The free-text cable type the boxes are pooled by ("" = conditions with no cable type)'),
+  order_lf: z.number().describe("The cable type's order LF — the Cable summary's by-cable-type cable_lf_order (waste and ×N in)"),
+  package_ft: z.number().nullable().describe("Feet per box or reel; null when no condition of the type states one, when they disagree, or on the blank type"),
+  boxes: z.number().int().nullable().describe("ceil(order_lf / package_ft) — null (not 0) when not figured"),
+  purchased_lf: z.number().nullable().describe("boxes × package_ft"),
+  leftover_lf: z.number().nullable().describe("purchased_lf − order_lf"),
+  conditions: z.array(z.string()).describe("Every cable condition of this cable type"),
+  package_set_on: z.array(z.string()).describe("The conditions that state a package_ft"),
+  package_conflict: z.array(z.object({ finish_tag: z.string(), package_ft: z.number() })).optional().describe("Present when the type's conditions state different sizes: each one and its size — boxes left blank"),
+  note: z.string().optional().describe("Why boxes are blank (conflicting sizes, or no cable type)"),
+});
+export const cableOrderBlock = z.object({ rows: z.array(cableOrderRow) })
+  .describe("Cable ORDER: boxes / reels per cable type, pooled across its conditions and rounded up once. Present only once a condition's cable_setup states package_ft");
 export const cablePathwayBlock = z.object({
   rows: z.array(z.object({ condition_id: z.string(), finish_tag: z.string(), route_kind: z.enum(["trunk", "branch", ""]).describe('"" = unspecified'), ...pathwayQty, multiplier: z.number() })).describe("One row per role \"route\" condition"),
   by_kind: z.array(z.object({ route_kind: z.enum(["trunk", "branch", ""]), ...pathwayQty })),
@@ -564,6 +581,7 @@ export const listRunsOutput = {
   duplicates: cableDuplicatesBlock.nullable().describe("The duplicate device check: device markers on cable conditions stacked on one spot, and overlay plans whose device positions coincide. Flags only — move one set to a non-cable reference condition (edit_shape { condition }) or remove an extra marker only with the estimator; never delete on this alone"),
   summary: cableSummaryBlock.nullable(),
   pathway: cablePathwayBlock.optional(),
+  order: cableOrderBlock.optional(),
   count: z.number().int(),
   note: z.string().optional(),
 };
@@ -581,7 +599,7 @@ export const holdDevicesOutput = {
 
 export const takeoffSummaryOutput = {
   conditions: z.array(summaryRow),
-  cable: cableSummaryBlock.extend({ unlinked_devices: z.number().int(), unlinked_routes: z.number().int(), held_devices: z.number().int(), warnings: z.array(z.string()), pathway: cablePathwayBlock.optional(), duplicates: cableDuplicatesBlock.optional().describe("The duplicate device check — present only when it found something (list_runs always carries it)") }).optional().describe("Division 27 cable rollups — present only when a condition carries a cable_setup or a run exists (list_runs has the per-run detail)"),
+  cable: cableSummaryBlock.extend({ unlinked_devices: z.number().int(), unlinked_routes: z.number().int(), held_devices: z.number().int(), warnings: z.array(z.string()), pathway: cablePathwayBlock.optional(), order: cableOrderBlock.optional(), duplicates: cableDuplicatesBlock.optional().describe("The duplicate device check — present only when it found something (list_runs always carries it)") }).optional().describe("Division 27 cable rollups — present only when a condition carries a cable_setup or a run exists (list_runs has the per-run detail)"),
   totals: z.object({
     total_sf: z.number(),
     total_sf_net: z.number(),
@@ -913,6 +931,7 @@ export const exportReportOutput = {
     unlinked: cableUnlinked, warnings: z.array(z.string()),
     duplicates: cableDuplicatesBlock.optional().describe("The duplicate device check — present only when it found something, so a cable report with no finding is unchanged"),
     pathway: cablePathwayBlock.optional(),
+    order: cableOrderBlock.optional(),
   }).optional().describe("Division 27 cable schedule (docs/design/CABLE_SETUP.md) — present only when a cable condition or a run exists, so every other report is byte-identical"),
 };
 
@@ -972,6 +991,7 @@ export const editConditionOutput = {
   cable: z.object({
     problems: z.array(z.string()).describe("Required values still missing from the setup — while any remain, every run on this condition is WITHHELD with this reason (no length is assumed)"),
     rows: z.array(cableSummaryRow).describe("The condition's Cable summary row(s), one per TR it homes to, ×N and waste applied as in export_report"),
+    order: cableOrderRow.optional().describe("The condition's CABLE TYPE row of the box/reel order (boxes pool across every condition of the type) — present once any condition states package_ft"),
     minted: z.record(z.number()).optional().describe("On a fresh opt-in or a device-type change: every setup value this call did NOT state and the device type's starting table supplied (cables_per_location, vertical_ft, loop_device_ft, loop_tr_ft). Starting values, not verified against spec — confirm each against the project spec"),
     note: z.string().optional().describe("Present with minted: the starting-values caveat"),
   }).optional().describe("Present when the condition carries a cable setup"),

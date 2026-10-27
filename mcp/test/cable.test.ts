@@ -652,3 +652,92 @@ test("trunk and branch over the wire: link_run [branch, trunk] splits route LF; 
   assert.equal(back.pathway.totals.pathway_lf, 180);
   assert.deepEqual((await ok(two, "export_takeoff", {})).conditions.map((c: any) => c.route_kind).filter(Boolean), ["trunk", "branch"]);
 });
+
+test("edit_condition cable_setup.package_ft: boxes per cable type over the wire — the order table on list_runs, takeoff_summary and export_report; refusals; a conflict blanks the type; null clears byte-identically; undo and round trip keep it", async () => {
+  const { client, tr, devW, devC, rtW, rtC } = await worked();
+  await ok(client, "link_run", { device_shape_ids: [devW], route_shape_ids: [rtW], tr_id: tr });
+  await ok(client, "link_run", { device_shape_ids: [devC], route_shape_ids: [rtC], tr_id: tr });
+  // before any size: no order anywhere — and these are the bytes a cleared size must return to
+  const runs0 = await ok(client, "list_runs", {});
+  const sum0 = (await ok(client, "takeoff_summary", {})).cable;
+  const rep0 = (await ok(client, "export_report", {})).cable;
+  assert.equal("order" in runs0 || "order" in sum0 || "order" in rep0, false);
+  const edit0 = await ok(client, "edit_condition", { condition: "DATA-1", waste_pct: 12 });
+  assert.equal("order" in edit0.cable, false);
+
+  // refusals: 0, a negative and a string are schema violations; nothing is written
+  for (const bad of [0, -1000, "1000"]) {
+    const r: any = await client.callTool({ name: "edit_condition", arguments: { condition: "DATA-1", cable_setup: { package_ft: bad } } });
+    assert.ok(r.isError && /MCP error -32602/.test(r.content[0].text) && /cable_setup/.test(r.content[0].text), `package_ft ${JSON.stringify(bad)} refused by the schema`);
+  }
+  assert.deepEqual(await ok(client, "list_runs", {}), runs0, "refusals wrote nothing");
+
+  // DATA-1 (CAT6A) order 292.32 → 1 box of 1000; CAM-1 (CAT6) states no size → blank
+  const set = await ok(client, "edit_condition", { condition: "DATA-1", cable_setup: { package_ft: 1000 } });
+  assert.equal(set.cable_setup.package_ft, 1000);
+  assert.equal("minted" in set.cable, false, "no starting value is minted for it");
+  const cat6a = { cable_type: "CAT6A", order_lf: 292.32, package_ft: 1000, boxes: 1, purchased_lf: 1000, leftover_lf: 707.68, conditions: ["DATA-1"], package_set_on: ["DATA-1"] };
+  const cat6 = { cable_type: "CAT6", order_lf: 199.36, package_ft: null, boxes: null, purchased_lf: null, leftover_lf: null, conditions: ["CAM-1"], package_set_on: [] };
+  assert.deepEqual(set.cable.order, cat6a, "the reply carries the condition's cable-type row");
+  const runs1 = await ok(client, "list_runs", {});
+  assert.deepEqual(runs1.order, { rows: [cat6a, cat6] });
+  assert.deepEqual((await ok(client, "takeoff_summary", {})).cable.order, { rows: [cat6a, cat6] });
+  const rep1 = (await ok(client, "export_report", {})).cable;
+  assert.equal(Object.keys(rep1).at(-1), "order");
+  assert.deepEqual(rep1.order, { rows: [cat6a, cat6] });
+  assert.deepEqual(rep1.totals, rep0.totals, "the measured, net and order LF do not move");
+
+  // a type change keeps the box size (it belongs to the cable, not the device type)
+  const wap = await ok(client, "edit_condition", { condition: "DATA-1", cable_setup: { device_type: "wap" } });
+  assert.equal(wap.cable_setup.package_ft, 1000);
+  await ok(client, "undo_last", { n: 1 });
+
+  // CAM-1 moved onto CAT6A at 500 ft: the two disagree → CAT6A blank, a warning names both
+  await ok(client, "edit_condition", { condition: "CAM-1", cable_setup: { cable_type: "CAT6A", package_ft: 500 } });
+  const conflict = await ok(client, "list_runs", {});
+  assert.deepEqual(conflict.order.rows.map((r: any) => [r.cable_type, r.order_lf, r.boxes, r.package_conflict]), [["CAT6A", 491.68, null, [{ finish_tag: "DATA-1", package_ft: 1000 }, { finish_tag: "CAM-1", package_ft: 500 }]]]);
+  assert.ok(conflict.warnings.includes("Cable type CAT6A: its conditions state different box/reel sizes (DATA-1 1000 ft; CAM-1 500 ft). Its boxes are left blank rather than guessed: state one package_ft for the cable type, or give the different products different cable types."), conflict.warnings.join("\n"));
+  // one size for the type: the two pool into ONE box (292.32 + 199.36 = 491.68)
+  await ok(client, "edit_condition", { condition: "CAM-1", cable_setup: { package_ft: 1000 } });
+  assert.deepEqual((await ok(client, "list_runs", {})).order.rows.map((r: any) => [r.cable_type, r.order_lf, r.boxes, r.leftover_lf]), [["CAT6A", 491.68, 1, 508.32]]);
+
+  // export → import keeps it; the cover prints the box line
+  const payload = await ok(client, "export_takeoff", {});
+  assert.deepEqual(payload.conditions.filter((c: any) => c.cable_setup).map((c: any) => c.cable_setup.package_ft), [1000, 1000]);
+  const dir = await mkdtemp(path.join(tmpdir(), "ot-cable-box-"));
+  const file = path.join(dir, "boxes.json");
+  await writeFile(file, JSON.stringify(payload));
+  const two = await pair();
+  await ok(two, "load_plan", { path: PLAN });
+  await ok(two, "import_takeoff", { path: file });
+  assert.deepEqual((await ok(two, "list_runs", {})).order.rows[0].boxes, 1);
+  const out = path.join(dir, "boxes marked set.pdf");
+  await ok(client, "export_marked_pdf", { path: out, project_name: "Invented Div 27" });
+  const doc = await openPdf(out);
+  const cover = (await doc.page(1)).textContent.items.map((i: any) => i.str).join("\n");
+  await doc.destroy();
+  assert.ok(cover.includes("Cable order: CAT6A: 1 box of 1,000 LF · 1,000 LF purchased against 491.7 LF order · 508.3 LF left over"), cover);
+
+  // null clears both, and every cable reply returns to its bytes from before
+  await ok(client, "edit_condition", { condition: "CAM-1", cable_setup: { cable_type: "CAT6", package_ft: null } });
+  const cleared = await ok(client, "edit_condition", { condition: "DATA-1", cable_setup: { package_ft: null } });
+  assert.equal("package_ft" in cleared.cable_setup, false, "null removes the key");
+  assert.equal("order" in cleared.cable, false);
+  assert.equal(JSON.stringify(await ok(client, "list_runs", {})), JSON.stringify(runs0));
+  assert.equal(JSON.stringify((await ok(client, "takeoff_summary", {})).cable), JSON.stringify(sum0));
+  assert.equal(JSON.stringify((await ok(client, "export_report", {})).cable), JSON.stringify(rep0));
+  // undo_last puts the size back
+  await ok(client, "undo_last", { n: 1 });
+  assert.equal((await ok(client, "list_runs", {})).order.rows[0].package_ft, 1000);
+});
+
+test("Session.editCondition refuses a package_ft that is not feet > 0 for a direct caller (no schema in front), writing nothing", async () => {
+  const s = new Session();
+  await s.loadPlan(PLAN);
+  s.placeCount(KEY, [[500, 500]], { condition: "DATA-1" });
+  s.editCondition("DATA-1", { cable_setup: { device_type: "wall_outlet", cable_type: "CAT6A" } });
+  for (const bad of [0, -5, Number.NaN, "1000"]) {
+    assert.throws(() => s.editCondition("DATA-1", { cable_setup: { package_ft: bad } }), /package_ft must be a number of feet greater than 0/);
+  }
+  assert.equal("package_ft" in (s.exportPayload() as any).conditions[0].cable_setup, false);
+});

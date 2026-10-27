@@ -439,6 +439,11 @@ export async function buildMarkedSetPdf({ projectName, dark, sheets, shapes, mar
       // runs, unconfirmed scales, legs), wrapped — a warning is never cut
       y -= 2;
       for (const ln of wrapText(legend.key, 508, (t) => font.widthOfTextAtSize(winAnsiSafe(t), 8))) { if (y < 110) break; draw(ln, { x: 52, y, size: 8, font, color: muted }); y -= 10; }
+      // boxes / reels per cable type — present only once a condition states
+      // package_ft, so a cover without one is byte-identical
+      for (const o of legend.order || []) {
+        for (const ln of wrapText(o, 508, (t) => font.widthOfTextAtSize(winAnsiSafe(t), 8))) { if (y < 110) break; draw(ln, { x: 52, y, size: 8, font, color: ink }); y -= 10; }
+      }
       const shownW = [];
       for (const w of legend.warnings) {
         const lines = wrapText(w, 500, (t) => font.widthOfTextAtSize(winAnsiSafe(t), 8));

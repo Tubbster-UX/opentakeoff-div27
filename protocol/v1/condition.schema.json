@@ -93,7 +93,7 @@
         "object",
         "null"
       ],
-      "description": "Division 27 cable opt-in on a count condition (web/src/lib/cable.js): device_type, cables_per_location, cable_type, vertical_ft, loop_device_ft, loop_tr_ft. Presence of a device_type makes the condition a device condition; null or absent opts out.",
+      "description": "Division 27 cable opt-in on a count condition (web/src/lib/cable.js): device_type, cables_per_location, cable_type, vertical_ft, loop_device_ft, loop_tr_ft, and the optional package_ft. Presence of a device_type makes the condition a device condition; null or absent opts out.",
       "properties": {
         "device_type": {
           "type": "string"
@@ -125,6 +125,11 @@
             "null"
           ],
           "minimum": 0
+        },
+        "package_ft": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Optional feet per box or reel the cable is bought in. Never minted; absent = not stated. Boxes are figured per cable_type from the pooled order LF (waste and multiplier in): ceil(order LF / package_ft)."
         }
       },
       "additionalProperties": true

@@ -176,7 +176,9 @@ export async function buildXlsx(sheets) {
  *   appends the "Cable summary" and "Cable runs" tabs. The fixed five-tab list
  *   above is unchanged; these two exist ONLY when a cable condition exists, so
  *   a project without one gets the same workbook it always did. A third,
- *   "Pathway", follows only once a route condition is tagged trunk or branch.
+ *   "Pathway", follows only once a route condition is tagged trunk or branch;
+ *   "Cable order" (boxes / reels per cable type) only once a condition
+ *   states package_ft.
  * @returns {Array<{name: string, rows: any[][]}>}
  */
 export function reportWorkbook({ rows = [], bySheet = [], shapeRows = [], cols = null, ctx = null, sheetLabel = null, units = "imperial", byFloorRoom = [], cable = null }) {
@@ -270,6 +272,9 @@ export function reportWorkbook({ rows = [], bySheet = [], shapeRows = [], cols =
     // "Pathway" (trunk/branch, each segment once) exists only once a route
     // condition is tagged trunk or branch — the J-hook / tray basis
     if (cableT.pathway) cableTabs.push({ name: "Pathway", rows: cableT.pathway });
+    // "Cable order" (boxes / reels per cable type) exists only once a
+    // condition states package_ft
+    if (cableT.order) cableTabs.push({ name: "Cable order", rows: cableT.order });
   }
 
   return [

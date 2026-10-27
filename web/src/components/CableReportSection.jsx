@@ -45,6 +45,28 @@ export default function CableReportSection({ takeoff, units = "imperial", sheetL
       <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--ink-muted)", lineHeight: 1.5 }}>
         Pulls, cables and cable LF come only from linked runs: measured route + the vertical (the condition's, or a run's own) and the service loops, × cables. Device EA beside Pulls shows the gap, which is exactly the unlinked plus held devices. Pending runs are counted, like pending shapes. Waste applies only to the order column; ×N applies across the row.
       </p>
+      {t.order && (
+        <div style={{ marginTop: 14 }} data-cable-report-order>
+          <h3 style={{ ...H3, fontSize: 11 }}>Cable order — boxes and reels per cable type</h3>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", background: "var(--paper-bright)", border: "1px solid var(--ink-faint)" }}>
+              <thead>
+                <tr>{t.order[0].map((h) => <th key={h} style={{ ...cell, textAlign: "left", fontSize: 10.5, color: "var(--ink-muted)", fontWeight: 600 }}>{h}</th>)}</tr>
+              </thead>
+              <tbody>
+                {t.order.slice(1).map((row, i) => (
+                  <tr key={i}>
+                    {row.map((v, j) => <td key={j} style={{ ...cell, textAlign: numeric(v) ? "right" : "left", fontFamily: numeric(v) ? "var(--f-mono)" : undefined, whiteSpace: j === row.length - 1 ? "normal" : "nowrap" }}>{v}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--ink-muted)", lineHeight: 1.5 }}>
+            Boxes are bought against the order quantity (waste and ×N in), pooled per cable type and rounded up once, so three conditions of the same cable share boxes. A blank means not figured: no condition of that type states a box/reel size, its conditions disagree, or the cable type is blank.
+          </p>
+        </div>
+      )}
       {t.pathway && (
         <div style={{ marginTop: 14 }} data-cable-report-pathway>
           <h3 style={{ ...H3, fontSize: 11 }}>Pathway — each segment counted once</h3>

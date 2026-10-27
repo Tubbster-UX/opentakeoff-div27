@@ -13,11 +13,15 @@
 //                                route_kind, which splits each run's route LF
 //                                and adds the Report's Pathway table)
 //
+// A device condition's optional Box/reel field states package_ft (feet per
+// box or reel); the Report's Cable order table rounds each cable type's
+// order LF up to whole boxes from it.
+//
 // Required values left empty show inline, in the danger color, with the
 // reason the library withholds the condition's runs. Field edits follow the
 // condition editor's convention (not on the undo stack), like roll goods.
 // All defaults and validation come from lib/cable.js — nothing is computed here.
-import { DEVICE_TYPES, DEVICE_TYPE_LABELS, CABLE_DEFAULTS, ROUTE_KINDS, ROUTE_KIND_LABELS, mintCableSetup, hasCableSetup, cableSetupProblems, routeKindOf } from "../lib/cable.js";
+import { DEVICE_TYPES, DEVICE_TYPE_LABELS, CABLE_DEFAULTS, ROUTE_KINDS, ROUTE_KIND_LABELS, mintCableSetup, hasCableSetup, cableSetupProblems, routeKindOf, packageFt } from "../lib/cable.js";
 import { lenVal, lenUnit, heightVal, heightInputToFeet, heightUnit } from "../lib/units";
 
 const box = { display: "flex", flexDirection: "column", gap: 5, paddingTop: 6, marginTop: 1, borderTop: "1px solid var(--ink-faint)" };
@@ -111,6 +115,14 @@ export default function CableSetupEditor({ cond: c, onUpdateCond, row = null, ca
   const shown = (ft) => (ft == null ? "" : r2(heightVal(ft, units)));
   const setFt = (k, raw) => patch({ [k]: raw === "" ? null : Math.max(0, heightInputToFeet(Number(raw) || 0, units)) });
   const hu = heightUnit(units);
+  // box / reel size: optional, > 0, never minted. Blank (or 0) removes the
+  // key, so a setup that never stated one stays byte-identical. Metric entry
+  // is rounded to a millionth of a foot so 304.8 m reads back as 1000 ft.
+  const setPackage = (raw) => {
+    const ft = Math.round(heightInputToFeet(Number(raw) || 0, units) * 1e6) / 1e6;
+    const { package_ft: _drop, ...rest } = cs;
+    onUpdateCond({ cable_setup: raw !== "" && ft > 0 ? { ...cs, package_ft: ft } : rest });
+  };
   const tot = cableRows.reduce((t, r) => ({ ea: t.ea + r.ea, pulls: t.pulls + r.pulls, cables: t.cables + r.cables, lf: t.lf + r.cable_lf, order: t.order + r.cable_lf_order, unl: t.unl + r.unlinked_devices }), { ea: 0, pulls: 0, cables: 0, lf: 0, order: 0, unl: 0 });
   const isDefault = (k) => CABLE_DEFAULTS[cs.device_type]?.[k] != null && cs[k] === CABLE_DEFAULTS[cs.device_type][k];
   const anyDefault = ["vertical_ft", "loop_device_ft", "loop_tr_ft"].some(isDefault);
@@ -119,8 +131,8 @@ export default function CableSetupEditor({ cond: c, onUpdateCond, row = null, ca
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <span style={cap} title="Division 27 cable setup — per cable LF = measured route + vertical + both loops">Cable</span>
         <select name="condition-cable-device-type" value={cs.device_type} style={sel}
-          title="Device type — changing it re-fills the starting values (cables per location and cable type are kept)"
-          onChange={(e) => onUpdateCond({ cable_setup: mintCableSetup(e.target.value, { cables_per_location: cs.cables_per_location, cable_type: cs.cable_type }) })}>
+          title="Device type — changing it re-fills the starting values (cables per location, cable type and box/reel size are kept)"
+          onChange={(e) => onUpdateCond({ cable_setup: mintCableSetup(e.target.value, { cables_per_location: cs.cables_per_location, cable_type: cs.cable_type, package_ft: packageFt(cs) ?? undefined }) })}>
           {DEVICE_TYPES.map((t) => <option key={t} value={t}>{DEVICE_TYPE_LABELS[t]}</option>)}
         </select>
         <button onClick={() => onUpdateCond({ cable_setup: undefined })} title="Remove the cable setup (runs on this condition read broken; the markers stay)" style={xBtn}>✕</button>
@@ -132,6 +144,11 @@ export default function CableSetupEditor({ cond: c, onUpdateCond, row = null, ca
         <span style={{ color: "var(--ink-muted)" }} title="Free text — groups the cable summary (a part number, CAT6A)">Type</span>
         <input name="condition-cable-type" value={cs.cable_type || ""} placeholder="e.g. CAT6A" onChange={(e) => patch({ cable_type: e.target.value })}
           style={{ width: 96, padding: "3px 6px", borderRadius: 0, border: "1px solid var(--ink-faint)", fontSize: 12 }} />
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+        <span style={{ color: "var(--ink-muted)" }} title="Feet per box or reel (1000 for a Cat 6A box). Optional; blank = not stated. Boxes are figured per cable type from the order LF (waste and ×N in), in the Report's Cable order table">Box/reel {hu}</span>
+        <input name="condition-cable-package" type="number" min="0" step="any" value={shown(packageFt(cs))} placeholder="—" style={{ ...num(false), width: 64 }}
+          onChange={(e) => setPackage(e.target.value)} />
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
         <span style={{ color: "var(--ink-muted)" }} title="Vertical per cable — required; no silent default">Vertical</span>

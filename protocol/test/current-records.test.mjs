@@ -259,6 +259,17 @@ test("Division 27 cable setup, TR role and cable runs conform as additive record
   checkBoth(tb);
   const tt = computeCableTakeoff(tb.conditions, tb.shapes, tb.cable_runs);
   assert.deepEqual({ route: tt.resolved.runs[0].route_lf, branch: tt.resolved.runs[0].branch_lf, trunk: tt.resolved.runs[0].trunk_lf, pathway: tt.pathway.totals.pathway_lf }, { route: 140, branch: 40, trunk: 100, pathway: 140 });
+  // boxes / reels: package_ft (feet > 0) on a cable setup; boxes pool per cable type
+  const boxed = { ...d, conditions: d.conditions.map((c) => (c.cable_setup ? { ...c, cable_setup: { ...c.cable_setup, package_ft: 1000 } } : c)) };
+  checkBoth(boxed);
+  const tbx = computeCableTakeoff(boxed.conditions, boxed.shapes, boxed.cable_runs);
+  assert.deepEqual(tbx.order.rows.map((r) => [r.cable_type, r.order_lf, r.boxes, r.purchased_lf, r.leftover_lf]), [["CAT6A", 292.32, 1, 1000, 707.68]]);
+  assert.equal(t.order, null, "no package_ft: no order table");
+  for (const bad of [0, -1, "1000"]) {
+    const v = { ...structuredClone(boxed), schema: draftId };
+    v.conditions.find((c) => c.cable_setup).cable_setup.package_ft = bad;
+    assert.equal(draftCheck(v), false, `package_ft ${JSON.stringify(bad)} does not conform`);
+  }
   // the MCP writer emits none of the keys for a session without cable work
   const session = new Session();
   await session.loadPlan(plan);
