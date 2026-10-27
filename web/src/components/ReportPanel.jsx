@@ -5,10 +5,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../brand/icons.jsx";
 import ToolMenu from "./ToolMenu.jsx";
-import { conditionTotals, grandTotals, sheetTotals, sheetGroupedRows, labelGroupedRows, authorGroupedRows, sheetLabelGroupedRows, round2, totalsToCsv, downloadText, materialsSummary, reportJson, hasMultipliers, BY_SHEET_BASE_NOTE } from "../lib/totals.js";
+import { conditionTotals, grandTotals, sheetTotals, sheetGroupedRows, labelGroupedRows, authorGroupedRows, sheetLabelGroupedRows, round2, totalsToCsv, downloadText, materialsSummary, materialNote, reportJson, hasMultipliers, BY_SHEET_BASE_NOTE } from "../lib/totals.js";
 import { TABLE_PROFILE, CSV_PROFILE, colGetter, customColProfile, specColProfile, laborColProfile, rollColProfile, cableColProfile, partitionRowsBy, forceIncludeGroupCol, loadColPrefs, saveColPrefs, loadGroupBy, saveGroupBy, visibleCols, floorPerimeterLf, applyUnits } from "../lib/reportColumns.js";
 import { rollReportRows, seamLfByShape } from "../lib/rollTakeoff.js";
-import { cableReportBlock } from "../lib/cable.js";
+import { cableReportBlock, cableQtyByShape } from "../lib/cable.js";
 import CableReportSection from "./CableReportSection.jsx";
 import { areaVal, areaUnit, lenVal, lenUnit } from "../lib/units";
 import { columnLabel } from "../lib/conditionColumns.js";
@@ -89,7 +89,10 @@ export default function ReportPanel({ projectName, onProjectName, conditions, sh
   // views below slice it for free instead of repeating the whole condition's
   // welding on every sheet. Empty map for a project with no roll goods, which
   // makes every seam_lf row read 0 — the honest answer before a layout exists.
-  const seamCtx = useMemo(() => ({ seamByShape: seamLfByShape(rollByCond) }), [rollByCond]);
+  // The cable takeoff's linked pulls and cables per device shape ride the same
+  // seam for the "pulls" / "cables" bases (a faceplate per pull, a jack per
+  // cable); with no cable takeoff the map is empty and those rows read 0.
+  const seamCtx = useMemo(() => ({ seamByShape: seamLfByShape(rollByCond), cableByShape: cableQtyByShape(cableTakeoff) }), [rollByCond, cableTakeoff]);
   const rows = useMemo(() => conditionTotals(conditions, shapes, seamCtx).filter((r) => r.shape_count > 0), [conditions, shapes, seamCtx]);
   const noteQty = useMemo(() => qtyLabels(rows, units), [rows, units]);   // {{qty}} in the annotations table (#474)
   const bySheet = useMemo(() => sheetTotals(conditions, shapes), [conditions, shapes]);
@@ -940,11 +943,11 @@ export default function ReportPanel({ projectName, onProjectName, conditions, sh
                 <React.Fragment key={r.id}>
                   <span style={{ marginRight: 14, display: "inline-block" }}>
                     <strong style={{ fontFamily: "var(--f-mono)" }}>{r.finish_tag}</strong>{" "}
-                    {r.materials.map((m) => `${m.name} ${num(m.qty, 2)}${m.unit ? " " + m.unit : ""}${m.note ? ` (${m.note})` : ""}`).join(" · ")}
+                    {r.materials.map((m) => `${m.name} ${num(m.qty, 2)}${m.unit ? " " + m.unit : ""}${m.note || m.reason ? ` (${materialNote(m)})` : ""}`).join(" · ")}
                   </span>{" "}
                 </React.Fragment>
               ))}
-              <br />Each quantity = measured {`{area / linear / count}`} ÷ your coverage rate, rounded up to whole units.
+              <br />Each quantity = measured {`{area / linear / count}`} ÷ your coverage rate, rounded up to whole units{rows.some((r) => r.materials?.some((m) => m.basis === "cables" || m.basis === "pulls")) ? "; a per cable or per pull line divides the linked cables or pulls from the Cable summary (×N applied; unlinked, held, withheld and broken excluded)" : ""}.
             </p>
           </div>
         )}

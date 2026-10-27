@@ -364,3 +364,57 @@ PLAYWRIGHT_MODULE=/path/to/playwright-core/index.mjs BROWSER_PATH=/path/to/chrom
   node scripts/verify-cable-runs.mjs /tmp/cable-fixture.json /tmp/cable-ui/results.json
 node --import tsx scripts/make-cable-marked-sample.mts /tmp/cable-marked-sample.pdf
 ```
+
+## 14.5 Parts per cable and per pull (item 5, Oct 27, 2026)
+
+The bid workbook figured parts by hand: every DATA-1 location carries a jack and a patch cord
+per cable and a faceplate per pull; every camera a mount per pull and an outdoor patch cord per
+cable. A supporting-materials row could only key on the device count, so "jacks = cables" meant
+`per = 1 ÷ cables per location`, which goes wrong on a run's `cables_override` and on every
+unlinked or held device. Two new materials bases fix it: `cables` and `pulls`, the condition's
+linked figures from the cable summary. Decisions are in the spec's Decisions ("Recorded while
+building item 5"); `cable_lf` was considered and left out (the cable is already the summary's
+net and order LF, and no materials basis carries waste).
+
+| File | Change |
+|---|---|
+| `web/src/lib/cable.js` | `CABLE_MATERIAL_BASES`, `isCableMaterialBasis`, `cableQtyByShape` (linked pulls and cables per device shape, unmultiplied), `cableMaterialReason` (why a row reads 0). |
+| `web/src/lib/totals.js` | `conditionTotals` takes `ctx.cableByShape` beside `ctx.seamByShape`; the `cables` / `pulls` bases; `reason` on a zero cables/pulls line only; `materialBasisLabel`, `materialCoverage`, `materialNote` shared by the CSV and the workbook; the grouped-row JSDoc. |
+| `web/src/lib/xlsx.js` | The Materials tab reads the shared coverage and note cells. |
+| `web/src/components/ReportPanel.jsx` | The cable map rides the Report's materials ctx (rows, grouped views, CSV, XLSX, JSON); the by-finish line prints a row's reason; the footnote names the rule when a cable/pull line exists. |
+| `web/src/components/TakeoffsPanel.jsx` | The basis picker offers **cable** and **pull** only on a condition with a cable setup (kept visible on a row that already uses one); the row shows *N cables linked* / *N pulls linked*, or why it reads 0. The library picker shows them only on an entry promoted from such a row. |
+| `web/src/pages/TakeoffCanvas.jsx` | Wiring only: the materials ctx memo moves below the cable takeoff memo and gains `cableByShape`. |
+| `mcp/src/session.ts` | `MaterialRow.basis` gains the two values; `materialsCtx()` (seams + cables) for `takeoff_summary`; `export_report` hands the cable map in; `edit_materials` replies with `computed` on a condition the bases concern. |
+| `mcp/src/tools.ts`, `mcp/src/outputs.ts` | The `edit_materials` basis enum and description ("per cable: 1 jack per cable → per 1, basis cables"); the output schemas carry the new bases, `computed` and `reason`. No new tool (57 default). |
+| `protocol/v1/condition.schema.json`, `protocol/INVENTORY.md` | `materials[].basis` described (still a string, not an enum); an inventory row. Generated: `protocol/README.md`, `mcp/src/protocol.generated.ts`. |
+| `web/test/cableMaterials.test.ts`, `web/test/fixtures/cableMaterials.noCable.ts` (new), `mcp/test/cable.test.ts` | Tests below. |
+| Docs | `USER_GUIDE.md` (Supporting materials, Cable runs, the buy list), `AGENT_GUIDE.md` (two rows: use `cables` / `pulls`, never `per = 1 ÷ quantity`; a zero with a reason), `MCP.md`, `mcp/README.md`, `FEATURES.md`, `CHANGELOG.md`, the spec's Decisions. |
+
+**Tests.** `web/test/cableMaterials.test.ts` (8): DATA-1 with three linked runs at 4 cables, one
+run overridden to 2 (one of them a pending agent run), a device on a broken run and a held
+device reads jacks 14, faceplates 4, patch cords 14 against a count row's 6; ×2 reads 28, 8, 28
+and equals `cableByCondition`; non-1 coverage rounds up and `round:false` keeps two places; a
+condition with no cable setup, one with no linked run, and a caller with no cable takeoff each
+read 0 with their own reason; the by-sheet slice splits 8 / 6; the buy list, CSV, workbook and
+report JSON carry the parts and the reason; and an invented takeoff with no cable work (area,
+linear, count, seam_lf, basis-less, round:false and unnamed rows, by sheet and by label) hashes
+to the SHA-256 the base commit `d680c88` printed for its report JSON, CSV and workbook, with no
+cable ctx and with an empty one. `mcp/test/cable.test.ts` (+1): `edit_materials` adds jack,
+faceplate and patch-cord rows on DATA-1 (2 linked runs, one overridden to 3, one device
+unlinked) and the reply's `computed` reads 5 / 2 / 5; `export_report`'s buy list reads 5 / 2 / 5
+and 10 / 4 / 10 at ×2; an unknown basis is refused by the schema; a VCT-1 row on `cables` reads 0
+with its reason in the reply and the report; an ordinary `edit_materials` reply has no
+`computed`; `undo_last` restores the rows.
+
+### Check record (this container: Node 22, root)
+
+| Check | Result |
+|---|---|
+| `web` typecheck, lint, build | pass |
+| `web` tests | 3,436 tests: 3,421 pass, 0 fail, 11 cancelled. Six are the known environment-only ones (`pictures.test.ts`'s 20 s file timeout and 5 in `stageOcrModel.test.ts`); the other five files (`hybridReplay`, `ocrPageRead`, `planSearch`, `scheduleOcrReplay`, `sheetName`) timed out while the MCP suite ran beside them and pass alone (224 of 224). |
+| `web/bench/results.json` | unchanged (not touched) |
+| `mcp` typecheck; all test files as CI runs them | pass; 300 tests: 299 pass, 1 fail (`safewrite` "an unreadable file fails CLOSED", root, as in §10) |
+| `mcp` check:tool-count, check:wiki, check:protocol-resources | pass (57 default / 59 gated / 11 setup; 9 wiki pages; 11 schemas, after `--write`) |
+| `protocol` `npm run check` | pass after `node protocol/scripts/check-docs.mjs --write` |
+| `node scripts/check-doc-links.mjs` | pass |
+| Browser, built app, invented fixture on the demo plan (scratch script, not committed) | 8 of 8: the Report's buy list reads RJ45 jack 5, Faceplate 2 against a count row's 3; the VCT-1 per-cable line reads 0 with its reason; DATA-1's picker offers cable and pull and its rows show *5 cables linked* / *2 pulls linked*; VCT-1's picker keeps its row's basis, offers no pull and says it reads 0; no console errors |

@@ -415,3 +415,54 @@ test("export_marked_pdf: route chips carry run ID + device condition + per-cable
   assert.ok(sheet.includes("MDF"), "the TR is named on the sheet");
   assert.equal(/ROUTE · 87\.5 LF/.test(sheet), false, "a linked route's generic chip gives way to its run chip");
 });
+
+// ── item 5: parts per cable and per pull (docs/design/CABLE_SETUP_PLAN.md §14.5) ──
+
+test("edit_materials basis cables / pulls on DATA-1: the reply's computed lines and export_report's buy list carry the exact parts; ×N doubles them; a non-cable condition reads 0 with a reason", async () => {
+  const { client, tr, devW, rtW, rtC } = await worked();
+  // DATA-1: devW at 2 cables per location, a second location overridden to 3,
+  // a third device left unlinked — 2 pulls, 5 cables, never the 3 EA
+  const more = await ok(client, "place_count", { sheet: KEY, points: [[1800, 1000], [2200, 1000]], condition: "DATA-1" });
+  await ok(client, "link_run", { device_shape_ids: [devW], route_shape_ids: [rtW], tr_id: tr });
+  await ok(client, "link_run", { device_shape_ids: [more.shape_ids[0]], route_shape_ids: [rtC], tr_id: tr, cables_override: 3 });
+  const bad: any = await client.callTool({ name: "edit_materials", arguments: { condition: "DATA-1", add: [{ name: "Jack", per: 1, basis: "jacks" }] } });
+  assert.equal(!!bad.isError, true, "an unknown basis is refused by the schema");
+  assert.match(bad.content[0].text, /basis/);
+  const m = await ok(client, "edit_materials", {
+    condition: "DATA-1",
+    add: [
+      { name: "RJ45 jack", per: 1, basis: "cables", unit: "ea" },
+      { name: "Faceplate", per: 1, basis: "pulls", unit: "ea" },
+      { name: "Patch cord", per: 1, basis: "cables", unit: "ea" },
+    ],
+  });
+  assert.deepEqual(m.materials.map((r: any) => r.basis), ["cables", "pulls", "cables"]);
+  assert.deepEqual(m.computed.map((r: any) => [r.name, r.basis_qty, r.qty]), [["RJ45 jack", 5, 5], ["Faceplate", 2, 2], ["Patch cord", 5, 5]]);
+  assert.ok(m.computed.every((r: any) => !("reason" in r)));
+
+  const rep = await ok(client, "export_report", {});
+  const buy = (name: string) => rep.materials.find((x: any) => x.name === name)?.qty;
+  assert.deepEqual([buy("RJ45 jack"), buy("Faceplate"), buy("Patch cord")], [5, 2, 5]);
+  const dataRow = rep.conditions.find((r: any) => r.finish_tag === "DATA-1");
+  assert.equal(dataRow.ea, 3, "three markers on the plan; the parts follow the two linked runs");
+  const sumRow = rep.cable.summary.find((r: any) => r.finish_tag === "DATA-1");
+  assert.deepEqual([sumRow.pulls, sumRow.cables], [2, 5]);
+
+  await ok(client, "edit_condition", { condition: "DATA-1", multiplier: 2 });
+  const rep2 = await ok(client, "export_report", {});
+  assert.deepEqual(["RJ45 jack", "Faceplate", "Patch cord"].map((n) => rep2.materials.find((x: any) => x.name === n).qty), [10, 4, 10]);
+
+  // a non-cable condition: the row reads 0 and says why, in the reply and the report
+  await ok(client, "measure_polygon", { sheet: KEY, verts: [[100, 2000], [460, 2000], [460, 2360], [100, 2360]], condition: "VCT-1" });
+  const v = await ok(client, "edit_materials", { condition: "VCT-1", add: [{ name: "Stray jack", per: 1, basis: "cables", unit: "ea" }] });
+  assert.equal(v.computed[0].qty + 0, 0);
+  assert.match(v.computed[0].reason, /no cable setup on this condition/);
+  const vRow = (await ok(client, "export_report", {})).conditions.find((r: any) => r.finish_tag === "VCT-1");
+  assert.match(vRow.materials[0].reason, /no cable setup/);
+  // an ordinary materials edit on a condition the cable bases do not concern: the reply is unchanged
+  const plain = await ok(client, "edit_materials", { condition: "WB-1", add: [{ name: "Adhesive", per: 40, basis: "linear", unit: "tube" }] });
+  assert.equal("computed" in plain, false);
+  // undo restores the materials array; the buy list follows
+  await ok(client, "undo_last", { n: 3 });
+  assert.equal((await ok(client, "export_report", {})).materials.some((x: any) => x.name === "Stray jack"), false);
+});

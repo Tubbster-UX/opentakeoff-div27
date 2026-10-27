@@ -157,7 +157,7 @@ import { rollColorForType } from "../lib/rollgoods.js";
 import { computeRollTakeoff, seamLfByShape } from "../lib/rollTakeoff.js";
 // Division 27 cable runs (docs/design/CABLE_SETUP.md) — the pure library;
 // the canvas only holds the records, resolves them, and hands the result on.
-import { sanitizeCableRuns, computeCableTakeoff, applyCableRunCommand, mintCableRun, mintCableHold, holdRefusal, isTrCondition } from "../lib/cable.js";
+import { sanitizeCableRuns, computeCableTakeoff, applyCableRunCommand, mintCableRun, mintCableHold, holdRefusal, isTrCondition, cableQtyByShape } from "../lib/cable.js";
 // Phase 2 canvas UI — the click logic is pure (lib/cableLink.js); the panels,
 // the overlay and the readout are their own components
 import { EMPTY_LINK, linkClick, linkUndoPick, linkReadout } from "../lib/cableLink.js";
@@ -1552,11 +1552,6 @@ export default function TakeoffCanvas() {
   );
   const rollByCond = rollTakeoff.byCond;
   const rollCutsByPanel = rollTakeoff.cutsBySheet;
-  // Figured seam LF per shape — the basis a "seam_lf" materials row (weld rod,
-  // seam tape) divides against. Handed to every conditionTotals scope below so
-  // the HUD, the project roll-up, and a zone check agree with the Report on
-  // what the layout welds.
-  const seamCtx = useMemo(() => ({ seamByShape: seamLfByShape(rollByCond) }), [rollByCond]);
 
   // ── cable runs (Division 27): resolved once per change, null when no condition
   // carries a cable setup. uppFor answers the scale gate per sheet (stitches
@@ -1568,6 +1563,12 @@ export default function TakeoffCanvas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- uppFor reads scales (listed) + renderScalesRef pinned to RENDER_SCALE, the roll memo's rule; tabLabel only words a warning
     [conditions, shapes, cableRuns, scales, scaleUnconfirmed]
   );
+  // Figured seam LF per shape — the basis a "seam_lf" materials row (weld rod,
+  // seam tape) divides against — and the figured linked pulls and cables per
+  // device shape, the "pulls" / "cables" bases (a faceplate per pull, a jack
+  // per cable). Handed to every conditionTotals scope below so the HUD, the
+  // project roll-up, and a zone check agree with the Report.
+  const seamCtx = useMemo(() => ({ seamByShape: seamLfByShape(rollByCond), cableByShape: cableQtyByShape(cableTakeoff) }), [rollByCond, cableTakeoff]);
   // Phase 2 wiring: which conditions hold TR markers (the overlay names them),
   // the Link Run readout (lib/cableLink.js → lib/cable.js), and the handlers.
   const trCondIds = useMemo(() => new Set(conditions.filter(isTrCondition).map((c) => c.id)), [conditions]);

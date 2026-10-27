@@ -591,6 +591,55 @@ export function cableByCondition(summary) {
   return out;
 }
 
+// ── supporting materials (parts per cable / per pull) ────────────────────────
+
+/** The two materials bases a cable takeoff answers (lib/totals.js
+ *  conditionTotals): "cables" divides a row against the condition's linked
+ *  cables, "pulls" against its linked pulls — a jack per cable, a faceplate
+ *  or a mount per pull. Both are FIGURED from the runs, like seam_lf from the
+ *  roll layout, never measured. */
+export const CABLE_MATERIAL_BASES = Object.freeze(["cables", "pulls"]);
+export function isCableMaterialBasis(b) { return CABLE_MATERIAL_BASES.includes(b); }
+
+/** The figured pulls and cables per DEVICE SHAPE — what a materials row with
+ *  basis "cables" / "pulls" divides against. Only LINKED runs contribute
+ *  (withheld, broken, unlinked and held devices stay out, exactly as in the
+ *  Cable summary; a pending run counts like everything pending does). Each
+ *  run lands on its first device shape, so a run is one pull however many
+ *  markers name its location, and `cables` already carries cables_override.
+ *  UNMULTIPLIED: conditionTotals applies ×N like every other quantity, so a
+ *  condition's sum × N equals cableByCondition's pulls and cables. Per shape,
+ *  not per condition, so the Report's by-sheet and by-room slices split it
+ *  the way they split seam LF. Empty map without a cable takeoff.
+ *  @param {any} takeoff computeCableTakeoff() result (null → empty)
+ *  @returns {Map<string, { pulls: number, cables: number }>} */
+export function cableQtyByShape(takeoff) {
+  const out = new Map();
+  for (const r of takeoff?.resolved?.runs || []) {
+    if (r.status !== "linked") continue;
+    const id = (r.device_shape_ids || [])[0];
+    if (!id) continue;
+    const cur = out.get(id) || { pulls: 0, cables: 0 };
+    cur.pulls += 1;
+    cur.cables += Number(r.cables) || 0;
+    out.set(id, cur);
+  }
+  return out;
+}
+
+/** Why a "cables" / "pulls" materials row reads 0, or null when it does not.
+ *  The same honesty rule as a seam_lf row with no roll layout: nothing has
+ *  figured that quantity yet, so the row says so instead of guessing.
+ *  @param {any} cond the condition
+ *  @param {number} basisVal the figured cables or pulls (this slice)
+ *  @param {boolean} figured whether the caller handed in a cable takeoff at all */
+export function cableMaterialReason(cond, basisVal, figured = true) {
+  if (basisVal > 0) return null;
+  if (!hasCableSetup(cond)) return "no cable setup on this condition — per cable and per pull read 0";
+  if (!figured) return "cable runs are not figured in this view";
+  return "no linked cable run — 0 until a run links this condition's devices";
+}
+
 /** The whole cable takeoff, figured once: conditions + shapes + runs → what
  *  every surface reads. `null` when no condition carries a cable setup, so a
  *  project that never used the feature pays nothing and exports byte-identically. */

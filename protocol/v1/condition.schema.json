@@ -57,7 +57,8 @@
             "type": "number"
           },
           "basis": {
-            "type": "string"
+            "type": "string",
+            "description": "Which of the condition's totals the row divides by per. Writers emit area (the default when absent), linear, count, seam_lf (the figured roll-layout seam length), cables or pulls (the condition's linked cables and pulls from its cable runs, for a condition with a cable_setup; ×N applied, unlinked and held devices excluded). seam_lf, cables and pulls are figured, not measured, and read 0 without a roll_setup or a linked run. The engine reads any other value as area."
           },
           "unit": {
             "type": "string"

@@ -203,7 +203,12 @@ Fifty-two tools, in the order an agent tends to reach for them:
   unlinked. A run over 295 ft per cable (TIA-568 copper) is flagged and warned, and a route on an
   agent-set scale no person confirmed is flagged. `takeoff_summary` and
   `export_report` carry a `cable` block whenever a cable condition exists; agent-linked runs
-  land pending and count exactly as pending agent shapes do
+  land pending and count exactly as pending agent shapes do. Parts that follow the runs go in
+  `edit_materials` on the device condition with `basis: "cables"` (a jack or patch cord per
+  cable → `per: 1`) or `basis: "pulls"` (a faceplate or mount per location → `per: 1`): the
+  condition's linked cables and pulls, ×N applied, unlinked and held devices excluded. Use
+  them instead of `basis: "count"` with `per` = 1 ÷ cables per location; the reply's `computed`
+  lines and `export_report`'s buy list carry the result
 - **Scope collision** (#366)—`takeoff_summary.shared_floor_sf` is the floor
   claimed by more than one shape across the takeoff (Σ areas − union, once per
   cell), the number that has to read zero before a total means anything;
