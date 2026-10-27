@@ -152,7 +152,7 @@ function issue(code: "schematic_edit_orphaned" | "schematic_edit_conflict", e: S
     code,
     message: `Schematic edit (${by}): ${describeEdit(e)}: ${why}. ${tail}`,
     ...(e.targetContext?.conditionKey ? { conditionKey: e.targetContext.conditionKey } : {}),
-    refs: { editId: e.id, targetKey: e.targetKey, kind: e.kind, editor: e.editorEmail },
+    refs: { editId: e.id, targetKey: e.targetKey, kind: e.kind, editor: e.editorEmail, reason: why },
   };
 }
 
@@ -176,6 +176,10 @@ export function applyEdits(source: SchematicFile, edits: readonly SchematicEdit[
       case "rename": {
         if (!node) {
           issues.push(issue("schematic_edit_orphaned", e, `${e.targetKey} is not in this import`));
+          continue;
+        }
+        if (node.type !== "device" && node.type !== "room") {
+          issues.push(issue("schematic_edit_conflict", e, `a ${node.type} has no name to change`));
           continue;
         }
         (node.data as { label: string }).label = String(p.label);

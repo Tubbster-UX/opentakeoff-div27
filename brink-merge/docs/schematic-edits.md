@@ -74,7 +74,7 @@ On every import (CLI `--db`, MCP `import_takeoff`, and the re-merge `map_conditi
 
 Either warning:
 - names the editor, the date, what the edit did (using the stored `target_context`, since the target may be gone) and why it was not applied
-- carries `refs: { editId, targetKey, kind, editor }`
+- carries `refs: { editId, targetKey, kind, editor, reason }`
 - is stored in `brink_issues` for that import and appears on the BOM as an issue line, so it shows in the app's BOM & Issues tab
 - counts toward the import's warnings (the CLI exits 0 unless `--strict`)
 

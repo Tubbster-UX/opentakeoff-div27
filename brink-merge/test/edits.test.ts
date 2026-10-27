@@ -107,6 +107,8 @@ describe("applyEdits", () => {
     expect(parseEditInput({ kind: "rename", target: "a", payload: { label: "" } })).toMatch(/label/);
     expect(parseEditInput({ kind: "property", target: "a", payload: {} })).toMatch(/kind must be/);
     expect(parseEditInput({ kind: "drop table", target: "a" })).toMatch(/kind must be/);
+    // the issues note has text, not a name
+    expect(codes(applyEdits(file, [edit(parseEditInput({ kind: "rename", target: "note-brink", payload: { label: "x" } }))]).issues)).toEqual(["schematic_edit_conflict"]);
     expect(parseEditInput({ kind: "connect", payload: { source: "a", target: "a", sourceHandle: null, targetHandle: null, signalType: "ethernet" } })).toMatch(/two different/);
     expect(parseEditInput({ kind: "move", target: "a", payload: { x: 1, y: 2, parent: null, evil: true } })).toEqual({ kind: "move", target: "a", payload: { x: 1, y: 2, parent: null } });
     const ctx = targetContext(file, parseEditInput({ kind: "rename", target: dev.id, payload: { label: "x" } }) as EditInput);
