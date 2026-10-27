@@ -7,6 +7,8 @@
 //     "<n.n> ft" format) and the OT cable_type as the line label
 //   - room nodes from the shapes' labels; a simple grid layout (no plan
 //     coordinates: real placement is Stage 1b)
+//   - node and edge ids derived from OpenTakeoff's shape and run ids (ids.ts),
+//     so the schematic edit layer (edits.ts) finds the same element after a re-import
 // Devices that cannot be drawn (unmapped, invalid) are listed in a note node
 // and in the issues; devices with no linked run are placed with no cable.
 import type { CableRun } from "./cable.js";
@@ -14,6 +16,7 @@ import type { CatalogRow, ResolvedMapping } from "./catalog.js";
 import type { Issues } from "./issues.js";
 import type { OtCondition, OtTakeoff } from "./ot/types.js";
 import type { ConditionRollup } from "./rollup.js";
+import { cableEdgeId, deviceNodeId, NOTE_NODE_ID, roomNodeId, trNodeId } from "./ids.js";
 import { CURRENT_SCHEMA_VERSION, ES_SOURCE_COMMIT } from "./vendor/esEnums.generated.js";
 import type { ConnectionEdge, DeviceNode, DeviceTemplate, NoteNode, Port, RoomNode, SchematicFile, SignalType, ConnectorType } from "./vendor/esTypes.js";
 
@@ -109,7 +112,6 @@ export function buildSchematic(opts: {
   const notDrawn: Record<string, number> = {};
   const placed: PlacedDevice[] = [];
   const nodeByShapeCopy = new Map<string, DeviceNode>();
-  let seq = 0;
 
   // Devices: one node per counted unit and copy.
   for (const shape of takeoff.shapes) {
@@ -129,10 +131,9 @@ export function buildSchematic(opts: {
     const tpl = templates.get(row.conditionKey)!;
     const copies = Math.round(roll.multiplier);
     for (let copy = 1; copy <= copies; copy++) {
-      seq++;
       const n = (deviceCounts[row.conditionKey] = (deviceCounts[row.conditionKey] ?? 0) + 1);
       const node: DeviceNode = {
-        id: `device-${seq}`,
+        id: deviceNodeId(shape.id, copy),
         type: "device",
         position: { x: 0, y: 0 },
         data: {
@@ -179,10 +180,9 @@ export function buildSchematic(opts: {
     const ports = cablesAtTr.get(shape.id) ?? 0;
     if (!templates.has(row.conditionKey)) templates.set(row.conditionKey, templateFor(row, 24));
     const tpl = templates.get(row.conditionKey)!;
-    seq++;
     const trName = shape.label || shape.id;
     const node: DeviceNode = {
-      id: `device-${seq}`,
+      id: trNodeId(shape.id),
       type: "device",
       position: { x: 0, y: 0 },
       data: {
@@ -217,7 +217,7 @@ export function buildSchematic(opts: {
       for (let k = 1; k <= r.cables; k++) {
         const panelPort = `p${panel.next++}`;
         edges.push({
-          id: `edge-${r.runId.replace(/^run-/, "").slice(0, 8)}-${copy}-${k}`,
+          id: cableEdgeId(r.runId, copy, k),
           source: dev.id,
           sourceHandle: fieldHandle(row, `p${k}`, "source"),
           target: panel.node.id,
@@ -261,7 +261,7 @@ export function buildSchematic(opts: {
       cursorY += rowH + ROOM_GAP;
       rowH = 0;
     }
-    const id = `room-${i + 1}`;
+    const id = roomNodeId(key);
     rooms.push({ id, type: "room", position: { x: cursorX, y: cursorY }, data: { label: key }, style: { width: w, height: h }, width: w, height: h, zIndex: -1 });
     list.forEach((p, j) => {
       p.node.parentId = id;
@@ -312,5 +312,5 @@ function noteNode(opts: { issues: Issues; takeoff: OtTakeoff }, notDrawn: Record
     ...warnings.slice(0, 12).map((i) => `<div>warning ${esc(i.code)}: ${esc(i.message)}</div>`),
     ...(errors.length + warnings.length > 24 ? [`<div>... the full list is in bom.json / bom.csv</div>`] : []),
   ];
-  return { id: "note-brink", type: "note", position: { x: 0, y }, data: { html: lines.join("") }, style: { width: 640, height: 420 }, width: 640, height: 420 };
+  return { id: NOTE_NODE_ID, type: "note", position: { x: 0, y }, data: { html: lines.join("") }, style: { width: 640, height: 420 }, width: 640, height: 420 };
 }

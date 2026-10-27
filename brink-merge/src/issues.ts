@@ -25,7 +25,10 @@ export type IssueCode =
   | "over_length"
   | "review_pending"
   | "ot_warning"
-  | "schematic_invalid";
+  | "schematic_invalid"
+  // The schematic edit layer (edits.ts): a person's edit that this import cannot carry.
+  | "schematic_edit_orphaned"
+  | "schematic_edit_conflict";
 
 export interface Issue {
   severity: Severity;

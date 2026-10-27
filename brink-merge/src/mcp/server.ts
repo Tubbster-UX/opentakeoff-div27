@@ -13,11 +13,11 @@ import { bomToCsv } from "../bom.js";
 import { catalogRowSchema, loadCatalogMap, rowEnumProblems, type CatalogRow } from "../catalog.js";
 import { migrate, type Db } from "../db/db.js";
 import {
-  currentImport, listProjects, loadBomLines, loadCatalog, loadImportInput, loadIssues, renderSchematic, saveMerge, seedCatalog, upsertCatalogRow, type ImportSummary,
+  currentImport, listProjects, loadActiveEditsByName, loadBomLines, loadCatalog, loadImportInput, loadIssues, renderSchematic, saveMerge, seedCatalog, upsertCatalogRow, type ImportSummary,
 } from "../db/repository.js";
 import type { Issue } from "../issues.js";
 import { loadInput, type LoadedInput } from "../load.js";
-import { merge, type MergeResult } from "../pipeline.js";
+import { merge, projectNameFor, type MergeResult } from "../pipeline.js";
 import { CURRENT_SCHEMA_VERSION } from "../vendor/esEnums.generated.js";
 
 export const DEFAULT_MAP = new URL("../../data/catalog-map.json", import.meta.url).pathname;
@@ -50,7 +50,9 @@ export async function prepare(state: BrinkState, mapPath = DEFAULT_MAP): Promise
 
 async function runMerge(state: BrinkState, input: LoadedInput, project?: string): Promise<{ result: MergeResult; saved: ImportSummary }> {
   const map = await loadCatalog(state.db);
-  const result = merge(input, map, { project });
+  // People's schematic edits survive: the project's edit layer is re-applied to the new import.
+  const edits = await loadActiveEditsByName(state.db, projectNameFor(input, project));
+  const result = merge(input, map, { project, edits });
   const saved = await saveMerge(state.db, input, result);
   return { result, saved };
 }
@@ -63,6 +65,7 @@ function summarize(result: MergeResult, saved: ImportSummary) {
     totals: t,
     devices_by_condition: result.schematic.deviceCounts,
     connections: result.schematic.file.edges.length,
+    schematic_edits: { applied: result.editsApplied.length, not_applied: result.issues.filter((i) => i.code === "schematic_edit_orphaned" || i.code === "schematic_edit_conflict").length },
     unmapped: result.mapping.unmapped,
     ...issueCounts(result.issues),
     issues: result.issues.map((i) => `${i.severity} [${i.code}] ${i.message}`),
@@ -189,7 +192,7 @@ export function buildServer(state: BrinkState): McpServer {
   }));
 
   server.registerTool("get_schematic", {
-    description: "A compact view of the current import's EasySchematic schematic: rooms with their devices, connections with measured cable lengths, and templates. export_schematic writes the full file.",
+    description: "A compact view of the current import's EasySchematic schematic, with the edits people made in the Brink app applied: rooms with their devices, connections with measured cable lengths, and templates. export_schematic writes the full file.",
     inputSchema: { project: z.string() },
   }, run(async ({ project }: { project: string }) => {
     const cur = await requireImport(state, project);
@@ -203,7 +206,7 @@ export function buildServer(state: BrinkState): McpServer {
   }));
 
   server.registerTool("export_schematic", {
-    description: "Render the current import's schematic from the database and write it as an EasySchematic project file (open it with EasySchematic's Load). Give the user the path.",
+    description: "Render the current import's schematic from the database (generated rows plus the edits people made in the Brink app) and write it as an EasySchematic project file (open it with EasySchematic's Load). Give the user the path.",
     inputSchema: { project: z.string(), path: z.string() },
   }, run(async ({ project, path }: { project: string; path: string }) => {
     const cur = await requireImport(state, project);

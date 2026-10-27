@@ -39,7 +39,7 @@ describe("brink MCP server (headless)", () => {
   it("imports an OpenTakeoff export pair and reports totals and issues", async () => {
     const r = await call("import_takeoff", { takeoff_path: fixture("div27-sample.takeoff.json"), report_path: fixture("div27-sample.report.json") });
     expect(r.isError).toBeFalsy();
-    expect(r.structuredContent).toMatchObject({ project: PROJECT, totals: { devices: 16, trs: 2, cables: 23, cableNetLf: 1795.13 }, connections: 23, unmapped: [], errors: 0 });
+    expect(r.structuredContent).toMatchObject({ project: PROJECT, totals: { devices: 16, trs: 2, cables: 23, cableNetLf: 1795.13 }, connections: 23, schematic_edits: { applied: 0, not_applied: 0 }, unmapped: [], errors: 0 });
     expect(r.structuredContent!.issues.some((i: string) => i.includes("over_length"))).toBe(true);
   });
 

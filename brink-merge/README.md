@@ -85,7 +85,7 @@ The repository root `.mcp.json` registers `opentakeoff` and `brink` side by side
 
 | Tool | What it does |
 |---|---|
-| `import_takeoff` | Takes an OpenTakeoff export and report. Produces the rollup, BOM and schematic, stored as the project's current import, and returns totals and every issue. |
+| `import_takeoff` | Takes an OpenTakeoff export and report. Produces the rollup, BOM and schematic, stored as the project's current import, re-applies the project's schematic edits, and returns totals and every issue. |
 | `bom` | BOM lines (issues left out) |
 | `list_issues` | Errors and warnings for the current import |
 | `catalog` | The Brink catalog map |
@@ -147,9 +147,19 @@ The schema is in `supabase/migrations/`. It is applied automatically by the CLI 
   - The OT `cable_type` is the line label.
 - **Rooms:** taken from the takeoff's shape labels; each TR gets its own room.
 - **Layout:** a plain grid. Placement at real plan coordinates is Stage 1b.
+- **Ids:** stable. They come from OpenTakeoff's shape and run ids (`dev-<shape>-<copy>`, `tr-<shape>`, `cable-<run>-<copy>-<n>`, `room-<slug>-<hash>`), so a re-import of the same takeoff reproduces them.
 - **Issues note:** a note node lists the issues.
 
 Devices with no linked run (unlinked or held) are drawn with no cable. Devices that cannot be drawn (unmapped) are listed in the note and the issues.
+
+## Schematic edits survive re-imports
+
+People edit the schematic in the Brink app (`dashboard/`). Their moves, renames, room changes and connections are stored as a layer in `brink_schematic_edits`, keyed by the stable ids, and never written into an import's rows.
+- Every render applies the layer: `get_schematic`, `export_schematic`, and the CLI's `--out` with `--db`.
+- Every import applies it again (CLI `--db`, `import_takeoff`, `map_condition`'s re-merge).
+- An edit whose target left the takeoff becomes a `schematic_edit_orphaned` warning on the new import. An edit that no longer fits becomes `schematic_edit_conflict`. Either way the edit is kept, and nothing else receives it.
+
+Rules and the table: [docs/schematic-edits.md](docs/schematic-edits.md).
 
 ## Tests
 
@@ -177,5 +187,3 @@ node scripts/es-open-check.mjs --es /path/to/EasySchematic --file job.schematic.
 
 - Real-coordinate placement (1b)
 - Portal push (`portalSku` is reserved)
-- Live mirroring into an EasySchematic tab
-- The combined dashboard website

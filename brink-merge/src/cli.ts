@@ -8,9 +8,10 @@ import { parseArgs } from "node:util";
 import { bomToCsv } from "./bom.js";
 import { loadCatalogMap, parseCatalogMap } from "./catalog.js";
 import { migrate, openDb } from "./db/db.js";
-import { loadCatalog, saveMerge, seedCatalog } from "./db/repository.js";
+import { loadActiveEditsByName, loadCatalog, saveMerge, seedCatalog } from "./db/repository.js";
+import type { SchematicEdit } from "./edits.js";
 import { loadInput } from "./load.js";
-import { merge } from "./pipeline.js";
+import { merge, projectNameFor } from "./pipeline.js";
 
 const USAGE = `usage: brink-merge <takeoff.json> --report <report.json> [--map data/catalog-map.json]
                    [--out schematic.json] [--bom bom.csv] [--bom-json bom.json]
@@ -64,15 +65,18 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   let db = null;
+  let edits: SchematicEdit[] = [];
   if (wantsDb) {
     db = await openDb({ url: v["db-url"] || null });
     await migrate(db);
     await seedCatalog(db, map); // adds rows the database lacks; never overwrites an edited row
     map = parseCatalogMap(await loadCatalog(db));
+    // The project's schematic edit layer is re-applied to the new import (docs/schematic-edits.md).
+    edits = await loadActiveEditsByName(db, projectNameFor(input, v.project));
   }
 
-  const result = merge(input, map, { project: v.project });
-  writeFileSync(v.out!, JSON.stringify(result.schematic.file, null, 2) + "\n");
+  const result = merge(input, map, { project: v.project, edits });
+  writeFileSync(v.out!, JSON.stringify(result.edited, null, 2) + "\n");
   writeFileSync(v.bom!, bomToCsv(result.bom));
   if (v["bom-json"]) writeFileSync(v["bom-json"], JSON.stringify(result.bom, null, 2) + "\n");
 
@@ -86,6 +90,7 @@ export async function main(argv: string[]): Promise<number> {
   console.log(`${result.project}: ${t.devices} devices, ${t.trs} TR(s), ${t.pulls} pulls, ${t.cables} cables, ${t.cableNetLf} LF net / ${t.cableOrderLf} LF order`);
   console.log(`wrote ${v.out} (${result.schematic.file.nodes.filter((n) => n.type === "device").length} device nodes, ${result.schematic.file.edges.length} connections), ${v.bom}${v["bom-json"] ? `, ${v["bom-json"]}` : ""}`);
   if (saved) console.log(`saved import ${saved.importId} (${db!.kind})`);
+  if (edits.length) console.log(`schematic edits: ${result.editsApplied.length} of ${edits.length} re-applied`);
   for (const i of result.issues) console.log(`${i.severity === "error" ? "ERROR" : "warning"} [${i.code}] ${i.message}`);
   console.log(`${t.errors} error(s), ${t.warnings} warning(s)`);
   return t.errors > 0 || (v.strict && t.warnings > 0) ? 1 : 0;

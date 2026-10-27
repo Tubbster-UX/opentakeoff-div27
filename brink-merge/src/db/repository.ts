@@ -2,11 +2,18 @@
 // transaction: the raw OpenTakeoff files, the BOM, the issues and the
 // schematic as rows (one per node and connection). The EasySchematic file is
 // rendered back from those rows, so the database, not a file, is the truth.
+// People's edits to the schematic are a separate layer (brink_schematic_edits)
+// applied on top of the rows when rendering; the rows stay as generated.
 import type { BomLine } from "../bom.js";
 import { catalogRowSchema, parseCatalogMap, type CatalogMap, type CatalogRow } from "../catalog.js";
 import type { Issue } from "../issues.js";
 import { parseInput, type LoadedInput } from "../load.js";
 import type { MergeResult } from "../pipeline.js";
+import {
+  ACTIVE_EDITS_SQL, applyEdits, editFromRow, INSERT_EDIT_SQL, SUPERSEDE_EDIT_SQL,
+  type ApplyResult, type EditInput, type EditRow, type SchematicEdit, type TargetContext,
+} from "../edits.js";
+import { assembleSchematic, SCHEMATIC_EDGES_SQL, SCHEMATIC_META_SQL, SCHEMATIC_NODES_SQL, type SchematicMetaRow } from "../render.js";
 import type { ConnectionEdge, SchematicFile, SchematicNode } from "../vendor/esTypes.js";
 import type { Db, Queryable } from "./db.js";
 
@@ -119,27 +126,73 @@ async function writeSchematic(tx: Queryable, importId: string, file: SchematicFi
   }
 }
 
-/** Render the EasySchematic file from rows. Positions come from the x / y columns, so an edit there is what ES opens. */
-export async function renderSchematic(db: Queryable, importId: string): Promise<SchematicFile> {
-  const meta = (await db.query<{ name: string; version: number; title_block: SchematicFile["titleBlock"]; custom_templates: SchematicFile["customTemplates"]; extra: Record<string, unknown> }>(
-    "select name, version, title_block, custom_templates, extra from brink_schematics where import_id = $1", [importId],
-  )).rows[0];
+/** The generated schematic of an import, from its rows (no edits). */
+export async function renderGenerated(db: Queryable, importId: string): Promise<SchematicFile> {
+  const meta = (await db.query<SchematicMetaRow>(SCHEMATIC_META_SQL, [importId])).rows[0];
   if (!meta) throw new Error(`no schematic for import ${importId}`);
-  const nodes = (await db.query<{ node: SchematicNode; x: number; y: number }>(
-    "select node, x, y from brink_schematic_nodes where import_id = $1 order by seq", [importId],
-  )).rows.map((r) => ({ ...r.node, position: { x: Number(r.x), y: Number(r.y) } }) as SchematicNode);
-  const edges = (await db.query<{ edge: ConnectionEdge }>(
-    "select edge from brink_schematic_connections where import_id = $1 order by seq", [importId],
-  )).rows.map((r) => r.edge);
-  return {
-    ...meta.extra,
-    version: meta.version,
-    name: meta.name,
-    nodes,
-    edges,
-    customTemplates: meta.custom_templates ?? [],
-    ...(meta.title_block ? { titleBlock: meta.title_block } : {}),
-  };
+  const nodes = (await db.query<{ node: SchematicNode; x: number; y: number }>(SCHEMATIC_NODES_SQL, [importId])).rows;
+  const edges = (await db.query<{ edge: ConnectionEdge }>(SCHEMATIC_EDGES_SQL, [importId])).rows;
+  return assembleSchematic(meta, nodes, edges);
+}
+
+/** An import's schematic as people see it: its rows with the project's active edit layer applied, and the edits it cannot carry. */
+export async function renderEdited(db: Queryable, importId: string): Promise<ApplyResult & { edits: SchematicEdit[] }> {
+  const imp = (await db.query<{ project_id: string }>("select project_id from brink_imports where id = $1", [importId])).rows[0];
+  if (!imp) throw new Error(`no import ${importId}`);
+  const edits = await loadActiveEdits(db, imp.project_id);
+  return { ...applyEdits(await renderGenerated(db, importId), edits), edits };
+}
+
+/**
+ * Render the EasySchematic file from rows. Positions come from the x / y columns, so an edit there is what ES opens.
+ * The project's schematic edit layer is applied unless `edits: false`.
+ */
+export async function renderSchematic(db: Queryable, importId: string, opts: { edits?: boolean } = {}): Promise<SchematicFile> {
+  if (opts.edits === false) return renderGenerated(db, importId);
+  return (await renderEdited(db, importId)).file;
+}
+
+// ---------------------------------------------------------------------------
+// The schematic edit layer (edits.ts, docs/schematic-edits.md).
+
+/** A project's active edits (neither superseded nor reverted), oldest first. */
+export async function loadActiveEdits(db: Queryable, projectId: string): Promise<SchematicEdit[]> {
+  return (await db.query<EditRow>(ACTIVE_EDITS_SQL, [projectId])).rows.map(editFromRow);
+}
+
+/** The active edits of the project named `project`; none when there is no such project yet. */
+export async function loadActiveEditsByName(db: Queryable, project: string): Promise<SchematicEdit[]> {
+  const p = (await db.query<{ id: string }>("select id from brink_projects where name = $1", [project])).rows[0];
+  return p ? loadActiveEdits(db, p.id) : [];
+}
+
+export interface RecordedEdit extends SchematicEdit {
+  editorAuth: string;
+  clientRef: string | null;
+  baseImportId: string | null;
+  /** The edit this one superseded, if any. */
+  superseded: string | null;
+}
+
+/**
+ * Append one edit, superseding the active edit of the same (target, kind). One transaction.
+ * The app's Worker writes through the same SQL (edits.ts); this is for brink-merge processes and tests.
+ */
+export async function recordEdit(db: Db, e: { projectId: string; input: EditInput; editorEmail: string; editorAuth?: "brink-merge" | "dev-bypass" | "cloudflare-access"; clientRef?: string | null; baseImportId?: string | null; context?: TargetContext | null }): Promise<RecordedEdit> {
+  return db.transaction(async (tx) => {
+    const id = (await tx.query<{ id: string }>("select gen_random_uuid()::text as id")).rows[0]!.id;
+    const old = (await tx.query<{ id: string }>(SUPERSEDE_EDIT_SQL, [e.projectId, e.input.target, e.input.kind, id])).rows[0];
+    const row = (await tx.query<EditRow & { editor_auth: string; client_ref: string | null; base_import_id: string | null }>(INSERT_EDIT_SQL, [
+      id, e.projectId, e.input.target, e.input.kind, json(e.input.payload), json(e.context ?? null), e.editorEmail, e.editorAuth ?? "brink-merge", e.clientRef ?? null, e.baseImportId ?? null,
+    ])).rows[0]!;
+    return { ...editFromRow(row), editorAuth: row.editor_auth, clientRef: row.client_ref, baseImportId: row.base_import_id, superseded: old?.id ?? null };
+  });
+}
+
+/** Revert an active edit. Returns false when it was not active (already reverted or superseded). */
+export async function revertEdit(db: Queryable, editId: string, by: string): Promise<boolean> {
+  const r = await db.query("update brink_schematic_edits set reverted_at = now(), reverted_by = $2 where id = $1 and superseded_at is null and reverted_at is null returning id", [editId, by]);
+  return r.rows.length > 0;
 }
 
 export async function currentImport(db: Queryable, project: string): Promise<ImportSummary | null> {
