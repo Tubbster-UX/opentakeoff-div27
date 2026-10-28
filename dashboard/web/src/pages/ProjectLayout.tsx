@@ -1,10 +1,12 @@
-// /projects/:id: the project header and its tabs. One ProjectStore (snapshot +
-// live socket) per project, created here and shared with every tab through
-// context, so switching tabs keeps the connection and the data.
+// /projects/:id: one ProjectStore (snapshot + live socket) per project, created
+// here and shared with every tab through context, so switching tabs keeps the
+// connection and the data. The project's name, switcher and tabs live in the one
+// app header (components/Shell.tsx); this sets what it shows.
 import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useParams } from "react-router";
-import { Notice } from "../components/ui.js";
+import { Link, Outlet, useNavigate, useParams } from "react-router";
+import { Loading, Notice } from "../components/ui.js";
 import { str, when } from "../lib/format.js";
+import { setChrome } from "../lib/chrome.js";
 import { ProjectStoreContext, useProject } from "../lib/projectContext.js";
 import { ProjectStore } from "../lib/projectStore.js";
 import { PROJECT_TABS } from "../workspaces.js";
@@ -26,6 +28,8 @@ export function ProjectLayout() {
     };
   }, [id]);
 
+  useEffect(() => () => setChrome({ project: null }), []);
+
   if (!UUID.test(id)) return <Notice tone="error">Not a project id.</Notice>;
   if (!store) return null;
   return (
@@ -35,11 +39,38 @@ export function ProjectLayout() {
   );
 }
 
+/** The import line shown under page titles and in the switcher's tooltip. */
+export function importLine(imp: Record<string, unknown> | null | undefined): string {
+  return imp ? `import ${str(imp.id)} · imported ${when(imp.imported_at)} · ${str(imp.ot_schema)} · EasySchematic v${str(imp.es_schema_version)}` : "no current import";
+}
+
 function ProjectFrame() {
   const { snap, notFound, error } = useProject();
+  const navigate = useNavigate();
+  const id = snap ? str(snap.project.id) : "";
+  const name = snap ? str(snap.project.name) : "";
+  const line = importLine(snap?.import);
+
   useEffect(() => {
-    if (snap) document.title = `${str(snap.project.name)} · Brink`;
-  }, [snap?.project.name]);
+    if (!snap) return;
+    document.title = `${name} · Brink Design`;
+    setChrome({ project: { id, name, importLine: line } });
+  }, [id, name, line, snap]);
+
+  // Alt+1 / Alt+2 / Alt+3 switch tabs. Alt is used by no EasySchematic shortcut.
+  useEffect(() => {
+    if (!id) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey) return;
+      const n = Number(e.code.replace("Digit", "")) - 1;
+      const tab = PROJECT_TABS[n];
+      if (!tab || !/^Digit\d$/.test(e.code)) return;
+      e.preventDefault();
+      navigate(`/projects/${id}/${tab.path}`);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [id, navigate]);
 
   if (notFound)
     return (
@@ -47,42 +78,12 @@ function ProjectFrame() {
         No such project. <Link to="/">All projects</Link>
       </Notice>
     );
-  if (!snap) return error ? <Notice tone="error">{error}</Notice> : <p className="text-muted">Loading project…</p>;
+  if (!snap) return error ? <Notice tone="error">{error}</Notice> : <Loading>Loading project…</Loading>;
 
-  const imp = snap.import;
   return (
     <>
-      <nav className="text-xs">
-        <Link to="/">Projects</Link> <span className="text-muted">/</span>
-      </nav>
-      <h1 className="mt-1 mb-0.5 text-xl font-semibold">{str(snap.project.name)}</h1>
-      <div className="meta font-mono text-xs text-muted [overflow-wrap:anywhere]">
-        {imp
-          ? `import ${str(imp.id)} · imported ${when(imp.imported_at)} · ${str(imp.ot_schema)} · EasySchematic v${str(imp.es_schema_version)}`
-          : "no current import"}
-      </div>
       {error && <Notice tone="error">{error}</Notice>}
-      <div className="table-scroll mt-3 border-b border-line" role="tablist" aria-label="Project views">
-        <div className="flex min-w-max gap-1">
-          {PROJECT_TABS.map((t) => (
-            <NavLink
-              key={t.path}
-              to={t.path}
-              role="tab"
-              data-tab={t.path}
-              className={({ isActive }) =>
-                `-mb-px whitespace-nowrap border-b-2 px-2.5 py-2 sm:px-3 text-sm font-semibold no-underline ${isActive ? "border-accent text-ink" : "border-transparent text-muted hover:text-ink"}`
-              }
-            >
-              {t.label}
-              {t.phase && <span className="ml-1.5 font-mono text-[10px] font-normal text-muted">{t.phase}</span>}
-            </NavLink>
-          ))}
-        </div>
-      </div>
-      <div className="pt-3.5">
-        <Outlet />
-      </div>
+      <Outlet />
     </>
   );
 }

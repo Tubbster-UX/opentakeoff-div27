@@ -1,17 +1,26 @@
 // Brink app: one site per brink-merge project, live. The Schematic tab edits (Phase 2); everything else reads.
 //   /                         Projects
 //   /projects/:id/takeoff     OpenTakeoff canvas (Phase 3 placeholder)
-//   /projects/:id/schematic   EasySchematic editor (the edit layer) + the generated rows outline
+//   /projects/:id/schematic   EasySchematic editor, mounted in the app (the edit layer)
 //   /projects/:id/bom         BOM & Issues (live)
+//   /design                   The Brink design system's kitchen sink (for review)
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, Navigate, RouterProvider, useParams } from "react-router";
 import { Shell } from "./components/Shell.js";
 import { Notice } from "./components/ui.js";
+import "./design/theme.js";
+import favicon from "../public/brand/Logo Transparent Black@2x.png";
+import { DesignPage } from "./pages/DesignPage.js";
 import { ProjectLayout } from "./pages/ProjectLayout.js";
 import { ProjectsPage } from "./pages/ProjectsPage.js";
 import { DEFAULT_TAB, PROJECT_TABS } from "./workspaces.js";
 import "./app.css";
+
+const icon = document.createElement("link");
+icon.rel = "icon";
+icon.href = favicon;
+document.head.appendChild(icon);
 
 /** The first dashboard's links were /p/:id. */
 function LegacyProjectLink() {
@@ -29,6 +38,7 @@ const router = createBrowserRouter([
         element: <ProjectLayout />,
         children: [{ index: true, element: <Navigate to={DEFAULT_TAB} replace /> }, ...PROJECT_TABS.map((t) => ({ path: t.path, element: <t.Component /> }))],
       },
+      { path: "design", element: <DesignPage /> },
       { path: "p/:id", element: <LegacyProjectLink /> },
       { path: "*", element: <Notice tone="error">Page not found.</Notice> },
     ],

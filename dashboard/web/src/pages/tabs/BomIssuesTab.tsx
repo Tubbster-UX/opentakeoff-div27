@@ -4,7 +4,8 @@
 import type { ReactNode } from "react";
 import { rowKey, type Row, type TableName } from "../../../../src/shared/protocol.js";
 import { summarize } from "../../../../src/shared/state.js";
-import { DataTable, Panel, Stat, Stats, Tag } from "../../components/ui.js";
+import { DataTable, Page, Panel, Stat, Stats, Tag } from "../../components/ui.js";
+import { importLine } from "../ProjectLayout.js";
 import { fmt, short, str, when } from "../../lib/format.js";
 import { useProject } from "../../lib/projectContext.js";
 
@@ -37,7 +38,7 @@ export function BomIssuesTab() {
   };
 
   return (
-    <>
+    <Page title="BOM & Issues" meta={importLine(snap.import)}>
       <Stats>
         <Stat k="BOM lines" v={fmt(sum.bomLines)} />
         <Stat k="Devices" v={fmt(sum.bom.devices)} />
@@ -94,7 +95,7 @@ export function BomIssuesTab() {
         />
       </Panel>
 
-      <div className="grid grid-cols-1 gap-x-3.5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-x-4 lg:grid-cols-2">
         <Panel title="Rooms" count={rooms.length}>
           <DataTable
             columns={[{ label: "Room" }, { label: "Devices", numeric: true }, { label: "Cable LF", numeric: true }]}
@@ -149,7 +150,7 @@ export function BomIssuesTab() {
       </Panel>
 
       <Panel title="Live changes" count={`read ${when(snap.readAt)}`}>
-        <ul id="feed" className="m-0 list-none px-3 py-1.5 font-mono text-xs text-muted">
+        <ul id="feed" className="m-0 list-none px-4 py-2 font-num text-xs text-ink-3">
           {feed.length ? (
             feed.map((f) => (
               <li key={f.id} className="py-0.5 [overflow-wrap:anywhere]">
@@ -161,6 +162,6 @@ export function BomIssuesTab() {
           )}
         </ul>
       </Panel>
-    </>
+    </Page>
   );
 }
