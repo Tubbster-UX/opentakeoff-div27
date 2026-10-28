@@ -10,15 +10,15 @@ interface Props {
 export default function LoginDialog({ open, onClose }: Props) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={onClose}>
+    <div className="bk fixed inset-0 z-50 flex items-center justify-center bg-[var(--bk-scrim)]" onClick={onClose}>
       <div
-        className="bg-white border border-[var(--color-border)] rounded-lg shadow-2xl w-[360px] p-5 text-sm text-[var(--color-text)]"
+        className="w-[360px] rounded-dialog border border-line bg-panel p-5 text-sm text-ink shadow-lg"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label="Not available in the Brink app"
       >
-        <p className="m-0 mb-3">EasySchematic accounts, cloud saves and community submissions are not used in the Brink app. The project&apos;s schematic saves to Brink&apos;s database as you edit.</p>
-        <button type="button" className="px-3 py-1.5 rounded bg-[var(--color-surface-hover)] cursor-pointer" onClick={onClose}>
+        <p className="m-0 mb-3">We don&apos;t use EasySchematic accounts, cloud saves or community submissions here. Your changes save to the project in our database as you work.</p>
+        <button type="button" className="bk-focus cursor-pointer rounded-ctl border border-line-strong bg-panel px-3 py-1.5 text-ink hover:bg-hover" onClick={onClose}>
           Close
         </button>
       </div>

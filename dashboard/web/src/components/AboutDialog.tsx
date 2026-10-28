@@ -16,11 +16,11 @@ export function AboutDialog() {
   return (
     <div className="space-y-4 [&_p]:m-0" data-about>
       <p>
-        <strong>Brink Design</strong> internal project app: plan takeoff, schematic and bill of materials for each project. It is free software under the{" "}
+        Our internal project app at <strong>Brink Design</strong>: plan takeoff, schematic and bill of materials for each project. It is free software under the{" "}
         <strong>GNU Affero General Public License v3.0</strong> (AGPL-3.0-only), the license of the repository it is built from.
       </p>
       <section className="rounded-panel border border-line">
-        <h3 className="m-0 border-b border-line px-3 py-2 text-sm font-semibold">Includes</h3>
+        <h3 className="bk-label m-0 border-b border-line px-3 py-2 text-ink-3">Includes</h3>
         <ul className="m-0 list-none divide-y divide-line p-0">
           <li className="px-3 py-2.5">
             <div className="flex flex-wrap items-center gap-2">
@@ -54,7 +54,7 @@ export function AboutDialog() {
         </ul>
       </section>
       <section>
-        <h3 className="m-0 mb-1 text-sm font-semibold">Source code</h3>
+        <h3 className="bk-label m-0 mb-1 text-ink-3">Source code</h3>
         <p className="text-xs text-ink-2">
           Under the AGPL, everyone who uses this app over a network may get its complete source code. Source offer: <span className="font-num" data-source-offer>{SOURCE_OFFER}</span>
         </p>

@@ -38,7 +38,7 @@ export function BomIssuesTab() {
   };
 
   return (
-    <Page title="BOM & Issues" meta={importLine(snap.import)}>
+    <Page title="BOM & issues" meta={importLine(snap.import)}>
       <Stats>
         <Stat k="BOM lines" v={fmt(sum.bomLines)} />
         <Stat k="Devices" v={fmt(sum.bom.devices)} />
@@ -154,7 +154,7 @@ export function BomIssuesTab() {
           {feed.length ? (
             feed.map((f) => (
               <li key={f.id} className="py-0.5 [overflow-wrap:anywhere]">
-                <b className="font-semibold text-ink">{f.at}</b> {f.text}
+                <b className="font-bold text-ink">{f.at}</b> {f.text}
               </li>
             ))
           ) : (

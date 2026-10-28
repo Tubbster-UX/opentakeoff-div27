@@ -14,6 +14,12 @@
  * names 'Inter' in its global CSS and in inline styles / SVG attributes on canvas nodes,
  * edges and page overlays; the rules at the end re-point those at --font-ui.
  *
+ * Voice: the lightning bolt and the emoji upstream prints in its chrome (the auto-route chip,
+ * the USB-C power badge, page tabs) are hidden by "Brink Hidden Glyphs", a tiny font whose
+ * only glyphs are empty (scripts/make-hidden-glyphs-font.py), listed first with a
+ * unicode-range so it covers those code points only. The two page-tab "add" buttons get
+ * Brink outline icons instead.
+ *
  * Left alone on purpose:
  *   - signal colours (--color-sdi, --color-hdmi...) and power phase colours: they are
  *     data (what a cable carries), not decoration;
@@ -21,9 +27,15 @@
  *     colours there on the capture element itself, which wins over these inherited values,
  *     so exported PNG / SVG / PDF files look exactly as upstream's do.
  */
+@font-face {
+  font-family: "Brink Hidden Glyphs";
+  src: url(data:font/ttf;base64,AAEAAAAKAIAAAwAgT1MvMquBS5sAAAEoAAAAYGNtYXDVp20/AAABlAAAAIRnbHlmAAAAAAAAAiQAAAABaGVhZC0lstQAAACsAAAANmhoZWEDIf86AAAA5AAAACRobXR4AAAAAAAAAYgAAAAMbG9jYQAAAAAAAAIYAAAADG1heHAABgACAAABCAAAACBuYW1lcfp25AAAAigAAACEcG9zdNx0/jUAAAKsAAAAVgABAAAAAQAApcza6F8PPPUAAwPoAAAAAOcHuPoAAAAA5we4+gAAAAAAAAAAAAAAAwACAAAAAAAAAAEAAAMg/zgAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAEAAAAFAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAwAAAZAABQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgBAAAgAAAAAAAAAPz8/PwAAJqH//wMg/zgAAAMgAMgAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAADAAAAAwAAABwAAwABAAAAHAADAAoAAABEAAQAKAAAAAYABAABAAImof4P//8AACah/g///9lgAfUAAQAAAAAAAAAMAAAAAABAAAAAAAAAAAQAACahAAAmoQAAAAEAAP4PAAD+DwAAAAQAAfTEAAH0xAAAAAIAAfUMAAH1DAAAAAMAAAAAAAAAAAAAAAAAAAAAAAAABAA2AAEAAAAAAAEAEwAAAAEAAAAAAAIABwATAAMAAQQJAAEAJgAaAAMAAQQJAAIADgBAQnJpbmsgSGlkZGVuIEdseXBoc1JlZ3VsYXIAQgByAGkAbgBrACAASABpAGQAZABlAG4AIABHAGwAeQBwAGgAcwBSAGUAZwB1AGwAYQByAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABQAAAQIBAwEEAQUJYmxhbmsyNkExCmJsYW5rMUY0QzQKYmxhbmsxRjUwQwlibGFua0ZFMEYAAA==) format("truetype");
+  unicode-range: U+26A1, U+1F4C4, U+1F50C, U+FE0F;
+}
+
 @media screen {
   .bk-es {
-    --bk-es-font: var(--font-ui);
+    --bk-es-font: "Brink Hidden Glyphs", var(--font-ui);
     --color-bg: var(--bk-paper);
     --color-surface: var(--bk-surface-2);
     --color-surface-hover: var(--bk-hover);
@@ -44,8 +56,22 @@
     --color-blue-700: var(--bk-accent-fill-hover);
     --color-blue-800: var(--bk-accent-fill-hover);
     --color-blue-900: var(--bk-accent-fill-hover);
+    --color-sky-50: color-mix(in srgb, var(--bk-accent) 6%, var(--bk-surface));
+    --color-sky-100: color-mix(in srgb, var(--bk-accent) 12%, var(--bk-surface));
+    --color-sky-200: color-mix(in srgb, var(--bk-accent) 24%, var(--bk-surface));
+    --color-sky-300: color-mix(in srgb, var(--bk-accent) 45%, var(--bk-surface));
+    --color-sky-400: var(--bk-accent);
     --color-sky-500: var(--bk-accent);
     --color-sky-600: var(--bk-accent-fill);
+    --color-sky-700: var(--bk-accent);
+    --color-cyan-50: color-mix(in srgb, var(--bk-accent) 6%, var(--bk-surface));
+    --color-cyan-100: color-mix(in srgb, var(--bk-accent) 12%, var(--bk-surface));
+    --color-cyan-200: color-mix(in srgb, var(--bk-accent) 24%, var(--bk-surface));
+    --color-cyan-300: color-mix(in srgb, var(--bk-accent) 45%, var(--bk-surface));
+    --color-cyan-400: var(--bk-accent);
+    --color-cyan-500: var(--bk-accent);
+    --color-cyan-600: var(--bk-accent-fill);
+    --color-cyan-700: var(--bk-accent);
     --color-indigo-500: var(--bk-accent);
     --color-indigo-600: var(--bk-accent-fill);
 
@@ -288,6 +314,27 @@
   .bk-es .hover\:bg-amber-500:hover {
     background-color: var(--bk-warn-fill);
   }
+  /* The auto-route chip (upstream App.tsx): a Brink pill instead of a black one. */
+  .bk-es div.absolute.top-3.right-3.z-50.rounded-full,
+  .bk-es div.absolute.top-3.right-3.z-50 > div.rounded-full {
+    background: var(--bk-surface) !important;
+    color: var(--bk-ink-2) !important;
+    border: 1px solid var(--bk-line);
+    box-shadow: var(--bk-shadow-sm);
+    font-weight: 500;
+  }
+  .bk-es div.absolute.top-3.right-3.z-50.rounded-full:hover {
+    background: var(--bk-hover) !important;
+    color: var(--bk-ink) !important;
+  }
+  .bk-es div.absolute.top-3.right-3.z-50.rounded-full.bg-black\/20 {
+    color: var(--bk-ink-3) !important;
+  }
+  .bk-es div.absolute.top-3.right-3.z-50 > button.rounded-full {
+    background: var(--bk-surface) !important;
+    color: var(--bk-danger) !important;
+    border: 1px solid var(--bk-line);
+  }
   /* The USB-C power-shortfall badge on a cable: the Brink warning colour, not amber. */
   .bk-es div[title^="USB-C power undersupply"] {
     background: var(--bk-warn) !important;
@@ -305,6 +352,14 @@
     background: currentColor;
     -webkit-mask: var(--bk-es-add-icon) center / contain no-repeat;
     mask: var(--bk-es-add-icon) center / contain no-repeat;
+  }
+  .bk-es button[title="Add print sheet"],
+  .bk-es button[title="Add patch bay page"] {
+    color: var(--bk-ink-3) !important;
+  }
+  .bk-es button[title="Add print sheet"]:hover,
+  .bk-es button[title="Add patch bay page"]:hover {
+    color: var(--bk-ink) !important;
   }
   .bk-es button[title="Add print sheet"] {
     --bk-es-add-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 1.5h5.5L12.5 4.5v10h-8.5z'/%3E%3Cpath d='M9.5 1.5v3h3'/%3E%3C/svg%3E");

@@ -26,10 +26,10 @@ export function TakeoffTab() {
     <Page title="Takeoff" meta={importLine(imp)}>
       <Placeholder phase="Phase 3" title="OpenTakeoff plan canvas">
         <p>
-          The OpenTakeoff canvas mounts in this tab: the project&apos;s plan sheets (PDFs kept in Supabase Storage) with the Division 27 takeoff drawn over them, editable in
-          place.
+          Next, we put the OpenTakeoff canvas in this tab: the project&apos;s plan sheets (PDFs kept in Supabase Storage) with the Division 27 takeoff drawn over them, editable
+          in place.
         </p>
-        <p className="text-ink-3">It will use this design system: the same header, a Brink toolbar for the takeoff tools, and side panels for sheets and conditions. Until then, the current import&apos;s source files are below.</p>
+        <p className="text-ink-3">It uses the same header, a Brink toolbar for the takeoff tools, and side panels for sheets and conditions. Until then, the current import&apos;s source files are below.</p>
       </Placeholder>
       <Panel title="Current import source">
         {imp ? (
