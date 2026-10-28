@@ -98,7 +98,9 @@ The build swaps upstream modules for Brink ones. This is the `brink-easyschemati
 
 `web/src/design/es-theme.css`, scoped to the editor's `.bk-es` element:
 - upstream's own variables (`--color-bg`, `--color-surface`, `--color-surface-hover`, `--color-border`, `--color-text*`, `--color-canvas-origin`) point at the Brink tokens;
-- the Tailwind palette upstream's components use (`blue-*`, `gray-*`, `slate-*`, `neutral-*`, `sky-*`, `indigo-*`) points at the Brink accent and neutrals, so `bg-blue-600` is the Brink accent;
+- the Tailwind palette upstream's components use (`blue-*`, `gray-*`, `slate-*`, `neutral-*`, `sky-*`, `cyan-*`, `indigo-*`) points at the Brink accent and neutrals, so `bg-blue-600` is the Brink accent (Brink Blue); its status palettes (`red-*`, `amber-*`, `yellow-*`, `green-*`, `emerald-*`, `violet-*`, `purple-*`) point at the Brink status tones and accent, so no amber is left in its chrome;
+- its literal `'Inter'` (global CSS, inline styles and SVG `font-family` attributes on canvas nodes, edges and page overlays) is re-pointed at Roboto, the Brink typeface;
+- the Brink voice rules: its lightning bolt and emoji (the auto-route chip, the USB-C power badge, page tabs) render as nothing through "Brink Hidden Glyphs", a tiny font listed first in the editor's font stack with a `unicode-range` covering only those characters (`scripts/make-hidden-glyphs-font.py`); the auto-route chip and the USB-C badge take Brink colours; the page-tab "add" buttons get Brink outline icons through a CSS mask;
 - React Flow's controls, minimap, background and selection box take the Brink panel look;
 - upstream panels shown as Brink panel tabs have their own title row hidden (`.bk-embed`).
 

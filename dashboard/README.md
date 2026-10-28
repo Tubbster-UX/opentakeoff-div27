@@ -5,19 +5,19 @@ Internal Brink Design tool. It is never distributed and never shown to clients.
 One website for every brink-merge project. It will host both the OpenTakeoff plan canvas and the EasySchematic editor for each project.
 - **Phase 1** built the app shell: read-only and live.
 - **Phase 2** mounted the real EasySchematic editor in the Schematic tab. Edits are saved to the project's **schematic edit layer**, which survives re-imports (see [brink-merge/docs/schematic-edits.md](../brink-merge/docs/schematic-edits.md)).
-- **The cohesive app (this version)** makes it one Brink Design product: one app header, the [Brink design system](docs/design-system.md) everywhere, and the EasySchematic editor mounted directly in the Schematic tab (no frame) with a Brink toolbar and side panels. The OpenTakeoff canvas (next phase) uses the same system.
+- **The cohesive app (this version)** makes it one Brink Design product: one app header, the [Brink design system](docs/design-system.md) everywhere (applied from the Brink Design Brand Guidelines v1.0: palette, Roboto, the logo, one icon family and the voice rules), and the EasySchematic editor mounted directly in the Schematic tab (no frame) with a Brink toolbar and side panels. The OpenTakeoff canvas (next phase) uses the same system.
 
 **License.** The app includes EasySchematic, vendored in [`vendor/`](vendor/README.md) (AGPL-3.0). The app as a whole is AGPL-3.0, the license of this repository.
 
 | Route | What it shows |
 |---|---|
 | `/` **Projects** | Every project: current-import time, BOM totals (devices, cables, net / order LF), error and warning counts, and the latest Portal push when the database has `brink_portal_pushes`. Updates live. |
-| `/projects/:id/bom` **BOM & Issues** | The live view of the current import: BOM, issues, rooms, devices, connections. Changed rows flash; a re-import switches the page to the new import. |
+| `/projects/:id/bom` **BOM & issues** | The live view of the current import: BOM, issues, rooms, devices, connections. Changed rows flash; a re-import switches the page to the new import. |
 | `/projects/:id/schematic` **Schematic** | The EasySchematic editor, opened on the project's schematic (brink-merge's rows with the edit layer applied), with the Brink toolbar, device library, inspector and layers panels. Moves, renames, room changes and connections save as you work, under your Cloudflare Access email. They appear live in other open tabs, and are kept across re-imports. The read-only outline of the generated rows is the Rows panel. Exports and reports are in the header's Project menu. |
 | `/projects/:id/takeoff` **Takeoff** | Phase 3 placeholder (the OpenTakeoff canvas mounts here), plus the current import's source hashes. |
 | `/design` **Design system** | The Brink design system's kitchen sink, for review |
 
-`/projects/:id` opens the BOM & Issues tab. The first dashboard's `/p/:id` links redirect.
+`/projects/:id` opens the BOM & issues tab. The first dashboard's `/p/:id` links redirect.
 
 > **Reads are protected only by Cloudflare Access on the route.** The Worker does not check who reads, so anyone who can reach it can read every project. Do not deploy it without Cloudflare Access in front.
 >
@@ -121,8 +121,8 @@ EasySchematic adds `@xyflow/react`, `zustand`, `html-to-image` and `jspdf`, pinn
 | `web/src/main.tsx` | Routes |
 | `web/src/workspaces.ts` | The project tabs; later phases swap a placeholder for the real workspace here |
 | `web/src/es/` | The Schematic workspace: mount (`workspace.tsx`), storage, save / live sync, the Brink toolbar and panels (`brink/`), module overrides |
-| `web/src/design/` | The Brink design system: tokens (`tokens.css`), Tailwind theme, EasySchematic re-theme, components ([docs](docs/design-system.md)) |
-| `web/public/brand/` | The Brink Design logo files (placeholders until the owner's originals are copied in) |
+| `web/src/design/` | The Brink design system, from the Brink Design Brand Guidelines v1.0: tokens (`tokens.css`), Roboto, Tailwind theme, EasySchematic re-theme, components ([docs](docs/design-system.md)); `test/tokens.test.ts` checks the palette and contrast |
+| `web/public/brand/` | The Brink Design logo: the owner's master shield SVG (navy, white), the wordmark cut from it, the interim app icon ([README](web/public/brand/README.md)) |
 | `vendor/` | Vendored EasySchematic, its lock (commit + hashes), `PATCHES.md`; `scripts/sync-easyschematic.mjs` re-syncs and checks it |
 | `web/src/pages/`, `web/src/components/`, `web/src/lib/` | Pages, UI pieces, the live socket and the stores |
 | `scripts/live-check.mjs` | Real-browser end-to-end check of the shell (Playwright); writes `docs/evidence/cohesive/live-check/` |
@@ -234,7 +234,7 @@ The genuine Realtime path is covered by `npm run live-check` against local Supab
 
 Every screenshot uses invented fixture data only.
 
-- **The cohesive app**: `docs/evidence/cohesive/` (light and dark: Projects, project header, Schematic tab, inspector, layers / rows panels, device editor, Project menu, Pack List and Cable Schedule reports, BOM & Issues, Takeoff, `/design`, About & licenses, phone width; `shots.json` has the assertions), with the re-run checks in `es-check/` and `live-check/` (each with its `results.json`).
+- **The cohesive app**: `docs/evidence/cohesive/`, re-taken after the Brand Guidelines were applied (light and dark: Projects, project header, Schematic tab, inspector, layers / rows panels, device editor, Project menu, Pack List and Cable Schedule reports, BOM & issues, Takeoff, `/design`, About & licenses, phone width; `shots.json` has the assertions), with the re-run checks in `es-check/` and `live-check/` (each with its `results.json`), and the logo files compared with the guidelines PDF in `brand/`.
 - **Phase 2** (the editor in its frame): `docs/evidence/phase2/`.
 - **Phase 1** (the read-only shell): `docs/evidence/phase1/`. The first dashboard's screenshots are in `docs/evidence/*.png`.
 

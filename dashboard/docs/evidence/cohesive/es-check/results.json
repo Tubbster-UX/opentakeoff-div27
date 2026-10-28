@@ -1,5 +1,5 @@
 {
-  "ranAt": "2026-10-28T14:20:02.184Z",
+  "ranAt": "2026-10-28T14:48:51.354Z",
   "project": "Brink Div 27 sample (invented)",
   "access": "Cloudflare Access JWTs verified by the Worker (local stand-in team)",
   "realtime": "local Supabase Realtime",
@@ -97,7 +97,7 @@
     {
       "name": "re-import: the editor reloads the new import with the edits still applied",
       "ok": true,
-      "detail": "import 32a027c5 -> 9b63ed92, dev-shp-afda9d7a-928e-4093-a553-50455d31ad92-1 at {\"x\":1024,\"y\":112}"
+      "detail": "import 4bbe8b3f -> 5e8a81ff, dev-shp-afda9d7a-928e-4093-a553-50455d31ad92-1 at {\"x\":1024,\"y\":112}"
     },
     {
       "name": "brink-merge reports the orphaned edit on the import (CLI)",
