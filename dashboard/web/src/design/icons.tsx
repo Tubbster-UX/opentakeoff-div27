@@ -103,6 +103,84 @@ const P = {
       <path d="M4 6.5h0M6.5 6.5h0M9 6.5h0M11.5 6.5h0M5 9.5h6" />
     </>
   ),
+  // The takeoff canvas (web/src/ot/brink/): drawing tools and view controls, in the same family.
+  pointer: <path d="M3.5 2.5 12 8.5l-3.9.8 2.3 4.2-1.6.9-2.3-4.2L3.5 13z" />,
+  area: <path d="M2.5 4 7 2.5l6.5 2.5-1 7.5-6.5 1-3.5-3.5z" />,
+  rect: <rect x="2.5" y="3.5" width="11" height="9" />,
+  linear: (
+    <>
+      <path d="M2.5 12.5 6.5 6l3.5 3.5 3.5-6" />
+      <path d="M2.5 12.5h0M13.5 3.5h0" />
+    </>
+  ),
+  surface: <path d="M2.5 13.5V5L8 2.5 13.5 5v8.5M2.5 9h11M8 2.5v11" />,
+  count: (
+    <>
+      <circle cx="4.5" cy="5" r="1.8" />
+      <circle cx="11.5" cy="5" r="1.8" />
+      <circle cx="8" cy="11" r="1.8" />
+    </>
+  ),
+  symbol: (
+    <>
+      <path d="M2 2h3M2 2v3M14 2h-3M14 2v3M2 14h3M2 14v-3M14 14h-3M14 14v-3" />
+      <circle cx="8" cy="8" r="2.5" />
+    </>
+  ),
+  deduct: (
+    <>
+      <path d="M2.5 4 7 2.5l6.5 2.5-1 7.5-6.5 1-3.5-3.5z" />
+      <path d="M5.5 8h5" />
+    </>
+  ),
+  markup: <path d="M2.5 13.5 3 11l7.5-7.5 2 2L5 13zM9.5 4.5l2 2" />,
+  ruler: (
+    <>
+      <path d="M1.5 10.5 10.5 1.5l4 4-9 9z" />
+      <path d="M4.5 7.5l1.5 1.5M7 5l1 1M9.5 2.5 11 4" />
+    </>
+  ),
+  zoomIn: (
+    <>
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="m10.5 10.5 3.5 3.5M5 7h4M7 5v4" />
+    </>
+  ),
+  zoomOut: (
+    <>
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="m10.5 10.5 3.5 3.5M5 7h4" />
+    </>
+  ),
+  fit: <path d="M2 5.5V2h3.5M10.5 2H14v3.5M14 10.5V14h-3.5M5.5 14H2v-3.5M5.5 5.5h5v5h-5z" />,
+  snap: (
+    <>
+      <path d="M2.5 13.5h11M2.5 13.5V2.5" />
+      <circle cx="9" cy="7" r="2" />
+    </>
+  ),
+  angle: <path d="M2.5 13.5h11M2.5 13.5 11 5M7.5 13.5a5 5 0 0 0-1.4-3.6" />,
+  upload: <path d="M8 10.5V2M4.5 5.5 8 2l3.5 3.5M2.5 13.5h11" />,
+  invert: (
+    <>
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 2a6 6 0 0 0 0 12z" />
+    </>
+  ),
+  panelLeft: (
+    <>
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1" />
+      <path d="M6 2.5v11" />
+    </>
+  ),
+  panelRight: (
+    <>
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1" />
+      <path d="M10 2.5v11" />
+    </>
+  ),
+  quantities: <path d="M2.5 13.5h11M4 13.5V8M7 13.5V4M10 13.5V9.5M13 13.5V6" />,
+  trash: <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.8 9.5h6.4L12 4M6.8 6.5v4.5M9.2 6.5v4.5" />,
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof P;

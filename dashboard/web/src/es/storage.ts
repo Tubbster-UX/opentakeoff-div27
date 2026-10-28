@@ -17,6 +17,12 @@ import { CURRENT_SCHEMA_VERSION } from "../../../../brink-merge/src/vendor/esEnu
 const PREFIX = "brink-es:";
 /** Personal preferences, kept across visits. Everything else is memory-only. */
 const PERSIST = [/^easyschematic-theme$/, /^easyschematic-show-minimap$/, /^easyschematic-autoroute-pref$/, /^easyschematic-.*-layout$/, /^easyschematic-default-(stub-label-mode|header-color)$/];
+/**
+ * Not EasySchematic's: the Takeoff tab's OpenTakeoff canvas keeps its per-viewer preferences (units, draw style,
+ * panel widths, the declared author) under these keys. The page has one localStorage, so they pass straight through
+ * to the real one, unprefixed, whichever tab was opened first (vendor/PATCHES.md, OpenTakeoff section 5).
+ */
+const PASS_THROUGH = [/^opentakeoff[_:]/, /^ot[.-]/];
 /** EasySchematic's autosave key. Seeded with an empty document so it opens empty (no demo), then the project loads. */
 const AUTOSAVE = "easyschematic-autosave";
 
@@ -28,6 +34,9 @@ class EditorStorage implements Storage {
   }
   private persisted(key: string): boolean {
     return PERSIST.some((r) => r.test(key));
+  }
+  private passThrough(key: string): boolean {
+    return PASS_THROUGH.some((r) => r.test(key));
   }
   get length(): number {
     return this.keys().length;
@@ -44,6 +53,13 @@ class EditorStorage implements Storage {
     return this.keys()[index] ?? null;
   }
   getItem(key: string): string | null {
+    if (this.passThrough(key)) {
+      try {
+        return this.real?.getItem(key) ?? null;
+      } catch {
+        return null;
+      }
+    }
     if (this.persisted(key)) {
       try {
         return this.real?.getItem(PREFIX + key) ?? null;
@@ -54,6 +70,14 @@ class EditorStorage implements Storage {
     return this.mem.get(key) ?? null;
   }
   setItem(key: string, value: string): void {
+    if (this.passThrough(key)) {
+      try {
+        this.real?.setItem(key, String(value));
+      } catch {
+        /* storage full or blocked: preferences are a convenience */
+      }
+      return;
+    }
     if (this.persisted(key)) {
       try {
         this.real?.setItem(PREFIX + key, String(value));
@@ -65,6 +89,14 @@ class EditorStorage implements Storage {
     this.mem.set(key, String(value));
   }
   removeItem(key: string): void {
+    if (this.passThrough(key)) {
+      try {
+        this.real?.removeItem(key);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     if (this.persisted(key)) {
       try {
         this.real?.removeItem(PREFIX + key);

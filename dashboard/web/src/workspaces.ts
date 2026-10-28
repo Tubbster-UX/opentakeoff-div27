@@ -1,7 +1,6 @@
 // The tabs of a project, in display order. Each is a child route of
-// /projects/:id. Later phases replace a placeholder's element with the real
-// workspace (Phase 3: the OpenTakeoff canvas) and drop its `phase` label;
-// nothing else in the shell changes.
+// /projects/:id: Takeoff (the OpenTakeoff canvas), Schematic (the EasySchematic
+// editor), BOM & issues. A tab still being built carries a `phase` label.
 import type { ComponentType } from "react";
 import type { IconName } from "./design/index.js";
 import { BomIssuesTab } from "./pages/tabs/BomIssuesTab.js";
@@ -19,7 +18,7 @@ export interface ProjectTab {
 }
 
 export const PROJECT_TABS: ProjectTab[] = [
-  { path: "takeoff", label: "Takeoff", icon: "plan", phase: "Phase 3", Component: TakeoffTab },
+  { path: "takeoff", label: "Takeoff", icon: "plan", Component: TakeoffTab },
   { path: "schematic", label: "Schematic", icon: "schematic", Component: SchematicTab },
   { path: "bom", label: "BOM & issues", icon: "list", Component: BomIssuesTab },
 ];

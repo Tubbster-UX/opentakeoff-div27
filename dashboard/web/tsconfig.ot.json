@@ -1,0 +1,28 @@
+{
+  // The Takeoff workspace (src/ot/) and, through its imports, the vendored OpenTakeoff source,
+  // checked with upstream's own compiler options (vendor/opentakeoff: web/tsconfig.json on main:
+  // its .ts geometry libs strict, its .jsx canvas allowed but not checked), plus the Brink lib/DOM
+  // targets. The shell's own options (tsconfig.json) stay stricter for the shell.
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "types": ["vite/client"],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "allowJs": true,
+    "checkJs": false,
+    "strict": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+    "paths": { "@brink/ot-host": ["./src/ot/host.ts"] }
+  },
+  "include": ["src/ot/**/*.ts", "src/ot/**/*.tsx", "src/ot-workspace.d.ts"]
+}

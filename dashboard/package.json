@@ -11,12 +11,13 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite build && wrangler dev",
-    "typecheck": "tsc -p tsconfig.json && tsc -p web/tsconfig.json && tsc -p web/tsconfig.es.json && tsc -p test/tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p web/tsconfig.json && tsc -p web/tsconfig.es.json && tsc -p web/tsconfig.ot.json && tsc -p test/tsconfig.json",
     "test": "vitest run",
     "check": "npm run check:vendor && npm run typecheck && npm test && npm run build",
     "check:vendor": "node scripts/sync-easyschematic.mjs --check && node scripts/sync-opentakeoff.mjs --check",
     "live-check": "node scripts/live-check.mjs",
     "es-check": "node scripts/es-check.mjs",
+    "takeoff-check": "node scripts/takeoff-check.mjs",
     "shots": "node scripts/cohesive-shots.mjs",
     "dev:web": "vite",
     "postinstall": "patch-package --patch-dir vendor/easyschematic/patches"

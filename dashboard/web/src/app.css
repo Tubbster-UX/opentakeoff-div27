@@ -7,11 +7,14 @@
  * 2. The Brink tokens (the one file to re-colour the app).
  * 3. The Brink Tailwind theme, base and component classes.
  * 4. EasySchematic re-themed to the Brink tokens (scoped to the editor's .bk-es element).
+ * 5. OpenTakeoff's canvas re-themed to the Brink tokens (scoped to the Takeoff tab's .bk-ot element;
+ *    upstream's own tokens.css / app.css are not loaded).
  */
 @import "../../vendor/easyschematic/src/index.css";
 @import "./design/tokens.css";
 @import "./design/theme.css";
 @import "./design/es-theme.css";
+@import "./design/ot-theme.css";
 
 /* Tailwind scans the vendored EasySchematic source too (its classes are in this build). */
 @source "../../vendor/easyschematic/src";

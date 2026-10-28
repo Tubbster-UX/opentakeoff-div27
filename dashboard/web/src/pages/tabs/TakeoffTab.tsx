@@ -1,45 +1,32 @@
-// Takeoff: Phase 3 mounts the OpenTakeoff plan canvas here. Until then, where
-// the current import came from (the hashes of the OpenTakeoff files brink-merge
-// stored), so a number can still be traced to its export.
-import { Page, Panel } from "../../components/ui.js";
-import { PropertyList } from "../../design/index.js";
-import { importLine } from "../ProjectLayout.js";
-import { Placeholder } from "../../components/Placeholder.js";
-import { str, when } from "../../lib/format.js";
-import { useProject } from "../../lib/projectContext.js";
+// Takeoff: the OpenTakeoff plan canvas, mounted directly in the app (no frame).
+//
+// The workspace (web/src/ot/workspace.tsx, loaded on first use) runs upstream
+// OpenTakeoff's canvas with its storage seam pointed at the Brink server (plan PDFs in
+// Supabase Storage, the takeoff as brink-merge's import + the takeoff edit layer), and the
+// Brink toolbar, sheets panel, right panel and status bar around it. This tab hands it:
+//   - the project, its current import and name;
+//   - the relayed rows of the project's tables (other people's takeoff edits and plan
+//     uploads appear live; a re-import reloads the canvas).
+import { lazy, Suspense, useCallback, useContext } from "react";
+import { loadTakeoffWorkspace } from "@brink/takeoff-workspace";
+import type { RowChange } from "../../../../src/shared/protocol.js";
+import { Loading, Notice } from "../../components/ui.js";
+import { str } from "../../lib/format.js";
+import { ProjectStoreContext, useProject } from "../../lib/projectContext.js";
+
+const Workspace = lazy(loadTakeoffWorkspace);
 
 export function TakeoffTab() {
   const { snap } = useProject();
+  const store = useContext(ProjectStoreContext);
+  const subscribeChanges = useCallback((cb: (c: RowChange) => void) => (store ? store.onChange(cb) : () => undefined), [store]);
   if (!snap) return null;
-  const imp = snap.import;
-  const rows: [string, string][] = imp
-    ? [
-        ["Import", str(imp.id)],
-        ["Imported", when(imp.imported_at)],
-        ["OpenTakeoff schema", str(imp.ot_schema)],
-        ["Takeoff sha256", str(imp.takeoff_sha256)],
-        ["Report sha256", str(imp.report_sha256) || "(no report)"],
-      ]
-    : [];
-
+  const projectId = str(snap.project.id);
+  const importId = (snap.import?.id as string | undefined) ?? null;
+  if (!importId) return <Notice>This project has no import yet: import a takeoff with brink-merge first.</Notice>;
   return (
-    <Page title="Takeoff" meta={importLine(imp)}>
-      <Placeholder phase="Phase 3" title="OpenTakeoff plan canvas">
-        <p>
-          Next, we put the OpenTakeoff canvas in this tab: the project&apos;s plan sheets (PDFs kept in Supabase Storage) with the Division 27 takeoff drawn over them, editable
-          in place.
-        </p>
-        <p className="text-ink-3">It uses the same header, a Brink toolbar for the takeoff tools, and side panels for sheets and conditions. Until then, the current import&apos;s source files are below.</p>
-      </Placeholder>
-      <Panel title="Current import source">
-        {imp ? (
-          <div className="px-4 py-3">
-            <PropertyList rows={rows.map(([k, v]) => [k, <span className="font-num text-xs">{v}</span>])} />
-          </div>
-        ) : (
-          <p className="m-0 p-4 text-center text-ink-3">No current import.</p>
-        )}
-      </Panel>
-    </Page>
+    <Suspense fallback={<Loading>Loading the takeoff canvas…</Loading>}>
+      <Workspace key={projectId} projectId={projectId} importId={importId} projectName={str(snap.project.name)} subscribeChanges={subscribeChanges} />
+    </Suspense>
   );
 }
