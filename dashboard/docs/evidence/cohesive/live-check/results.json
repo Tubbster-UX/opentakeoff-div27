@@ -1,24 +1,24 @@
 {
   "base": "http://127.0.0.1:8787",
   "project": "Brink Div 27 sample (invented)",
-  "ranAt": "2026-10-28T14:49:16.485Z",
+  "ranAt": "2026-10-28T16:05:49.425Z",
   "passed": 22,
   "failed": 0,
   "results": [
     {
       "name": "projects row shows the current import's BOM totals",
       "ok": true,
-      "detail": "Brink Div 27 sample (invented) | 10/28/2026, 2:48:48 PM | 16 | 23 | 1,795.13 | 2,007.79 | 0 | 14"
+      "detail": "Brink Div 27 sample (invented) | 10/28/2026, 4:02:01 PM | 17 | 23 | 1,795.13 | 2,007.79 | 0 | 17"
     },
     {
       "name": "Portal push column follows the database",
       "ok": true,
-      "detail": "Portal push status is not shown: this database has no brink_portal_pushes table (brink-merge's Portal push migration has not been applied). Read 10/28/2026, 2:49:06 PM."
+      "detail": "Portal push status is not shown: this database has no brink_portal_pushes table (brink-merge's Portal push migration has not been applied). Read 10/28/2026, 4:05:38 PM."
     },
     {
       "name": "projects page: BOM edit updates the row's Net LF live",
       "ok": true,
-      "detail": "1,795.13 -> 1,895.13 in 788 ms"
+      "detail": "1,795.13 -> 1,895.13 in 615 ms"
     },
     {
       "name": "project link opens the BOM & Issues tab",
@@ -28,12 +28,12 @@
     {
       "name": "BOM qty UPDATE appears without reload",
       "ok": true,
-      "detail": "7 -> 10 in 365 ms"
+      "detail": "8 -> 11 in 274 ms"
     },
     {
       "name": "connection cable_length_ft UPDATE appears",
       "ok": true,
-      "detail": "59.11 -> 69.61 in 532 ms"
+      "detail": "59.11 -> 69.61 in 531 ms"
     },
     {
       "name": "issue INSERT appears (flashing)",
@@ -43,7 +43,7 @@
     {
       "name": "issue DELETE disappears",
       "ok": true,
-      "detail": "801 ms"
+      "detail": "802 ms"
     },
     {
       "name": "Schematic tab: the editor mounted in the page (no iframe) and the generated-rows outline in its Rows panel",
@@ -53,27 +53,27 @@
     {
       "name": "Schematic outline: connection edit appears live",
       "ok": true,
-      "detail": "69.61 -> 70.86 in 161 ms"
+      "detail": "69.61 -> 70.86 in 167 ms"
     },
     {
-      "name": "Takeoff tab: Phase 3 placeholder",
+      "name": "Takeoff tab: the OpenTakeoff canvas mounted in the page (no iframe), with the Brink toolbar and panels",
       "ok": true,
       "detail": ""
     },
     {
       "name": "brink-merge re-import moved current_import_id",
       "ok": true,
-      "detail": "0cc352ef-70e0-4372-a9ca-5ae9e5848e34 -> e9746c0f-b7ba-4cf6-baea-18a477430375"
+      "detail": "c371bbc2-9d33-46a4-add0-cb332840c37d -> f3e42529-79d4-41f5-a530-615873d37616"
     },
     {
       "name": "page switched to the new import",
       "ok": true,
-      "detail": "626 ms after CLI start"
+      "detail": "1003 ms after CLI start"
     },
     {
       "name": "new import shows the fixture's own quantities",
       "ok": true,
-      "detail": "line 2 qty 7"
+      "detail": "line 2 qty 8"
     },
     {
       "name": "no reload happened (projects -> tabs -> re-import)",
@@ -103,7 +103,7 @@
     {
       "name": "phone: project card shows the totals without sideways scroll",
       "ok": true,
-      "detail": "Brink Div 27 sample (invented) imported 10/28/2026, 2:49:13 PM Devices 16 Cables 23 Errors 0 Net LF 1,795.13 Order LF 2,007.79 Warnings 14"
+      "detail": "Brink Div 27 sample (invented) imported 10/28/2026, 4:05:45 PM Devices 17 Cables 23 Errors 0 Net LF 1,795.13 Order LF 2,007.79 Warnings 17"
     },
     {
       "name": "BOM table scrolls inside its own container at 390 px",

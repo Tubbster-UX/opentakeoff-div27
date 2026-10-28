@@ -6,7 +6,8 @@
 //      each appears without a reload
 //   3. Schematic tab: the editor mounted in the page (no iframe) and the generated-rows outline in
 //      its Rows panel; a connection edit appears live
-//   4. Takeoff tab: placeholder
+//   4. Takeoff tab: the OpenTakeoff canvas mounted in the page (no iframe) with the Brink toolbar and panels
+//      (the full takeoff flow, with uploads, edits and a second tab, is scripts/takeoff-check.mjs)
 //   5. re-import with the brink-merge CLI: the page switches to the new import
 //   6. phone width (390 px): no horizontal page scroll on any view
 // Screenshots and results.json go to docs/evidence/cohesive/live-check/ (Phase 1's run is kept in docs/evidence/phase1/). Uses only brink-merge's invented fixtures.
@@ -153,8 +154,12 @@ try {
 
   // --- 4. Takeoff ---
   await page.locator('[data-tab="takeoff"]').click();
-  await page.locator('[data-placeholder="Phase 3"]').waitFor();
-  check("Takeoff tab: Phase 3 placeholder", true);
+  await page.locator("[data-ot-root] [data-sheet], [data-ot-root] [data-takeoff-empty]").first().waitFor({ timeout: 30_000 });
+  await page.locator('[data-takeoff-save="saved"]').waitFor({ timeout: 30_000 });
+  check(
+    "Takeoff tab: the OpenTakeoff canvas mounted in the page (no iframe), with the Brink toolbar and panels",
+    (await page.locator("iframe").count()) === 0 && (await page.locator("[data-ot-root] .app-shell").count()) === 1 && (await page.locator('[role=toolbar][aria-label="Takeoff tools"]').count()) === 1 && (await page.locator("[data-topbar], [data-tool-rail]:visible").count()) === 0,
+  );
   await shot("06-takeoff.png");
 
   // --- 5. re-import: current_import_id moves ---

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Screenshots of the Brink UI, light and dark, for review: Projects, the project header,
 // the Schematic tab (Brink toolbar and panels, the re-themed canvas), the inspector, a
-// report opened from the Project menu, BOM & Issues, the Takeoff placeholder, the
+// report opened from the Project menu, BOM & Issues, the Takeoff tab (the OpenTakeoff canvas), the
 // /design kitchen sink, About & licenses, and phone width. It also asserts that the
 // Schematic tab has no iframe and no EasySchematic logo or menu bar.
 //
@@ -121,7 +121,8 @@ try {
     await page.locator('tr[data-k^="brink_bom_lines:"]').first().waitFor();
     await shot(page, `07-bom-issues-${theme}.png`);
     await page.locator('[data-tab="takeoff"]').click();
-    await page.locator('[data-placeholder="Phase 3"]').waitFor();
+    await page.locator("[data-ot-root] [data-sheet], [data-ot-root] [data-takeoff-empty]").first().waitFor({ timeout: 30_000 });
+    await page.waitForTimeout(1500);
     await shot(page, `08-takeoff-${theme}.png`);
 
     await page.setViewportSize({ width: 1440, height: 2300 });

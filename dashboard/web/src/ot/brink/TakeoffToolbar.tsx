@@ -137,11 +137,14 @@ export function TakeoffToolbar() {
             <Button size="sm" variant="quiet" onClick={() => h()?.setUnits((u) => (u === "metric" ? "imperial" : "metric"))} aria-label="Switch display units" title="Switch display units" data-action="units">
               {s.units === "metric" ? "m" : "ft"}
             </Button>
-            <ToolbarDivider />
-            <IconButton icon="panelLeft" label="Sheets panel" pressed={sheets} onClick={() => setSession({ sheets: !sheets })} />
-            <IconButton icon="quantities" label="Quantities (OpenTakeoff panel)" pressed={s.takeoffsOpen} onClick={() => h()?.toggleTakeoffs()} />
-            <IconButton icon="panelRight" label="Conditions and inspector" pressed={right} onClick={() => setSession({ right: !right })} />
-            <Menu label="Panels" ariaLabel="More panels" icon="layers" bare size="sm" align="end" items={panels} testId="panels-menu" />
+            {/* The side panels are left out at phone width, so are their toggles (the tools scroll beside the scale). */}
+            <span className="hidden items-center gap-1 md:flex">
+              <ToolbarDivider />
+              <IconButton icon="panelLeft" label="Sheets panel" pressed={sheets} onClick={() => setSession({ sheets: !sheets })} />
+              <IconButton icon="quantities" label="Quantities (OpenTakeoff panel)" pressed={s.takeoffsOpen} onClick={() => h()?.toggleTakeoffs()} />
+              <IconButton icon="panelRight" label="Conditions and inspector" pressed={right} onClick={() => setSession({ right: !right })} />
+              <Menu label="Panels" ariaLabel="More panels" icon="layers" bare size="sm" align="end" items={panels} testId="panels-menu" />
+            </span>
           </>
         }
       >
@@ -182,11 +185,10 @@ export function TakeoffToolbar() {
         </ToolbarGroup>
         <ToolbarDivider />
         <ToolbarGroup label="Condition">
-          <label className="sr-only" htmlFor="ot-active-condition">
-            {s.selected && s.tool === "select" ? "Condition of the selected takeoff" : "Condition for the next measurement"}
-          </label>
+          {/* aria-label, not an sr-only label: an absolutely placed label in the scrolling toolbar would widen the page */}
           <Select
             id="ot-active-condition"
+            aria-label={s.selected && s.tool === "select" ? "Condition of the selected takeoff" : "Condition for the next measurement"}
             className="h-7 w-40 text-xs"
             value={s.activeCond}
             disabled={!conditions.length}
