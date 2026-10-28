@@ -81,6 +81,8 @@ export function buildBom(opts: {
   takeoff: OtTakeoff;
   report: OtReport | null;
   issues: Issues;
+  /** Conditions whose shapes the takeoff edit layer changed (takeoffEdits.ts): a count that differs from the report there is the edit, not a mismatch. */
+  editedConditionIds?: ReadonlySet<string>;
 }): Bom {
   const { rollups, cable, mapping, report, issues } = opts;
   const materialCount = new Map(opts.takeoff.conditions.map((c) => [c.id, c.materials?.length ?? 0]));
@@ -106,7 +108,11 @@ export function buildBom(opts: {
     };
     const rep = reportCond.get(c.conditionId);
     if (rep && (c.kind === "device" || c.kind === "tr") && typeof rep.ea === "number" && Math.abs(rep.ea - c.net.count) > 1e-9) {
-      issues.error("report_mismatch", `${c.finishTag}: the takeoff rolls up to ${c.net.count} EA, the report says ${rep.ea}`, { conditionKey: c.finishTag });
+      if (opts.editedConditionIds?.has(c.conditionId)) {
+        issues.warn("count_edited", `${c.finishTag}: ${c.net.count} EA after edits made in the Brink app; OpenTakeoff's report (exported before them) says ${rep.ea}. This BOM uses ${c.net.count}; cable lines still come from the report until it is re-exported`, { conditionKey: c.finishTag, refs: { reportEa: rep.ea, ea: c.net.count } });
+      } else {
+        issues.error("report_mismatch", `${c.finishTag}: the takeoff rolls up to ${c.net.count} EA, the report says ${rep.ea}`, { conditionKey: c.finishTag });
+      }
     }
 
     if (c.kind === "device" || c.kind === "tr") {

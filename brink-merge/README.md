@@ -110,6 +110,8 @@ The schema is in `supabase/migrations/`. It is applied automatically by the CLI 
 | `brink_issues` | Issues |
 | `brink_schematics`, `brink_schematic_nodes`, `brink_schematic_connections` | The schematic, one row per node and per connection; `cable_length_ft` is the measured per-cable LF |
 | `brink_schematic_edits` | People's edits to the schematic (moves, renames, room changes, connections), kept as a layer over every import and keyed by ids that survive a re-import; see [docs/schematic-edits.md](docs/schematic-edits.md) |
+| `brink_takeoff_edits` | People's edits to the takeoff in the Brink app's takeoff canvas (shapes added, reshaped or deleted, conditions, sheet scales), kept as a layer over the import's raw takeoff (the machine original, never rewritten) and re-applied on every import; see [docs/takeoff-edits.md](docs/takeoff-edits.md) |
+| `brink_sheets` | The plan PDFs a project's takeoff is drawn on: an index of objects in the private Supabase Storage bucket `brink-plans` |
 
 **Access:** every table has row-level security on and no policies, so only the service role can read or write.
 
@@ -160,6 +162,16 @@ People edit the schematic in the Brink app (`dashboard/`). Their moves, renames,
 - An edit whose target left the takeoff becomes a `schematic_edit_orphaned` warning on the new import. An edit that no longer fits becomes `schematic_edit_conflict`. Either way the edit is kept, and nothing else receives it.
 
 Rules and the table: [docs/schematic-edits.md](docs/schematic-edits.md).
+
+## Takeoff edits survive re-imports
+
+People also edit the takeoff itself in the Brink app's Takeoff tab (the OpenTakeoff canvas). Those edits are a second layer, `brink_takeoff_edits`, keyed by OpenTakeoff's shape, condition and sheet ids:
+- The import's raw takeoff, as exported, is never rewritten. The BOM and schematic are built from it with the layer applied (`merge(..., { takeoffEdits })`), on every import: the app's save, the CLI's `--db`, `import_takeoff` and `map_condition`.
+- Machine work keeps its original: an edit of an agent's shape keeps the agent's ring (`origin.proposed_verts_norm`), actor and method. Only a verified person can mark machine work reviewed.
+- Counts follow the edits (`count_edited` warning where they differ from the report). Cable lengths stay OpenTakeoff's report values until the report is re-exported (`route_edited`, `run_device_edited`).
+- An edit whose target left the takeoff becomes a `takeoff_edit_orphaned` warning; one made on an older machine version is applied with `takeoff_edit_base_changed`.
+
+Rules and the tables: [docs/takeoff-edits.md](docs/takeoff-edits.md).
 
 ## Tests
 

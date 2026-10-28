@@ -28,7 +28,17 @@ export type IssueCode =
   | "schematic_invalid"
   // The schematic edit layer (edits.ts): a person's edit that this import cannot carry.
   | "schematic_edit_orphaned"
-  | "schematic_edit_conflict";
+  | "schematic_edit_conflict"
+  // The takeoff edit layer (takeoffEdits.ts): a person's takeoff edit that this import cannot carry as made.
+  | "takeoff_edit_orphaned"
+  | "takeoff_edit_base_changed"
+  | "takeoff_edit_review_refused"
+  // A cable run whose route shapes a person edited in the app: its length is still the report's.
+  | "route_edited"
+  // A cable run whose device a person deleted in the app: its cables are still the report's.
+  | "run_device_edited"
+  // A device / TR count that people changed in the app: it differs from the report on purpose.
+  | "count_edited";
 
 export interface Issue {
   severity: Severity;

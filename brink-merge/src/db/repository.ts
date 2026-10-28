@@ -13,6 +13,10 @@ import {
   ACTIVE_EDITS_SQL, applyEdits, editFromRow, INSERT_EDIT_SQL, SUPERSEDE_EDIT_SQL,
   type ApplyResult, type EditInput, type EditRow, type SchematicEdit, type TargetContext,
 } from "../edits.js";
+import {
+  ACTIVE_TAKEOFF_EDITS_SQL, applyTakeoffEdits, INSERT_TAKEOFF_EDIT_SQL, SUPERSEDE_TAKEOFF_EDIT_SQL, takeoffEditFromRow, takeoffTargetContext, targetTypeOf,
+  type TakeoffApplyResult, type TakeoffEdit, type TakeoffEditInput, type TakeoffEditRow,
+} from "../takeoffEdits.js";
 import { assembleSchematic, SCHEMATIC_EDGES_SQL, SCHEMATIC_META_SQL, SCHEMATIC_NODES_SQL, type SchematicMetaRow } from "../render.js";
 import type { ConnectionEdge, SchematicFile, SchematicNode } from "../vendor/esTypes.js";
 import type { Db, Queryable } from "./db.js";
@@ -66,11 +70,22 @@ export async function loadCatalog(db: Queryable): Promise<CatalogMap> {
 }
 
 export async function saveMerge(db: Db, input: LoadedInput, result: MergeResult): Promise<ImportSummary> {
-  return db.transaction(async (tx) => {
-    const project = (await tx.query<{ id: string }>(
-      "insert into brink_projects (name) values ($1) on conflict (name) do update set name = excluded.name returning id",
-      [result.project],
-    )).rows[0];
+  return db.transaction((tx) => writeMerge(tx, input, result));
+}
+
+/**
+ * Write a merge as the project's new current import, inside the caller's transaction. The project is `projectId`
+ * when given (the app's Worker re-running a project's import after a takeoff edit), else found or created by name.
+ * The stored takeoff is always the raw input (the machine original), never the edited takeoff.
+ */
+export async function writeMerge(tx: Queryable, input: LoadedInput, result: MergeResult, opts: { projectId?: string } = {}): Promise<ImportSummary> {
+  {
+    const project = opts.projectId
+      ? { id: opts.projectId }
+      : (await tx.query<{ id: string }>(
+          "insert into brink_projects (name) values ($1) on conflict (name) do update set name = excluded.name returning id",
+          [result.project],
+        )).rows[0]!;
     const errors = result.issues.filter((i) => i.severity === "error").length;
     const warnings = result.issues.length - errors;
     const imp = (await tx.query<{ id: string; imported_at: string }>(
@@ -83,20 +98,20 @@ export async function saveMerge(db: Db, input: LoadedInput, result: MergeResult)
       await tx.query(
         `insert into brink_bom_lines (import_id, line_no, kind, condition_key, description, qty, unit, mapping_status, es_device_type, cable_type, net_lf, order_lf, portal_sku, severity, code, line)
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb)`,
-        [imp.id, l.lineNo, l.kind, l.conditionKey, l.description, l.qty, l.unit, l.mappingStatus ?? null, l.esDeviceType ?? null, l.cableType ?? null, l.netLf ?? null, l.orderLf ?? null, l.portalSku ?? null, l.severity ?? null, l.code ?? null, json(l)],
+        [imp!.id, l.lineNo, l.kind, l.conditionKey, l.description, l.qty, l.unit, l.mappingStatus ?? null, l.esDeviceType ?? null, l.cableType ?? null, l.netLf ?? null, l.orderLf ?? null, l.portalSku ?? null, l.severity ?? null, l.code ?? null, json(l)],
       );
     }
     let seq = 0;
     for (const i of result.issues) {
       await tx.query(
         "insert into brink_issues (import_id, seq, severity, code, message, condition_key, refs) values ($1, $2, $3, $4, $5, $6, $7::jsonb)",
-        [imp.id, ++seq, i.severity, i.code, i.message, i.conditionKey ?? null, json(i.refs ?? null)],
+        [imp!.id, ++seq, i.severity, i.code, i.message, i.conditionKey ?? null, json(i.refs ?? null)],
       );
     }
-    await writeSchematic(tx, imp.id, result.schematic.file);
-    await tx.query("update brink_projects set current_import_id = $1 where id = $2", [imp.id, project.id]);
-    return { importId: imp.id, projectId: project.id, project: result.project, importedAt: imp.imported_at, errors, warnings };
-  });
+    await writeSchematic(tx, imp!.id, result.schematic.file);
+    await tx.query("update brink_projects set current_import_id = $1 where id = $2", [imp!.id, project.id]);
+    return { importId: imp!.id, projectId: project.id, project: result.project, importedAt: imp!.imported_at, errors, warnings };
+  }
 }
 
 async function writeSchematic(tx: Queryable, importId: string, file: SchematicFile): Promise<void> {
@@ -187,6 +202,53 @@ export async function recordEdit(db: Db, e: { projectId: string; input: EditInpu
     ])).rows[0]!;
     return { ...editFromRow(row), editorAuth: row.editor_auth, clientRef: row.client_ref, baseImportId: row.base_import_id, superseded: old?.id ?? null };
   });
+}
+
+// ---------------------------------------------------------------------------
+// The takeoff edit layer (takeoffEdits.ts, docs/takeoff-edits.md).
+
+/** A project's active takeoff edits (neither superseded nor reverted), oldest first. */
+export async function loadActiveTakeoffEdits(db: Queryable, projectId: string): Promise<TakeoffEdit[]> {
+  return (await db.query<TakeoffEditRow>(ACTIVE_TAKEOFF_EDITS_SQL, [projectId])).rows.map(takeoffEditFromRow);
+}
+
+/** The active takeoff edits of the project named `project`; none when there is no such project yet. */
+export async function loadActiveTakeoffEditsByName(db: Queryable, project: string): Promise<TakeoffEdit[]> {
+  const p = (await db.query<{ id: string }>("select id from brink_projects where name = $1", [project])).rows[0];
+  return p ? loadActiveTakeoffEdits(db, p.id) : [];
+}
+
+/** An import's takeoff as people see it: the raw takeoff with the project's active takeoff edits applied. */
+export async function renderTakeoff(db: Queryable, importId: string): Promise<TakeoffApplyResult & { edits: TakeoffEdit[]; base: LoadedInput["takeoff"] }> {
+  const imp = (await db.query<{ project_id: string }>("select project_id from brink_imports where id = $1", [importId])).rows[0];
+  if (!imp) throw new Error(`no import ${importId}`);
+  const input = await loadImportInput(db, importId);
+  const edits = await loadActiveTakeoffEdits(db, imp.project_id);
+  return { ...applyTakeoffEdits(input.takeoff, edits), edits, base: input.takeoff };
+}
+
+/**
+ * Append one takeoff edit, superseding the active edit of the same target. One transaction. The app's Worker writes
+ * through the same SQL; this is for brink-merge processes and tests (editor_auth "brink-merge" by default, which can
+ * never mark machine work reviewed).
+ */
+export async function recordTakeoffEdit(db: Db, e: { projectId: string; input: TakeoffEditInput; editorEmail: string; editorAuth?: "brink-merge" | "dev-bypass" | "cloudflare-access"; clientRef?: string | null; baseImportId?: string | null }): Promise<TakeoffEdit & { superseded: string | null }> {
+  return db.transaction(async (tx) => {
+    const base = e.baseImportId ? (await loadImportInput(tx, e.baseImportId)).takeoff : null;
+    const id = (await tx.query<{ id: string }>("select gen_random_uuid()::text as id")).rows[0]!.id;
+    const type = targetTypeOf(e.input.kind);
+    const old = (await tx.query<{ id: string }>(SUPERSEDE_TAKEOFF_EDIT_SQL, [e.projectId, type, e.input.target, id])).rows[0];
+    const row = (await tx.query<TakeoffEditRow>(INSERT_TAKEOFF_EDIT_SQL, [
+      id, e.projectId, type, e.input.target, e.input.kind, json(e.input.payload), json(takeoffTargetContext(base, e.input)), e.editorEmail, e.editorAuth ?? "brink-merge", e.clientRef ?? null, e.baseImportId ?? null,
+    ])).rows[0]!;
+    return { ...takeoffEditFromRow(row), superseded: old?.id ?? null };
+  });
+}
+
+/** Revert an active takeoff edit. Returns false when it was not active. */
+export async function revertTakeoffEdit(db: Queryable, editId: string, by: string): Promise<boolean> {
+  const r = await db.query("update brink_takeoff_edits set reverted_at = now(), reverted_by = $2 where id = $1 and superseded_at is null and reverted_at is null returning id", [editId, by]);
+  return r.rows.length > 0;
 }
 
 /** Revert an active edit. Returns false when it was not active (already reverted or superseded). */

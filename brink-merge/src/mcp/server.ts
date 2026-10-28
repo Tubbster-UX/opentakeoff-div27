@@ -13,7 +13,7 @@ import { bomToCsv } from "../bom.js";
 import { catalogRowSchema, loadCatalogMap, rowEnumProblems, type CatalogRow } from "../catalog.js";
 import { migrate, type Db } from "../db/db.js";
 import {
-  currentImport, listProjects, loadActiveEditsByName, loadBomLines, loadCatalog, loadImportInput, loadIssues, renderSchematic, saveMerge, seedCatalog, upsertCatalogRow, type ImportSummary,
+  currentImport, listProjects, loadActiveEditsByName, loadActiveTakeoffEditsByName, loadBomLines, loadCatalog, loadImportInput, loadIssues, renderSchematic, saveMerge, seedCatalog, upsertCatalogRow, type ImportSummary,
 } from "../db/repository.js";
 import type { Issue } from "../issues.js";
 import { loadInput, type LoadedInput } from "../load.js";
@@ -52,7 +52,9 @@ async function runMerge(state: BrinkState, input: LoadedInput, project?: string)
   const map = await loadCatalog(state.db);
   // People's schematic edits survive: the project's edit layer is re-applied to the new import.
   const edits = await loadActiveEditsByName(state.db, projectNameFor(input, project));
-  const result = merge(input, map, { project, edits });
+  // And their takeoff edits (the app's takeoff canvas): re-applied over the export, which is stored as exported.
+  const takeoffEdits = await loadActiveTakeoffEditsByName(state.db, projectNameFor(input, project));
+  const result = merge(input, map, { project, edits, takeoffEdits });
   const saved = await saveMerge(state.db, input, result);
   return { result, saved };
 }
