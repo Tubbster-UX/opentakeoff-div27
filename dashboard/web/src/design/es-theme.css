@@ -10,6 +10,10 @@
  * its grays / slates / neutrals become the Brink neutrals, and its surfaces follow the
  * Brink light / dark theme.
  *
+ * Type: Roboto (the Brink typeface) everywhere in the editor, canvas text included. Upstream
+ * names 'Inter' in its global CSS and in inline styles / SVG attributes on canvas nodes,
+ * edges and page overlays; the rules at the end re-point those at --font-ui.
+ *
  * Left alone on purpose:
  *   - signal colours (--color-sdi, --color-hdmi...) and power phase colours: they are
  *     data (what a cable carries), not decoration;
@@ -19,6 +23,7 @@
  */
 @media screen {
   .bk-es {
+    --bk-es-font: var(--font-ui);
     --color-bg: var(--bk-paper);
     --color-surface: var(--bk-surface-2);
     --color-surface-hover: var(--bk-hover);
@@ -44,7 +49,7 @@
     --color-indigo-500: var(--bk-accent);
     --color-indigo-600: var(--bk-accent-fill);
 
-    /* gray / slate / zinc -> the Brink neutrals (no cool tint) */
+    /* gray / slate / neutral -> the Brink neutrals (cool, from the guide's Line / Border Strong / Ink Muted) */
     --color-gray-50: var(--bk-surface-2);
     --color-gray-100: var(--bk-hover);
     --color-gray-200: var(--bk-line);
@@ -76,7 +81,116 @@
     --color-neutral-800: var(--bk-ink);
     --color-neutral-900: var(--bk-ink);
 
-    font-family: var(--font-ui);
+    /* Status palettes upstream uses in its chrome -> the Brink status tones (amber and yellow
+       become the Brink warning colour: Brink Productions amber stays out). 50-300 are tints for
+       fills, 400-950 the text-safe tone; filled danger buttons are fixed below. */
+    --color-red-50: color-mix(in srgb, var(--bk-danger) 8%, var(--bk-surface));
+    --color-red-100: color-mix(in srgb, var(--bk-danger) 14%, var(--bk-surface));
+    --color-red-200: color-mix(in srgb, var(--bk-danger) 26%, var(--bk-surface));
+    --color-red-300: color-mix(in srgb, var(--bk-danger) 45%, var(--bk-surface));
+    --color-red-400: var(--bk-danger);
+    --color-red-500: var(--bk-danger);
+    --color-red-600: var(--bk-danger);
+    --color-red-700: var(--bk-danger);
+    --color-red-800: var(--bk-danger);
+    --color-red-900: var(--bk-danger);
+    --color-red-950: var(--bk-danger);
+    --color-rose-50: color-mix(in srgb, var(--bk-danger) 8%, var(--bk-surface));
+    --color-rose-100: color-mix(in srgb, var(--bk-danger) 14%, var(--bk-surface));
+    --color-rose-200: color-mix(in srgb, var(--bk-danger) 26%, var(--bk-surface));
+    --color-rose-300: color-mix(in srgb, var(--bk-danger) 45%, var(--bk-surface));
+    --color-rose-400: var(--bk-danger);
+    --color-rose-500: var(--bk-danger);
+    --color-rose-600: var(--bk-danger);
+    --color-rose-700: var(--bk-danger);
+    --color-rose-800: var(--bk-danger);
+    --color-rose-900: var(--bk-danger);
+    --color-rose-950: var(--bk-danger);
+    --color-amber-50: color-mix(in srgb, var(--bk-warn) 8%, var(--bk-surface));
+    --color-amber-100: color-mix(in srgb, var(--bk-warn) 14%, var(--bk-surface));
+    --color-amber-200: color-mix(in srgb, var(--bk-warn) 26%, var(--bk-surface));
+    --color-amber-300: color-mix(in srgb, var(--bk-warn) 45%, var(--bk-surface));
+    --color-amber-400: var(--bk-warn);
+    --color-amber-500: var(--bk-warn);
+    --color-amber-600: var(--bk-warn);
+    --color-amber-700: var(--bk-warn);
+    --color-amber-800: var(--bk-warn);
+    --color-amber-900: var(--bk-warn);
+    --color-amber-950: var(--bk-warn);
+    --color-yellow-50: color-mix(in srgb, var(--bk-warn) 8%, var(--bk-surface));
+    --color-yellow-100: color-mix(in srgb, var(--bk-warn) 14%, var(--bk-surface));
+    --color-yellow-200: color-mix(in srgb, var(--bk-warn) 26%, var(--bk-surface));
+    --color-yellow-300: color-mix(in srgb, var(--bk-warn) 45%, var(--bk-surface));
+    --color-yellow-400: var(--bk-warn);
+    --color-yellow-500: var(--bk-warn);
+    --color-yellow-600: var(--bk-warn);
+    --color-yellow-700: var(--bk-warn);
+    --color-yellow-800: var(--bk-warn);
+    --color-yellow-900: var(--bk-warn);
+    --color-yellow-950: var(--bk-warn);
+    --color-orange-50: color-mix(in srgb, var(--bk-warn) 8%, var(--bk-surface));
+    --color-orange-100: color-mix(in srgb, var(--bk-warn) 14%, var(--bk-surface));
+    --color-orange-200: color-mix(in srgb, var(--bk-warn) 26%, var(--bk-surface));
+    --color-orange-300: color-mix(in srgb, var(--bk-warn) 45%, var(--bk-surface));
+    --color-orange-400: var(--bk-warn);
+    --color-orange-500: var(--bk-warn);
+    --color-orange-600: var(--bk-warn);
+    --color-orange-700: var(--bk-warn);
+    --color-orange-800: var(--bk-warn);
+    --color-orange-900: var(--bk-warn);
+    --color-orange-950: var(--bk-warn);
+    --color-green-50: color-mix(in srgb, var(--bk-ok) 8%, var(--bk-surface));
+    --color-green-100: color-mix(in srgb, var(--bk-ok) 14%, var(--bk-surface));
+    --color-green-200: color-mix(in srgb, var(--bk-ok) 26%, var(--bk-surface));
+    --color-green-300: color-mix(in srgb, var(--bk-ok) 45%, var(--bk-surface));
+    --color-green-400: var(--bk-ok);
+    --color-green-500: var(--bk-ok);
+    --color-green-600: var(--bk-ok);
+    --color-green-700: var(--bk-ok);
+    --color-green-800: var(--bk-ok);
+    --color-green-900: var(--bk-ok);
+    --color-green-950: var(--bk-ok);
+    --color-emerald-50: color-mix(in srgb, var(--bk-ok) 8%, var(--bk-surface));
+    --color-emerald-100: color-mix(in srgb, var(--bk-ok) 14%, var(--bk-surface));
+    --color-emerald-200: color-mix(in srgb, var(--bk-ok) 26%, var(--bk-surface));
+    --color-emerald-300: color-mix(in srgb, var(--bk-ok) 45%, var(--bk-surface));
+    --color-emerald-400: var(--bk-ok);
+    --color-emerald-500: var(--bk-ok);
+    --color-emerald-600: var(--bk-ok);
+    --color-emerald-700: var(--bk-ok);
+    --color-emerald-800: var(--bk-ok);
+    --color-emerald-900: var(--bk-ok);
+    --color-emerald-950: var(--bk-ok);
+    --color-violet-50: color-mix(in srgb, var(--bk-accent) 8%, var(--bk-surface));
+    --color-violet-100: color-mix(in srgb, var(--bk-accent) 14%, var(--bk-surface));
+    --color-violet-200: color-mix(in srgb, var(--bk-accent) 26%, var(--bk-surface));
+    --color-violet-300: color-mix(in srgb, var(--bk-accent) 45%, var(--bk-surface));
+    --color-violet-400: var(--bk-accent);
+    --color-violet-500: var(--bk-accent);
+    --color-violet-600: var(--bk-accent);
+    --color-violet-700: var(--bk-accent);
+    --color-violet-800: var(--bk-accent);
+    --color-violet-900: var(--bk-accent);
+    --color-violet-950: var(--bk-accent);
+    --color-purple-50: color-mix(in srgb, var(--bk-accent) 8%, var(--bk-surface));
+    --color-purple-100: color-mix(in srgb, var(--bk-accent) 14%, var(--bk-surface));
+    --color-purple-200: color-mix(in srgb, var(--bk-accent) 26%, var(--bk-surface));
+    --color-purple-300: color-mix(in srgb, var(--bk-accent) 45%, var(--bk-surface));
+    --color-purple-400: var(--bk-accent);
+    --color-purple-500: var(--bk-accent);
+    --color-purple-600: var(--bk-accent);
+    --color-purple-700: var(--bk-accent);
+    --color-purple-800: var(--bk-accent);
+    --color-purple-900: var(--bk-accent);
+    --color-purple-950: var(--bk-accent);
+
+    font-family: var(--bk-es-font);
+  }
+  /* Upstream's literal 'Inter' (inline styles, SVG font-family attributes, the reconnect tooltip). */
+  .bk-es [style*="Inter"],
+  .bk-es [font-family*="Inter"],
+  .bk-es .reconnect-tooltip {
+    font-family: var(--bk-es-font) !important;
   }
 
   /* React Flow chrome: the Brink panel look. */
@@ -155,5 +269,28 @@
      title row (an h2 and a close / collapse button); the Brink panel header replaces it. */
   .bk-embed > div > div:has(> h2) {
     display: none;
+  }
+
+  /* Blue as TEXT is the accent (readable on navy in dark); blue-600/700 stay fills for buttons. */
+  .bk-es .text-blue-600,
+  .bk-es .text-blue-700,
+  .bk-es .text-blue-800,
+  .bk-es .hover\:text-blue-700:hover,
+  .bk-es .hover\:text-blue-800:hover {
+    color: var(--bk-accent);
+  }
+  /* Filled danger buttons (white text): Brink danger as a fill in both themes. */
+  .bk-es .bg-red-600,
+  .bk-es .hover\:bg-red-700:hover,
+  .bk-es .hover\:bg-red-600\/80:hover {
+    background-color: var(--bk-danger-fill);
+  }
+  .bk-es .hover\:bg-amber-500:hover {
+    background-color: var(--bk-warn-fill);
+  }
+  /* The USB-C power-shortfall badge on a cable: the Brink warning colour, not amber. */
+  .bk-es div[title^="USB-C power undersupply"] {
+    background: var(--bk-warn) !important;
+    color: var(--bk-surface) !important;
   }
 }

@@ -146,7 +146,7 @@ export function Menu({ label, ariaLabel, items, icon, variant = "quiet", size = 
               it.type === "separator" ? (
                 <div key={n} role="separator" className="my-1 h-px bg-line" />
               ) : it.type === "heading" ? (
-                <div key={n} role="presentation" className="px-2 pt-2 pb-1 text-2xs font-semibold tracking-wide text-ink-3 uppercase">
+                <div key={n} role="presentation" className="px-2 pt-2 pb-1 bk-label text-ink-3">
                   {it.label}
                 </div>
               ) : (
@@ -174,7 +174,7 @@ export function Menu({ label, ariaLabel, items, icon, variant = "quiet", size = 
                   className={`flex h-8 cursor-pointer items-center gap-2 rounded-ctl px-2 outline-none select-none focus:bg-hover hover:bg-hover ${it.disabled ? "cursor-not-allowed opacity-45" : ""}`}
                 >
                   <span className="flex w-4 shrink-0 justify-center text-ink-3">
-                    {it.checked ? <Icon name="check" size={14} className="text-accent" /> : it.icon ? <Icon name={it.icon} size={14} /> : null}
+                    {it.checked ? <Icon name="check" size={14} className="text-ink" /> : it.icon ? <Icon name={it.icon} size={14} /> : null}
                   </span>
                   <span className="flex-1 whitespace-nowrap">{it.label}</span>
                   {it.shortcut && <kbd className="ml-4 font-ui text-2xs text-ink-3">{it.shortcut}</kbd>}

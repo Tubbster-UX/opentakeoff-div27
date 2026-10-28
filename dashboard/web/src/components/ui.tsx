@@ -10,7 +10,7 @@ export function Page({ title, meta, actions, children, wide }: { title: string; 
     <div className={`mx-auto w-full ${wide ? "max-w-[1440px]" : "max-w-[1280px]"} px-4 pt-5 pb-10 sm:px-6`}>
       <div className="mb-4 flex flex-wrap items-end gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
-          <h1 className="m-0 text-2xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="m-0 text-xl font-bold">{title}</h1>
           {meta && <div className="meta mt-1 text-xs text-ink-3 [overflow-wrap:anywhere]">{meta}</div>}
         </div>
         {actions && <div className="flex items-center gap-2">{actions}</div>}
@@ -24,8 +24,8 @@ export function Stat({ k, v, tone }: { k: string; v: ReactNode; tone?: "warn" | 
   const color = tone === "error" ? "text-danger" : tone === "warn" ? "text-warn" : "text-ink";
   return (
     <div className="rounded-panel border border-line bg-panel px-3.5 py-3 shadow-sm">
-      <div className="text-2xs font-semibold tracking-wide text-ink-3 uppercase">{k}</div>
-      <div className={`num mt-1 text-xl font-semibold leading-tight ${color}`}>{v}</div>
+      <div className="bk-label text-ink-3">{k}</div>
+      <div className={`num mt-1 text-xl font-bold leading-tight ${color}`}>{v}</div>
     </div>
   );
 }

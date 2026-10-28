@@ -46,7 +46,7 @@ export function ProjectsPage() {
         {list.projects.length === 0 && <li className="rounded-panel border border-line bg-panel p-4 text-center text-ink-3">No projects yet. Import one with brink-merge --db.</li>}
         {list.projects.map((p) => (
           <li key={`${p.id}:${changed[p.id] ?? 0}`} data-project-card={p.id} className={`rounded-panel border border-line bg-panel p-3.5 shadow-sm ${changed[p.id] ? "card-flash" : ""}`}>
-            <Link to={`/projects/${p.id}`} className="font-semibold">
+            <Link to={`/projects/${p.id}`} className="font-bold">
               {p.name}
             </Link>
             <div className="text-xs text-ink-3">{p.current_import_id ? `imported ${when(p.imported_at)}` : "no current import"}</div>
@@ -55,7 +55,7 @@ export function ProjectsPage() {
                 [
                   ["Devices", fmt(p.devices), ""],
                   ["Cables", fmt(p.cables), ""],
-                  ["Errors", fmt(p.errors), p.errors ? "text-danger font-semibold" : ""],
+                  ["Errors", fmt(p.errors), p.errors ? "text-danger font-bold" : ""],
                   ["Net LF", fmt(p.net_lf), ""],
                   ["Order LF", fmt(p.order_lf), ""],
                   ["Warnings", fmt(p.warnings), p.warnings ? "text-warn" : ""],
@@ -84,7 +84,7 @@ export function ProjectsPage() {
             rows={list.projects.map((p) => (
               <tr key={`${p.id}:${changed[p.id] ?? 0}`} data-project={p.id} className={changed[p.id] ? "flash" : undefined}>
                 <td className="min-w-[180px]">
-                  <Link to={`/projects/${p.id}`} className="font-semibold">
+                  <Link to={`/projects/${p.id}`} className="font-bold">
                     {p.name}
                   </Link>
                 </td>
@@ -93,7 +93,7 @@ export function ProjectsPage() {
                 <td className="num">{fmt(p.cables)}</td>
                 <td className="num">{fmt(p.net_lf)}</td>
                 <td className="num">{fmt(p.order_lf)}</td>
-                <td className={`num ${p.errors ? "text-danger font-semibold" : ""}`}>{fmt(p.errors)}</td>
+                <td className={`num ${p.errors ? "text-danger font-bold" : ""}`}>{fmt(p.errors)}</td>
                 <td className={`num ${p.warnings ? "text-warn" : ""}`}>{fmt(p.warnings)}</td>
                 {pushes && (
                   <td>

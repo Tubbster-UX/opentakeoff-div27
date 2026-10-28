@@ -17,7 +17,7 @@ const label = (n: SchematicNode | undefined): string => String((n?.data as { lab
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="border-b border-line px-3 py-3">
-      <h3 className="m-0 mb-2 text-2xs font-semibold tracking-wide text-ink-3 uppercase">{title}</h3>
+      <h3 className="m-0 mb-2 bk-label text-ink-3">{title}</h3>
       {children}
     </section>
   );

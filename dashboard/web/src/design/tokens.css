@@ -1,98 +1,143 @@
 /* Brink Design tokens: the one file to edit to re-colour the app.
  *
- * Every colour the Brink UI (shell, schematic editor chrome, and later the takeoff
- * canvas) shows comes from these variables. Components never use raw colours.
- * The palette is a restrained warm-neutral scale that suits the black / white Brink
- * logo, with ONE accent (deep teal). To use real brand colours, change the --bk-accent*
- * lines (and, if wanted, the neutrals) here; nothing else needs to change.
+ * Source: Brink Design Brand Guidelines v1.0 (October 2026), "Color palette" and
+ * "Color in use". HEX is the reference. Every colour the Brink UI (shell, schematic
+ * editor chrome, and later the takeoff canvas) shows comes from these variables;
+ * components never use raw colours.
  *
- * Contrast (WCAG 2.1, measured; dashboard/docs/design-system.md has the full table):
- * light: ink 17.7:1, ink-2 8.1:1, ink-3 5.1:1 (4.6:1 on canvas), accent 5.6:1 on surface,
- * on-accent on accent 5.6:1; dark: ink 15.5:1, ink-2 8.4:1, ink-3 5.6:1, accent 8.3:1,
- * on-accent on accent 7.8:1. Every text pair meets AA (4.5:1). Keep it so when re-colouring.
+ *   - White grounds and navy type carry most of the app; Brink Navy frames it (the app
+ *     header); Brink Blue is the ONE accent, kept to small highlights: links, focus,
+ *     selection, the live-change flash. Primary buttons are navy, not blue.
+ *   - No warm, cream or tan grounds. Amber (#DEA31E) belongs to Brink Productions and
+ *     is never used here; the warning colour is a burnt orange.
+ *   - Never navy text on Navy 700, never white text on Surface Raised.
+ *
+ * Contrast: test/tokens.test.ts parses this file and checks every pair the UI uses
+ * (WCAG 2.1: 4.5:1 for text, 3:1 for borders, focus rings and icons). The table is in
+ * dashboard/docs/design-system.md. Keep it green when re-colouring.
  *
  * Dark theme: the `.dark` class on <html> (set by web/src/design/theme.ts, and before
  * first paint by the inline script in index.html). The same class drives
  * EasySchematic's own dark mode, so there is one theme for the whole app.
+ * `.bk-inverse` (the app header) is a Brink Navy field in both themes.
  */
 :root {
-  /* Neutrals */
-  --bk-canvas: #f4f4f2;        /* app background behind panels */
-  --bk-surface: #ffffff;       /* panels, header, cards, dialogs */
-  --bk-surface-2: #fafaf9;     /* side panels, table headers, sunken areas */
-  --bk-hover: #efeeeb;         /* hover fill for rows and quiet buttons */
-  --bk-pressed: #e5e4e0;       /* pressed / selected quiet fill */
-  --bk-line: #e3e2de;          /* hairlines and dividers */
-  --bk-line-strong: #c4c2bc;   /* control borders, node borders on the canvas */
-  --bk-ink: #18181b;           /* primary text */
-  --bk-ink-2: #4f4f57;         /* secondary text */
-  --bk-ink-3: #6e6e76;         /* tertiary text, placeholders, icons */
+  /* The guide's palette, by name (reference values; use the role tokens below in components) */
+  --bk-brand-navy: #0d161f;      /* Brink Navy: the brand colour, logo ink, dark grounds */
+  --bk-brand-navy-700: #1e2d3d;  /* Navy 700: large supporting fields beside navy */
+  --bk-brand-blue: #1f5a96;      /* Brink Blue: the one accent (PROPOSED in the guide) */
+  --bk-brand-white: #ffffff;
+  --bk-brand-surface-raised: #f3f5f7;
+  --bk-brand-line: #d5dbe1;
+  --bk-brand-border-strong: #6b7884;
+  --bk-brand-ink-muted: #4e5b67;
 
-  /* The one accent */
-  --bk-accent: #0d7377;
-  --bk-accent-hover: #0a5c5f;
-  --bk-accent-soft: #e2f1f0;   /* selected tab / row tint, info backgrounds */
-  --bk-on-accent: #ffffff;     /* text on an accent fill */
-  --bk-accent-fill: #0d7377;   /* filled controls that carry white text (EasySchematic's blue buttons) */
-  --bk-accent-fill-hover: #0a5c5f;
+  /* Grounds */
+  --bk-canvas: #ffffff;        /* app background behind panels (White: the default ground) */
+  --bk-surface: #ffffff;       /* panels, cards, dialogs */
+  --bk-surface-2: #f3f5f7;     /* Surface Raised: side panels, table headers */
+  --bk-hover: #e9edf1;         /* hover fill for rows and quiet buttons (derived, cool) */
+  --bk-pressed: #dde3e9;       /* pressed / open / toggled quiet fill (derived, cool) */
+  --bk-line: #d5dbe1;          /* Line: hairlines and dividers */
+  --bk-line-strong: #6b7884;   /* Border Strong: input and control outlines */
 
-  /* Status (used only for state, never decoration) */
+  /* Type */
+  --bk-ink: #0d161f;           /* Brink Navy: primary text (18.2:1 on white) */
+  --bk-ink-2: #33414e;         /* secondary text (derived between navy and Ink Muted) */
+  --bk-ink-3: #4e5b67;         /* Ink Muted: captions, metadata, icons, placeholders */
+
+  /* The one accent: Brink Blue */
+  --bk-accent: #1f5a96;
+  --bk-accent-hover: #184878;
+  --bk-accent-soft: #e8eff7;   /* selected row tint, info backgrounds */
+  --bk-on-accent: #ffffff;     /* text on an accent fill (7.1:1) */
+  --bk-accent-fill: #1f5a96;   /* filled controls that carry white text (EasySchematic's blue buttons) */
+  --bk-accent-fill-hover: #184878;
+
+  /* Primary actions: Brink Navy fill (blue stays a small highlight) */
+  --bk-primary: #0d161f;
+  --bk-primary-hover: #1e2d3d;
+  --bk-on-primary: #ffffff;
+
+  /* Status (state only, never decoration; always with text) */
   --bk-ok: #17703e;
-  --bk-ok-soft: #e6f4ec;
-  --bk-warn: #8f5a00;
-  --bk-warn-soft: #fbf1da;
+  --bk-ok-soft: #e7f3ec;
+  --bk-warn: #a6480b;          /* burnt orange: not Brink Productions amber */
+  --bk-warn-soft: #fbede4;
   --bk-danger: #b42318;
   --bk-danger-soft: #fbe8e6;
-  --bk-flash: #fff1b8;         /* a live change, fading out */
+  --bk-ok-fill: #17703e;       /* status fills that carry white text (both themes) */
+  --bk-warn-fill: #a6480b;
+  --bk-danger-fill: #b42318;
+  --bk-flash: #dce8f5;         /* a live change, fading out (a Brink Blue tint) */
 
   /* Schematic canvas */
   --bk-paper: #ffffff;         /* the drawing area */
-  --bk-paper-origin: #ecebe7;  /* outside the printable origin */
+  --bk-paper-origin: #f3f5f7;  /* outside the printable origin */
 
   /* Focus */
   --bk-focus: var(--bk-accent);
 
-  /* Elevation */
-  --bk-shadow-sm: 0 1px 2px rgb(24 24 27 / 0.06);
-  --bk-shadow-md: 0 4px 12px rgb(24 24 27 / 0.08), 0 1px 3px rgb(24 24 27 / 0.06);
-  --bk-shadow-lg: 0 16px 40px rgb(24 24 27 / 0.16), 0 2px 6px rgb(24 24 27 / 0.08);
+  /* Elevation (navy-tinted) */
+  --bk-shadow-sm: 0 1px 2px rgb(13 22 31 / 0.06);
+  --bk-shadow-md: 0 4px 12px rgb(13 22 31 / 0.08), 0 1px 3px rgb(13 22 31 / 0.06);
+  --bk-shadow-lg: 0 16px 40px rgb(13 22 31 / 0.18), 0 2px 6px rgb(13 22 31 / 0.08);
+  --bk-scrim: rgb(13 22 31 / 0.5);
 
   color-scheme: light;
 }
 
-:root.dark {
-  --bk-canvas: #0b0b0c;
-  --bk-surface: #161618;
-  --bk-surface-2: #121214;
-  --bk-hover: #212124;
-  --bk-pressed: #2a2a2e;
-  --bk-line: #29292d;
-  --bk-line-strong: #45454b;
-  --bk-ink: #ededef;
-  --bk-ink-2: #b0b0b8;
-  --bk-ink-3: #8e8e97;
+/* Dark: Brink Navy / Navy 700 grounds, white and cool-neutral text, a lighter tint of Brink Blue. */
+:root.dark,
+.bk-inverse {
+  --bk-canvas: #0d161f;        /* Brink Navy */
+  --bk-surface: #1e2d3d;       /* Navy 700 (white text 14.0:1) */
+  --bk-surface-2: #16222f;     /* between Navy and Navy 700: side panels, table headers */
+  --bk-hover: #2a3b4e;
+  --bk-pressed: #34475c;
+  --bk-line: #34465a;
+  --bk-line-strong: #7d8a96;   /* input outlines (4.0:1 on Navy 700) */
 
-  --bk-accent: #45c2ba;
-  --bk-accent-hover: #6fd3cc;
-  --bk-accent-soft: #12302e;
-  --bk-on-accent: #04211f;
-  --bk-accent-fill: #0f7f7a;
-  --bk-accent-fill-hover: #0c6b67;
+  --bk-ink: #ffffff;
+  --bk-ink-2: #d5dbe1;         /* the Line neutral, as text on navy */
+  --bk-ink-3: #a9b4bf;
 
-  --bk-ok: #5bd08a;
-  --bk-ok-soft: #10291b;
-  --bk-warn: #e9b949;
-  --bk-warn-soft: #2d2410;
-  --bk-danger: #ff8a7a;
-  --bk-danger-soft: #35140f;
-  --bk-flash: #3b3410;
+  --bk-accent: #8ebbea;        /* Brink Blue, lightened for navy grounds (7.0:1 on Navy 700) */
+  --bk-accent-hover: #b3d1f1;
+  --bk-accent-soft: #1f3a57;
+  --bk-on-accent: #0d161f;
+  --bk-accent-fill: #1f5a96;   /* Brink Blue itself carries white text (7.1:1) */
+  --bk-accent-fill-hover: #184878;
 
-  --bk-paper: #111113;
-  --bk-paper-origin: #0a0a0b;
+  --bk-primary: #ffffff;       /* white fill, navy text */
+  --bk-primary-hover: #d5dbe1;
+  --bk-on-primary: #0d161f;
+
+  --bk-ok: #6fd69a;
+  --bk-ok-soft: #173a2a;
+  --bk-warn: #f4a06b;
+  --bk-warn-soft: #3d2a1e;
+  --bk-danger: #ff8f86;
+  --bk-danger-soft: #40201f;
+  --bk-flash: #1f3a57;
+
+  --bk-paper: #142030;
+  --bk-paper-origin: #0d161f;
 
   --bk-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
   --bk-shadow-md: 0 4px 12px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.4);
   --bk-shadow-lg: 0 16px 40px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.4);
+  --bk-scrim: rgb(0 0 0 / 0.6);
 
   color-scheme: dark;
+}
+
+/* The app header: a Brink Navy field with white type, in both themes. */
+.bk-inverse {
+  --bk-surface: #0d161f;
+  --bk-surface-2: #0d161f;
+  --bk-hover: #1e2d3d;         /* Navy 700 */
+  --bk-pressed: #2a3b4e;
+  --bk-line: #2a3b4e;
+  --bk-ink-3: #c0c9d2;
 }

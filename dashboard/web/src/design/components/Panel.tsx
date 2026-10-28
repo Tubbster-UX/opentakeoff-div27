@@ -6,7 +6,7 @@ export function Panel({ title, count, children, id, actions, className = "" }: {
   return (
     <section id={id} aria-label={title} className={`mb-4 min-w-0 overflow-hidden rounded-panel border border-line bg-panel shadow-sm ${className}`}>
       <header className="flex min-h-11 items-center gap-2 border-b border-line px-4 py-2">
-        <h2 className="m-0 text-base font-semibold">{title}</h2>
+        <h2 className="m-0 text-lg font-bold">{title}</h2>
         {count != null && <span className="num text-xs text-ink-3">{count}</span>}
         {actions && <div className="ml-auto flex items-center gap-1">{actions}</div>}
       </header>
@@ -45,7 +45,7 @@ export function SidePanel({
       className={`flex h-full min-h-0 shrink-0 flex-col bg-panel-2 ${side === "left" ? "border-r" : "border-l"} border-line`}
     >
       <header className="flex h-10 shrink-0 items-center gap-2 border-b border-line pr-1.5 pl-3">
-        <h2 className="m-0 flex-1 truncate text-2xs font-semibold tracking-wide text-ink-3 uppercase">{title}</h2>
+        <h2 className="m-0 flex-1 truncate bk-label text-ink-3">{title}</h2>
         {onClose && <IconButton icon="close" label={`Close ${title.toLowerCase()}`} size="sm" onClick={onClose} />}
       </header>
       {tabs && <div className="shrink-0 border-b border-line px-2">{tabs}</div>}

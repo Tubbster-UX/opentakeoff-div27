@@ -14,7 +14,7 @@ const DOT: Record<Tone, string> = { neutral: "bg-ink-3", accent: "bg-accent", ok
 
 /** A small status label. Colour is never the only signal: the text says it. */
 export function Badge({ tone = "neutral", children, className = "" }: { tone?: Tone; children: ReactNode; className?: string }) {
-  return <span className={`tag inline-flex h-5 items-center rounded-full px-2 text-2xs font-semibold whitespace-nowrap ${TONE[tone]} ${className}`}>{children}</span>;
+  return <span className={`tag inline-flex h-5 items-center rounded-full px-2 text-2xs font-medium whitespace-nowrap ${TONE[tone]} ${className}`}>{children}</span>;
 }
 
 /** A dot + text status (save state, live state). */

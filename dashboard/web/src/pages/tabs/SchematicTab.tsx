@@ -61,7 +61,7 @@ function Outline() {
           <ul className="m-0 list-none p-0">
             {groups.map((g) => (
               <li key={g.key} className="border-b border-line">
-                <div className="flex items-baseline gap-2 px-3 pt-2 pb-1 font-semibold">
+                <div className="flex items-baseline gap-2 px-3 pt-2 pb-1 font-bold">
                   <span>{g.title}</span>
                   <span className="num text-xs font-normal text-ink-3">{g.devices.length} devices</span>
                 </div>

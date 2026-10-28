@@ -14,7 +14,7 @@ export interface TabDef<K extends string> {
 
 export const tabClass = (active: boolean, compact = false) =>
   `bk-focus relative inline-flex items-center gap-1.5 whitespace-nowrap no-underline ${compact ? "h-9 px-2 text-xs" : "h-11 px-3 text-sm"} font-medium transition-colors ${
-    active ? "text-ink after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-accent" : "text-ink-3 hover:text-ink"
+    active ? "text-ink after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-ink" : "text-ink-3 hover:text-ink"
   }`;
 
 export function TabList<K extends string>({

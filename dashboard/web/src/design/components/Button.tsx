@@ -5,7 +5,7 @@ export type ButtonVariant = "primary" | "secondary" | "quiet" | "danger";
 export type ButtonSize = "sm" | "md";
 
 const VARIANT: Record<ButtonVariant, string> = {
-  primary: "bg-accent text-on-accent border-transparent hover:bg-accent-hover",
+  primary: "bg-primary text-on-primary border-transparent hover:bg-primary-hover",
   secondary: "bg-panel text-ink border-line-strong hover:bg-hover",
   quiet: "bg-transparent text-ink-2 border-transparent hover:bg-hover hover:text-ink",
   danger: "bg-panel text-danger border-line-strong hover:bg-danger-soft",
@@ -55,7 +55,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
   ref,
 ) {
   const dim = size === "sm" ? "h-7 w-7" : "h-8 w-8";
-  const on = pressed ? "bg-accent-soft text-accent border-transparent hover:bg-accent-soft" : VARIANT[variant];
+  const on = pressed ? "bg-pressed text-ink border-transparent hover:bg-pressed" : VARIANT[variant];
   return (
     <button
       ref={ref}

@@ -15,6 +15,15 @@ import { DesignPage } from "./pages/DesignPage.js";
 import { ProjectLayout } from "./pages/ProjectLayout.js";
 import { ProjectsPage } from "./pages/ProjectsPage.js";
 import { DEFAULT_TAB, PROJECT_TABS } from "./workspaces.js";
+// Roboto, the Brink Design typeface (Brand Guidelines v1.0), bundled: no external font request.
+import "@fontsource/roboto/latin-300.css";
+import "@fontsource/roboto/latin-ext-300.css";
+import "@fontsource/roboto/latin-400.css";
+import "@fontsource/roboto/latin-ext-400.css";
+import "@fontsource/roboto/latin-500.css";
+import "@fontsource/roboto/latin-ext-500.css";
+import "@fontsource/roboto/latin-700.css";
+import "@fontsource/roboto/latin-ext-700.css";
 import "./app.css";
 
 const icon = document.createElement("link");

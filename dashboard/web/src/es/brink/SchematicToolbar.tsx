@@ -81,7 +81,7 @@ export default function SchematicToolbar() {
         id: `annotation-${Date.now()}`,
         type: "annotation",
         position: { x: c.x - (isSquare ? 50 : 100), y: c.y - 50 },
-        data: { shape, color: "rgba(59, 130, 246, 0.15)", borderColor: "#3b82f6" } as AnnotationData,
+        data: { shape, color: "rgba(31, 90, 150, 0.15)", borderColor: "#1f5a96" } as AnnotationData,
         style: { width: isSquare ? 100 : 200, height: 100 },
       };
       useSchematicStore.setState({ nodes: [...state.nodes, node] });

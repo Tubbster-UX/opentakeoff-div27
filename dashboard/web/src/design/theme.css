@@ -30,26 +30,39 @@
   --color-danger: var(--bk-danger);
   --color-danger-soft: var(--bk-danger-soft);
   --color-flash: var(--bk-flash);
+  --color-primary: var(--bk-primary);
+  --color-primary-hover: var(--bk-primary-hover);
+  --color-on-primary: var(--bk-on-primary);
 
-  /* Type: Inter (bundled with the vendored EasySchematic, so no external font load). */
-  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Type: Roboto (Brand Guidelines v1.0), bundled with the app from @fontsource/roboto
+     (web/src/main.tsx imports 300 / 400 / 500 / 700, Latin and Latin Extended): no
+     external font request. Fallbacks: Helvetica Neue, then Arial. */
+  --font-ui: "Roboto", "Helvetica Neue", Arial, sans-serif;
   --font-num: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 
-  /* Type scale (px): 11 / 12 / 13 / 14 / 16 / 20 / 24 */
-  --text-2xs: 11px;
-  --text-2xs--line-height: 16px;
+  /* Type scale, from the guide (px, size / line height):
+       text-display 48/52 Display (Bold)      text-2xl 32/40 Heading 1 (Bold)
+       text-xl      24/32 Heading 2 (Bold)    text-lg  18/24 Heading 3 (Bold)
+       text-base    16/24 Body                text-sm  14/20 Small: the app's dense UI text
+       text-xs      12/16 Label size          text-2xs 12/16 Label (use .bk-label: Medium, caps, +0.12em)
+     Dense chrome (tables, controls, panels) uses Small and Label; the hierarchy above it
+     follows the guide. Light 300 only at 18 px and up. */
+  --text-display: 48px;
+  --text-display--line-height: 52px;
+  --text-2xl: 32px;
+  --text-2xl--line-height: 40px;
+  --text-xl: 24px;
+  --text-xl--line-height: 32px;
+  --text-lg: 18px;
+  --text-lg--line-height: 24px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
   --text-xs: 12px;
   --text-xs--line-height: 16px;
-  --text-sm: 13px;
-  --text-sm--line-height: 20px;
-  --text-base: 14px;
-  --text-base--line-height: 20px;
-  --text-lg: 16px;
-  --text-lg--line-height: 24px;
-  --text-xl: 20px;
-  --text-xl--line-height: 28px;
-  --text-2xl: 24px;
-  --text-2xl--line-height: 32px;
+  --text-2xs: 12px;
+  --text-2xs--line-height: 16px;
 
   /* Radius: controls 4, panels 6, dialogs 8. */
   --radius-ctl: 4px;
@@ -69,7 +82,7 @@ body,
   background: var(--bk-canvas);
   color: var(--bk-ink);
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: 14px; /* Small: the app's dense default */
   line-height: 20px;
 }
 body {
@@ -97,6 +110,25 @@ body {
 }
 
 @layer components {
+  /* Label: 12/16, Medium, all caps, tracked +0.12em (eyebrows, panel headings, table headers). */
+  .bk-label,
+  .bk .bk-label {
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  /* Headings: Bold, sentence case. */
+  .bk h1,
+  .bk h2,
+  .bk h3 {
+    font-weight: 700;
+  }
+  /* One stroke weight for every icon, at any size. */
+  .bk-icon * {
+    vector-effect: non-scaling-stroke;
+  }
   .table-scroll {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -104,7 +136,7 @@ body {
   .data-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: 14px;
   }
   .data-table th,
   .data-table td {
@@ -117,9 +149,10 @@ body {
     position: sticky;
     top: 0;
     background: var(--bk-surface-2);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--bk-ink-3);
     white-space: nowrap;

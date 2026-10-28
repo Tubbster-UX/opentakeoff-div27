@@ -57,7 +57,7 @@ export function Dialog({
 
   if (!open) return null;
   return createPortal(
-    <div className="bk fixed inset-0 z-[300] flex items-center justify-center bg-[rgb(12_12_14/0.45)] p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()} data-bk-chrome>
+    <div className="bk fixed inset-0 z-[300] flex items-center justify-center bg-[var(--bk-scrim)] p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()} data-bk-chrome>
       <div
         ref={box}
         role="dialog"
@@ -69,7 +69,7 @@ export function Dialog({
       >
         <header className="flex items-start gap-3 border-b border-line px-5 py-3.5">
           <div className="min-w-0 flex-1">
-            <h2 id={`${id}-t`} className="m-0 text-lg font-semibold">
+            <h2 id={`${id}-t`} className="m-0 text-lg font-bold">
               {title}
             </h2>
             {description && (
