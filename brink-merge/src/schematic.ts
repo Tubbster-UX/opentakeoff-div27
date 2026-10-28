@@ -244,7 +244,7 @@ export function buildSchematic(opts: {
     members.get(p.roomKey)!.push(p);
   }
   // TR rooms first, so the head end reads first.
-  roomOrder.sort((a, b) => Number(members.get(b)![0].row.kind === "tr") - Number(members.get(a)![0].row.kind === "tr"));
+  roomOrder.sort((a, b) => Number(members.get(b)![0]!.row.kind === "tr") - Number(members.get(a)![0]!.row.kind === "tr"));
   const rooms: RoomNode[] = [];
   let cursorX = 0;
   let cursorY = 0;

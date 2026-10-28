@@ -8,17 +8,25 @@
 //   GET  /api/projects/:id                   -> Snapshot of the current import (BOM, issues, schematic rows)
 //   GET  /api/projects/:id/schematic         -> SchematicView: the EasySchematic file, rows + the edit layer
 //   POST /api/projects/:id/schematic/edits   -> EditResponse: append edits to the layer (Access identity required)
+//   GET  /api/projects/:id/takeoff           -> TakeoffView: the takeoff document, raw export + the takeoff edit layer
+//   POST /api/projects/:id/takeoff/edits     -> TakeoffEditResponse: append takeoff edits, re-run the import (Access identity)
+//   GET  /api/projects/:id/sheets            -> { sheets }: the project's current plan PDFs
+//   POST /api/projects/:id/sheets?name=&pages= -> SheetUploadResponse: store a plan PDF (body: the bytes; Access identity)
+//   GET  /api/projects/:id/sheets/:sheet/file -> the PDF, proxied from Supabase Storage
+//   DELETE /api/projects/:id/sheets/:sheet   -> { removed }: take a PDF out of the plan set (Access identity)
 //   GET  /api/projects/:id/live              -> WebSocket: row changes for that project
 //   GET  /api/live                           -> WebSocket: "touch" notices for the project list
 //
 // Reads carry no identity check of their own: Cloudflare Access in front of
 // the route is what keeps them private (dashboard/README.md). Writes verify the
 // Access JWT here (src/access.ts) and record the editor's email.
-import { identify } from "./access.js";
+import { identify, type Identity } from "./access.js";
 import { json, Router } from "./api/router.js";
 import { listProjects, readSnapshot, withClient } from "./db.js";
 import type { Env } from "./env.js";
 import { HttpError, parseEditRequest, readSchematic, writeEdits } from "./schematic.js";
+import { StorageError } from "./storage.js";
+import { currentSheets, MAX_SHEET_BYTES, parseTakeoffEditRequest, readTakeoff, removeSheet, sheetFile, uploadSheet, writeTakeoffEdits } from "./takeoff.js";
 
 export { RealtimeRelay } from "./relay.js";
 
@@ -27,8 +35,26 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RELAY_NAME = "brink-realtime-relay";
 /** A save carries at most a few hundred small ops. */
 const MAX_BODY = 256 * 1024;
+/** A takeoff save carries whole shape records (rings of up to tens of thousands of vertices). */
+const MAX_TAKEOFF_BODY = 8 * 1024 * 1024;
 
-const api = new Router({ id: (v) => (UUID.test(v) ? null : "project id must be a uuid") })
+/** Writes: same-origin only (a cross-site form cannot post here), from a verified Access identity. */
+async function writer(req: Request, env: Env, url: URL, contentType: RegExp): Promise<{ ok: true; who: Identity } | { ok: false; res: Response }> {
+  const origin = req.headers.get("origin");
+  if (origin && origin !== url.origin) return { ok: false, res: json({ error: "cross-origin write refused" }, 403) };
+  if (!contentType.test((req.headers.get("content-type") ?? "").toLowerCase())) return { ok: false, res: json({ error: "unsupported content type" }, 415) };
+  const who = await identify(req, env);
+  if (!who.ok) return { ok: false, res: json({ error: who.error }, who.status) };
+  return { ok: true, who: who.identity };
+}
+
+const fail = (e: unknown): Response => {
+  if (e instanceof HttpError) return json({ error: e.message, ...e.extra }, e.status);
+  if (e instanceof StorageError) return json({ error: e.message }, e.status);
+  throw e;
+};
+
+const api = new Router({ id: (v) => (UUID.test(v) ? null : "project id must be a uuid"), sheet: (v) => (UUID.test(v) ? null : "sheet id must be a uuid") })
   .get("/api/health", ({ env }) => json({ ok: true, realtime: Boolean(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) }))
   .get("/api/projects", async ({ env, ctx }) => json(await withClient(env.HYPERDRIVE.connectionString, (p) => ctx.waitUntil(p), listProjects)))
   .get("/api/projects/:id", async ({ env, ctx, params }) => {
@@ -68,6 +94,60 @@ const api = new Router({ id: (v) => (UUID.test(v) ? null : "project id must be a
       if (e instanceof HttpError) return json({ error: e.message, ...e.extra }, e.status);
       throw e;
     }
+  })
+  .get("/api/projects/:id/takeoff", async ({ env, ctx, params }) => {
+    const view = await withClient(env.HYPERDRIVE.connectionString, (p) => ctx.waitUntil(p), (db) => readTakeoff(db, params.id!));
+    if (!view) return json({ error: "no such project" }, 404);
+    if ("noImport" in view) return json({ error: "the project has no current import" }, 409);
+    return json(view);
+  })
+  .add("POST", "/api/projects/:id/takeoff/edits", async ({ req, env, ctx, url, params }) => {
+    const w = await writer(req, env, url, /^application\/json/);
+    if (!w.ok) return w.res;
+    // A takeoff save carries whole shape records: allow more than a schematic save.
+    const text = await req.text();
+    if (text.length > MAX_TAKEOFF_BODY) return json({ error: "request too large" }, 413);
+    let body: unknown;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      return json({ error: "body is not JSON" }, 400);
+    }
+    try {
+      const request = parseTakeoffEditRequest(body);
+      return json(await withClient(env.HYPERDRIVE.connectionString, (p) => ctx.waitUntil(p), (db) => writeTakeoffEdits(db, params.id!, request, w.who)));
+    } catch (e) {
+      return fail(e);
+    }
+  })
+  .get("/api/projects/:id/sheets", async ({ env, ctx, params }) =>
+    json({ sheets: await withClient(env.HYPERDRIVE.connectionString, (p) => ctx.waitUntil(p), (db) => currentSheets(db, params.id!)) }))
+  .add("POST", "/api/projects/:id/sheets", async ({ req, env, ctx, url, params }) => {
+    const w = await writer(req, env, url, /^application\/pdf/);
+    if (!w.ok) return w.res;
+    const len = Number(req.headers.get("content-length") ?? "0");
+    if (len > MAX_SHEET_BYTES) return json({ error: "plan files are limited to 100 MB" }, 413);
+    const bytes = await req.arrayBuffer();
+    const clientRef = req.headers.get("x-brink-client");
+    try {
+      const out = await withClient(env.HYPERDRIVE.connectionString, (p) => ctx.waitUntil(p), (db) =>
+        uploadSheet(env, db, params.id!, url.searchParams.get("name"), url.searchParams.get("pages"), bytes, w.who, clientRef && /^[A-Za-z0-9_-]{8,64}$/.test(clientRef) ? clientRef : null));
+      return json(out, out.unchanged ? 200 : 201);
+    } catch (e) {
+      return fail(e);
+    }
+  })
+  .get("/api/projects/:id/sheets/:sheet/file", async ({ env, ctx, params }) => {
+    try {
+      return await withClient(env.HYPERDRIVE.connectionString, (p) => ctx.waitUntil(p), (db) => sheetFile(env, db, params.id!, params.sheet!));
+    } catch (e) {
+      return fail(e);
+    }
+  })
+  .add("DELETE", "/api/projects/:id/sheets/:sheet", async ({ req, env, ctx, url, params }) => {
+    const w = await writer(req, env, url, /^(application\/json|$)/);
+    if (!w.ok) return w.res;
+    return json(await withClient(env.HYPERDRIVE.connectionString, (p) => ctx.waitUntil(p), (db) => removeSheet(db, params.id!, params.sheet!, w.who)));
   })
   .get("/api/projects/:id/live", ({ req, env, params }) => toRelay(req, env, { project: params.id! }))
   .get("/api/live", ({ req, env }) => toRelay(req, env, { scope: "list" }));

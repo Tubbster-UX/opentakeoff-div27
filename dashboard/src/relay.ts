@@ -17,7 +17,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { publishedTables, withClient } from "./db.js";
 import { connectSupabaseRealtime, type Upstream } from "./realtime.js";
-import { CORE_TABLES, OPTIONAL_TABLES, type ClientMessage, type RowChange, type ServerMessage, type TableName, type UpstreamStatus } from "./shared/protocol.js";
+import { CORE_TABLES, OPTIONAL_TABLES, PROJECT_TABLES, type ClientMessage, type RowChange, type ServerMessage, type TableName, type UpstreamStatus } from "./shared/protocol.js";
 import { isListClient, route, type ClientState } from "./shared/routing.js";
 import type { Env } from "./env.js";
 
@@ -110,8 +110,8 @@ export class RealtimeRelay extends DurableObject<Env> {
     for (const ws of this.openSockets()) {
       const st = ws.deserializeAttachment() as ClientState;
       if (isListClient(st)) {
-        // The project list shows nothing from the schematic edit layer: no re-read for it.
-        lists = change.table !== "brink_schematic_edits";
+        // The project list shows nothing from the edit layers or plan sheets: no re-read for them.
+        lists = !PROJECT_TABLES.includes(change.table);
         continue;
       }
       const { send, next } = route(change, st);

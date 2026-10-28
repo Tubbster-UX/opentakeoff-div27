@@ -9,7 +9,7 @@
 // - every "live" status from the relay triggers a re-read, which covers
 //   changes made before the subscription was in place;
 // - a change that moves current_import_id (re-import / re-merge) triggers a re-read.
-import type { ClientMessage, RowChange, ServerMessage, Snapshot } from "../../../src/shared/protocol.js";
+import { PROJECT_TABLES, type ClientMessage, type RowChange, type ServerMessage, type Snapshot } from "../../../src/shared/protocol.js";
 import { applyChange } from "../../../src/shared/state.js";
 import { short } from "./format.js";
 import { LiveSocket } from "./liveSocket.js";
@@ -98,8 +98,8 @@ export class ProjectStore {
       if (m.upstream === "live") void this.resync();
     } else if (m.type === "change") {
       for (const l of this.changeListeners) l(m.change);
-      // The edit layer is not part of the snapshot: only the editor frame uses it.
-      if (m.change.table === "brink_schematic_edits") return;
+      // The edit layers and plan sheets are not part of the snapshot: only the workspaces use them.
+      if (PROJECT_TABLES.includes(m.change.table)) return;
       if (this.loading || !this.state.snap) this.buffer.push(m.change);
       else this.applyOne(m.change, true);
     }

@@ -1,7 +1,7 @@
 // Which browser gets which change. The relay keeps, per browser socket, what it
 // opened: one project (and the import it is showing), or the project list. It
 // never needs the database to route.
-import { changeScope, type RowChange } from "./protocol.js";
+import { changeScope, PROJECT_TABLES, type RowChange } from "./protocol.js";
 
 export type ClientState =
   /** A project page: row changes for that project's current import. */
@@ -37,7 +37,7 @@ export function route(change: RowChange, client: ProjectClient): { send: boolean
   }
   // Portal pushes feed the project list only (touch); the project page does not show them in Phase 1.
   if (change.table === "brink_portal_pushes") return { send: false, next: client };
-  // Schematic edits belong to the project (they carry across imports), not to an import.
-  if (change.table === "brink_schematic_edits") return { send: scope.projectId === client.projectId, next: client };
+  // Edit layers and plan sheets belong to the project (they carry across imports), not to an import.
+  if (PROJECT_TABLES.includes(change.table)) return { send: scope.projectId === client.projectId, next: client };
   return { send: scope.importId !== undefined && scope.importId === client.importId, next: client };
 }

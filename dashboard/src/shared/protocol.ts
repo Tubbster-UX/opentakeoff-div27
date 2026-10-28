@@ -17,12 +17,19 @@ export const TABLE_COLUMNS = {
   // The schematic edit layer (brink-merge/docs/schematic-edits.md). Project-scoped, not import-scoped. OPTIONAL
   // like the Portal pushes: a database that has not had brink-merge's edits migration does not have it.
   brink_schematic_edits: ["id", "project_id", "target_key", "kind", "payload", "target_context", "editor_email", "editor_auth", "client_ref", "base_import_id", "created_at", "superseded_at", "superseded_by", "reverted_at", "reverted_by"],
+  // The takeoff edit layer and the plan sheets (brink-merge/docs/takeoff-edits.md). Project-scoped, OPTIONAL (a
+  // database without brink-merge's takeoff migration does not have them). The edit's payload (a whole shape record)
+  // stays on the server: a tab that sees another tab's edit re-reads GET /api/projects/:id/takeoff.
+  brink_takeoff_edits: ["id", "project_id", "target_type", "target_key", "kind", "editor_email", "editor_auth", "client_ref", "base_import_id", "created_at", "superseded_at", "superseded_by", "reverted_at", "reverted_by"],
+  brink_sheets: ["id", "project_id", "name", "byte_size", "sha256", "page_count", "rev", "uploaded_by", "uploaded_auth", "client_ref", "created_at", "replaced_by", "removed_at", "removed_by"],
 } as const;
 
 export type TableName = keyof typeof TABLE_COLUMNS;
 export const TABLES = Object.keys(TABLE_COLUMNS) as TableName[];
 /** Tables that may be absent (a migration this database has not had). Never assumed present. */
-export const OPTIONAL_TABLES: readonly TableName[] = ["brink_portal_pushes", "brink_schematic_edits"];
+export const OPTIONAL_TABLES: readonly TableName[] = ["brink_portal_pushes", "brink_schematic_edits", "brink_takeoff_edits", "brink_sheets"];
+/** Tables whose rows belong to a project across imports (edit layers, plan sheets): routed by project, never part of a snapshot. */
+export const PROJECT_TABLES: readonly TableName[] = ["brink_schematic_edits", "brink_takeoff_edits", "brink_sheets"];
 /** Tables every brink-merge database has (the init migration). */
 export const CORE_TABLES: readonly TableName[] = TABLES.filter((t) => !OPTIONAL_TABLES.includes(t));
 
@@ -36,6 +43,8 @@ export const PRIMARY_KEY: Record<TableName, readonly string[]> = {
   brink_schematic_connections: ["import_id", "edge_id"],
   brink_portal_pushes: ["id"],
   brink_schematic_edits: ["id"],
+  brink_takeoff_edits: ["id"],
+  brink_sheets: ["id"],
 };
 
 /** Child tables: one import's rows. */
@@ -43,7 +52,7 @@ export const IMPORT_TABLES = ["brink_bom_lines", "brink_issues", "brink_schemati
 export type ImportTable = (typeof IMPORT_TABLES)[number];
 
 /** Numeric columns (Postgres numeric / integer / bigint). Realtime and pg may hand them over as strings. */
-const NUMERIC = new Set(["line_no", "qty", "net_lf", "order_lf", "seq", "x", "y", "cable_length_ft", "errors", "warnings", "es_schema_version", "portal_proposal_id", "cables", "pulls"]);
+const NUMERIC = new Set(["line_no", "qty", "net_lf", "order_lf", "seq", "x", "y", "cable_length_ft", "errors", "warnings", "es_schema_version", "portal_proposal_id", "cables", "pulls", "byte_size", "page_count", "rev"]);
 
 /**
  * Small values the app needs from a heavy jsonb column, copied out on the server so the blob itself
@@ -145,6 +154,8 @@ export function changeScope(c: RowChange): { projectId?: string; importId?: stri
     case "brink_portal_pushes":
       return { projectId: r.project_id as string | undefined, importId: r.import_id as string | undefined };
     case "brink_schematic_edits":
+    case "brink_takeoff_edits":
+    case "brink_sheets":
       return { projectId: r.project_id as string | undefined };
     default:
       return { importId: r.import_id as string | undefined };
@@ -254,6 +265,77 @@ export interface EditResponse {
   importId: string;
   editor: string;
   results: EditResult[];
+}
+
+/** One plan file of a project (brink_sheets), as the app sees it. */
+export interface SheetSummary {
+  id: string;
+  /** The file name: OpenTakeoff's sheet key for page 1. */
+  name: string;
+  byte_size: number;
+  sha256: string;
+  page_count: number | null;
+  rev: number;
+  uploaded_by: string;
+  created_at: string;
+}
+
+/** One edit of the takeoff edit layer, as the app sees it (no payload: the document already has it applied). */
+export interface TakeoffEditSummary {
+  id: string;
+  target_type: "shape" | "condition" | "sheet";
+  target_key: string;
+  kind: string;
+  editor_email: string;
+  editor_auth: string;
+  created_at: string;
+}
+
+/** GET /api/projects/:id/takeoff: the current import's takeoff as people see it (raw export + the active edit layer). */
+export interface TakeoffView {
+  project_id: string;
+  project_name: string;
+  import_id: string;
+  /** The OpenTakeoff takeoff document (opentakeoff.takeoff_canvas.v1) with the edits applied: what the canvas opens. */
+  document: Record<string, unknown>;
+  /** The project's active edits; the canvas sends their ids back as `expect`. */
+  edits: TakeoffEditSummary[];
+  /** Active edits this import cannot carry as made (brink-merge's takeoff_edit_* warnings). */
+  issues: { severity: string; code: string; message: string; refs?: Record<string, unknown> }[];
+  sheets: SheetSummary[];
+  readAt: string;
+}
+
+/** POST /api/projects/:id/takeoff/edits. `expect`: the active edit of the target the canvas last saw (null: none). */
+export interface TakeoffEditRequest {
+  importId: string;
+  clientRef: string;
+  ops: ({ kind: string; target: string; payload?: Record<string, unknown>; expect?: string | null } | { kind: "revert"; edit: string })[];
+}
+
+export type TakeoffEditResult =
+  | { i: number; status: "saved"; edit: TakeoffEditSummary; superseded: string | null }
+  | { i: number; status: "reverted"; edit: string }
+  | { i: number; status: "conflict"; error: string; current: TakeoffEditSummary | null }
+  | { i: number; status: "invalid"; error: string };
+
+export interface TakeoffEditResponse {
+  /** The project's current import after the request: a new one when anything was saved (the import re-ran). */
+  importId: string;
+  editor: string;
+  results: TakeoffEditResult[];
+  /** The re-run import's issue counts, when it ran. */
+  reimport: { errors: number; warnings: number } | null;
+}
+
+/** POST /api/projects/:id/sheets (the PDF bytes; ?name=&pages=). */
+export interface SheetUploadResponse {
+  sheet: SheetSummary;
+  /** The same bytes were already the current file of that name: nothing was written. */
+  unchanged?: true;
+  /** Other bytes replaced a file of that name (its row and object are kept). */
+  revised?: true;
+  prevRev?: number;
 }
 
 /** GET /api/me: who a save would be recorded under; `email: null` (with the reason) when nobody. */
