@@ -1,0 +1,195 @@
+/* Brink design system: Tailwind 4 theme wiring, base styles and the few
+ * component classes that are easier as CSS (tables, focus, flash).
+ *
+ * Imported by web/src/app.css AFTER EasySchematic's index.css, which carries the
+ * single `@import "tailwindcss"` of the build, so this @theme extends that one
+ * Tailwind. Utility names are chosen so they never collide with EasySchematic's own
+ * CSS variables (--color-bg, --color-surface, --color-border, --color-text...):
+ * Brink utilities are bg-app, bg-panel, text-ink, border-line, bg-accent...
+ */
+
+@theme inline {
+  --color-app: var(--bk-canvas);
+  --color-panel: var(--bk-surface);
+  --color-panel-2: var(--bk-surface-2);
+  --color-hover: var(--bk-hover);
+  --color-pressed: var(--bk-pressed);
+  --color-line: var(--bk-line);
+  --color-line-strong: var(--bk-line-strong);
+  --color-ink: var(--bk-ink);
+  --color-ink-2: var(--bk-ink-2);
+  --color-ink-3: var(--bk-ink-3);
+  --color-accent: var(--bk-accent);
+  --color-accent-hover: var(--bk-accent-hover);
+  --color-accent-soft: var(--bk-accent-soft);
+  --color-on-accent: var(--bk-on-accent);
+  --color-ok: var(--bk-ok);
+  --color-ok-soft: var(--bk-ok-soft);
+  --color-warn: var(--bk-warn);
+  --color-warn-soft: var(--bk-warn-soft);
+  --color-danger: var(--bk-danger);
+  --color-danger-soft: var(--bk-danger-soft);
+  --color-flash: var(--bk-flash);
+
+  /* Type: Inter (bundled with the vendored EasySchematic, so no external font load). */
+  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-num: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  /* Type scale (px): 11 / 12 / 13 / 14 / 16 / 20 / 24 */
+  --text-2xs: 11px;
+  --text-2xs--line-height: 16px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 13px;
+  --text-sm--line-height: 20px;
+  --text-base: 14px;
+  --text-base--line-height: 20px;
+  --text-lg: 16px;
+  --text-lg--line-height: 24px;
+  --text-xl: 20px;
+  --text-xl--line-height: 28px;
+  --text-2xl: 24px;
+  --text-2xl--line-height: 32px;
+
+  /* Radius: controls 4, panels 6, dialogs 8. */
+  --radius-ctl: 4px;
+  --radius-panel: 6px;
+  --radius-dialog: 8px;
+
+  --shadow-sm: var(--bk-shadow-sm);
+  --shadow-md: var(--bk-shadow-md);
+  --shadow-lg: var(--bk-shadow-lg);
+}
+
+/* The app is an app shell: fixed header, the routed view fills the rest and scrolls
+   inside itself. (EasySchematic's index.css also pins html/body/#root to the viewport.) */
+html,
+body,
+#root {
+  background: var(--bk-canvas);
+  color: var(--bk-ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 20px;
+}
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer base {
+  a {
+    color: var(--bk-accent);
+    text-underline-offset: 2px;
+  }
+  a:hover {
+    color: var(--bk-accent-hover);
+  }
+  ::selection {
+    background: var(--bk-accent-soft);
+  }
+}
+
+/* One focus style everywhere: a 2px accent ring, keyboard only. */
+.bk :focus-visible,
+.bk-focus:focus-visible {
+  outline: 2px solid var(--bk-focus);
+  outline-offset: 2px;
+}
+
+@layer components {
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .data-table th,
+  .data-table td {
+    text-align: left;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--bk-line);
+    vertical-align: top;
+  }
+  .data-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--bk-surface-2);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--bk-ink-3);
+    white-space: nowrap;
+  }
+  .data-table tbody tr:hover > td {
+    background: var(--bk-surface-2);
+  }
+  .data-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .data-table .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .data-table .code {
+    font-family: var(--font-num);
+    font-size: 12px;
+    white-space: nowrap;
+    color: var(--bk-ink-2);
+  }
+  .data-table .desc {
+    min-width: 220px;
+  }
+  .data-table .empty {
+    color: var(--bk-ink-3);
+    text-align: center;
+    padding: 20px;
+  }
+  tr.flash > td {
+    animation: bk-flash 2.4s ease-out;
+  }
+  .card-flash {
+    animation: bk-flash-card 2.4s ease-out;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@keyframes bk-flash-card {
+  from {
+    background: var(--bk-flash);
+  }
+  to {
+    background: var(--bk-surface);
+  }
+}
+@keyframes bk-flash {
+  from {
+    background: var(--bk-flash);
+  }
+  to {
+    background: transparent;
+  }
+}
+@keyframes bk-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  tr.flash > td,
+  .card-flash {
+    animation-duration: 0.01s;
+  }
+}
