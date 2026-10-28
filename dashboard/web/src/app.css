@@ -1,164 +1,18 @@
-@import "tailwindcss";
+/* The app's one stylesheet, one Tailwind build for the shell AND the EasySchematic editor.
+ *
+ * 1. EasySchematic's own index.css, unmodified: it carries the build's `@import "tailwindcss"`,
+ *    React Flow's CSS, its theme variables, its class-based dark variant (`.dark`) and its
+ *    editor rules. The editor mounts in this same document (no frame), so its CSS is loaded
+ *    once, here, for every page.
+ * 2. The Brink tokens (the one file to re-colour the app).
+ * 3. The Brink Tailwind theme, base and component classes.
+ * 4. EasySchematic re-themed to the Brink tokens (scoped to the editor's .bk-es element).
+ */
+@import "../../vendor/easyschematic/src/index.css";
+@import "./design/tokens.css";
+@import "./design/theme.css";
+@import "./design/es-theme.css";
 
-/* Design tokens. Light: cool-slate on bright white, cobalt the one saturated thing.
-   Dark: near-black with electric blue. Square corners; mono tabular numerals on readouts. */
-:root {
-  --bg: #f4f6fa;
-  --surface: #ffffff;
-  --ink: #141a26;
-  --muted: #5b6577;
-  --line: #dde2ec;
-  --accent: #1f3fc7;
-  --accent-soft: #e6ebfb;
-  --warn: #8a5a00;
-  --warn-soft: #fbf0d9;
-  --error: #b03a26;
-  --error-soft: #f9e3df;
-  --ok: #1f6b4a;
-  --ok-soft: #dff2e8;
-  --flash: #fff3b0;
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #07090d;
-    --surface: #10141c;
-    --ink: #e6ebf4;
-    --muted: #8d97aa;
-    --line: #232a37;
-    --accent: #3f8cff;
-    --accent-soft: #14233f;
-    --warn: #f0b85a;
-    --warn-soft: #2e2512;
-    --error: #ff7a63;
-    --error-soft: #35150f;
-    --ok: #4fd39a;
-    --ok-soft: #0f2a1e;
-    --flash: #4a4212;
-    color-scheme: dark;
-  }
-}
-
-:root[data-theme="dark"] {
-  --bg: #07090d;
-  --surface: #10141c;
-  --ink: #e6ebf4;
-  --muted: #8d97aa;
-  --line: #232a37;
-  --accent: #3f8cff;
-  --accent-soft: #14233f;
-  --warn: #f0b85a;
-  --warn-soft: #2e2512;
-  --error: #ff7a63;
-  --error-soft: #35150f;
-  --ok: #4fd39a;
-  --ok-soft: #0f2a1e;
-  --flash: #4a4212;
-  color-scheme: dark;
-}
-
-@theme inline {
-  --color-bg: var(--bg);
-  --color-surface: var(--surface);
-  --color-ink: var(--ink);
-  --color-muted: var(--muted);
-  --color-line: var(--line);
-  --color-accent: var(--accent);
-  --color-accent-soft: var(--accent-soft);
-  --color-warn: var(--warn);
-  --color-warn-soft: var(--warn-soft);
-  --color-error: var(--error);
-  --color-error-soft: var(--error-soft);
-  --color-ok: var(--ok);
-  --color-ok-soft: var(--ok-soft);
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
-}
-
-@layer base {
-  html,
-  body {
-    background: var(--bg);
-    color: var(--ink);
-  }
-  body {
-    margin: 0;
-    font: 14px/1.45 var(--font-sans);
-  }
-  a {
-    color: var(--accent);
-  }
-}
-
-/* Tables: the one component every view repeats. They scroll inside their own container
-   (.table-scroll), never the page. */
-@layer components {
-  .table-scroll {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  .data-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-  .data-table th,
-  .data-table td {
-    text-align: left;
-    padding: 6px 12px;
-    border-bottom: 1px solid var(--line);
-    vertical-align: top;
-  }
-  .data-table th {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--muted);
-    white-space: nowrap;
-  }
-  .data-table tbody tr:last-child td {
-    border-bottom: 0;
-  }
-  .data-table .num {
-    text-align: right;
-    font-family: var(--font-mono);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-  .data-table .code {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    white-space: nowrap;
-  }
-  .data-table .desc {
-    min-width: 220px;
-  }
-  .data-table .empty {
-    color: var(--muted);
-    text-align: center;
-    padding: 18px;
-  }
-  tr.flash > td {
-    animation: flash 2.4s ease-out;
-  }
-  .card-flash {
-    animation: flash-card 2.4s ease-out;
-  }
-}
-
-@keyframes flash-card {
-  from {
-    background: var(--flash);
-  }
-  to {
-    background: var(--surface);
-  }
-}
-
-@keyframes flash {
-  from {
-    background: var(--flash);
-  }
-  to {
-    background: transparent;
-  }
-}
+/* Tailwind scans the vendored EasySchematic source too (its classes are in this build). */
+@source "../../vendor/easyschematic/src";
+@source "./";

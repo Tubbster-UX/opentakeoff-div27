@@ -1,0 +1,159 @@
+/* EasySchematic, re-themed to the Brink tokens without editing its components.
+ *
+ * EasySchematic styles itself through
+ *   1. its own CSS variables (src/theme.css: --color-bg, --color-surface, --color-border,
+ *      --color-text*, --color-canvas-origin), and
+ *   2. Tailwind palette utilities (bg-blue-600, text-gray-500, border-neutral-200...),
+ *      which Tailwind 4 compiles to var(--color-blue-600) etc.
+ * Both are re-pointed at the Brink tokens here, inside `.bk-es` (the element the
+ * Schematic tab mounts the editor in). So: EasySchematic's blue becomes the Brink accent,
+ * its grays / slates / neutrals become the Brink neutrals, and its surfaces follow the
+ * Brink light / dark theme.
+ *
+ * Left alone on purpose:
+ *   - signal colours (--color-sdi, --color-hdmi...) and power phase colours: they are
+ *     data (what a cable carries), not decoration;
+ *   - [data-export-capturing] and @media print: EasySchematic forces light, print-safe
+ *     colours there on the capture element itself, which wins over these inherited values,
+ *     so exported PNG / SVG / PDF files look exactly as upstream's do.
+ */
+@media screen {
+  .bk-es {
+    --color-bg: var(--bk-paper);
+    --color-surface: var(--bk-surface-2);
+    --color-surface-hover: var(--bk-hover);
+    --color-border: var(--bk-line-strong);
+    --color-text: var(--bk-ink-2);
+    --color-text-heading: var(--bk-ink);
+    --color-text-muted: var(--bk-ink-3);
+    --color-canvas-origin: var(--bk-paper-origin);
+
+    /* blue -> the Brink accent scale */
+    --color-blue-50: color-mix(in srgb, var(--bk-accent) 6%, var(--bk-surface));
+    --color-blue-100: color-mix(in srgb, var(--bk-accent) 12%, var(--bk-surface));
+    --color-blue-200: color-mix(in srgb, var(--bk-accent) 24%, var(--bk-surface));
+    --color-blue-300: color-mix(in srgb, var(--bk-accent) 45%, var(--bk-surface));
+    --color-blue-400: color-mix(in srgb, var(--bk-accent) 75%, var(--bk-surface));
+    --color-blue-500: var(--bk-accent);
+    --color-blue-600: var(--bk-accent-fill);
+    --color-blue-700: var(--bk-accent-fill-hover);
+    --color-blue-800: var(--bk-accent-fill-hover);
+    --color-blue-900: var(--bk-accent-fill-hover);
+    --color-sky-500: var(--bk-accent);
+    --color-sky-600: var(--bk-accent-fill);
+    --color-indigo-500: var(--bk-accent);
+    --color-indigo-600: var(--bk-accent-fill);
+
+    /* gray / slate / zinc -> the Brink neutrals (no cool tint) */
+    --color-gray-50: var(--bk-surface-2);
+    --color-gray-100: var(--bk-hover);
+    --color-gray-200: var(--bk-line);
+    --color-gray-300: var(--bk-line-strong);
+    --color-gray-400: var(--bk-ink-3);
+    --color-gray-500: var(--bk-ink-3);
+    --color-gray-600: var(--bk-ink-2);
+    --color-gray-700: var(--bk-ink-2);
+    --color-gray-800: var(--bk-ink);
+    --color-gray-900: var(--bk-ink);
+    --color-slate-50: var(--bk-surface-2);
+    --color-slate-100: var(--bk-hover);
+    --color-slate-200: var(--bk-line);
+    --color-slate-300: var(--bk-line-strong);
+    --color-slate-400: var(--bk-ink-3);
+    --color-slate-500: var(--bk-ink-3);
+    --color-slate-600: var(--bk-ink-2);
+    --color-slate-700: var(--bk-ink-2);
+    --color-slate-800: var(--bk-ink);
+    --color-slate-900: var(--bk-ink);
+    --color-neutral-50: var(--bk-surface-2);
+    --color-neutral-100: var(--bk-hover);
+    --color-neutral-200: var(--bk-line);
+    --color-neutral-300: var(--bk-line-strong);
+    --color-neutral-400: var(--bk-ink-3);
+    --color-neutral-500: var(--bk-ink-3);
+    --color-neutral-600: var(--bk-ink-2);
+    --color-neutral-700: var(--bk-ink-2);
+    --color-neutral-800: var(--bk-ink);
+    --color-neutral-900: var(--bk-ink);
+
+    font-family: var(--font-ui);
+  }
+
+  /* React Flow chrome: the Brink panel look. */
+  .bk-es .react-flow__controls,
+  .bk-es .react-flow__minimap {
+    border-color: var(--bk-line) !important;
+    border-radius: var(--radius-panel) !important;
+    box-shadow: var(--bk-shadow-md) !important;
+  }
+  .bk-es .react-flow__minimap {
+    background: var(--bk-surface) !important;
+  }
+  /* Minimap nodes: upstream colours them with literal blues / grays; here, accent-tinted. */
+  .bk-es .react-flow__minimap-node {
+    fill: color-mix(in srgb, var(--bk-accent) 35%, var(--bk-surface)) !important;
+    stroke: none !important;
+  }
+  .bk-es .react-flow__controls button {
+    background: var(--bk-surface) !important;
+    color: var(--bk-ink-2) !important;
+    border-color: var(--bk-line) !important;
+  }
+  .bk-es .react-flow__controls button:hover {
+    background: var(--bk-hover) !important;
+    color: var(--bk-ink) !important;
+  }
+  .bk-es .react-flow__controls button svg {
+    fill: currentColor;
+  }
+  .bk-es .react-flow__background {
+    background: var(--bk-paper) !important;
+  }
+  .bk-es .react-flow__background pattern circle,
+  .bk-es .react-flow__background pattern path {
+    fill: var(--bk-line-strong);
+    stroke: var(--bk-line);
+  }
+  /* Window selection in the accent; crossing selection keeps upstream's green dashes
+     (the two must stay distinguishable). */
+  .bk-es .react-flow.selection-window .react-flow__selection {
+    background: color-mix(in srgb, var(--bk-accent) 8%, transparent) !important;
+    border-color: color-mix(in srgb, var(--bk-accent) 60%, transparent) !important;
+  }
+  .bk-es .reconnect-visual {
+    background: color-mix(in srgb, var(--bk-accent) 15%, transparent);
+    border-color: color-mix(in srgb, var(--bk-accent) 60%, transparent);
+  }
+  .bk-es .react-flow__handle[data-connected]:hover {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--bk-accent) 40%, transparent);
+  }
+  .bk-es .reconnect-tooltip {
+    background: var(--bk-ink);
+    color: var(--bk-surface);
+  }
+  /* Inputs inside EasySchematic's panels and dialogs: the Brink control look. */
+  .bk-es input[type="text"],
+  .bk-es input[type="number"],
+  .bk-es input[type="search"],
+  .bk-es input:not([type]),
+  .bk-es select,
+  .bk-es textarea {
+    border-radius: var(--radius-ctl);
+  }
+  .bk-es input:focus-visible,
+  .bk-es select:focus-visible,
+  .bk-es textarea:focus-visible {
+    outline: 2px solid var(--bk-focus);
+    outline-offset: 0;
+  }
+  .bk-es input[type="checkbox"],
+  .bk-es input[type="radio"] {
+    accent-color: var(--bk-accent);
+  }
+
+  /* Upstream panels shown as Brink panel tabs (es/brink/RightPanel.tsx): hide their own
+     title row (an h2 and a close / collapse button); the Brink panel header replaces it. */
+  .bk-embed > div > div:has(> h2) {
+    display: none;
+  }
+}
