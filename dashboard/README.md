@@ -2,26 +2,27 @@
 
 Internal Brink Design tool. It is never distributed and never shown to clients.
 
-One website for every brink-merge project. It will host both the OpenTakeoff plan canvas and the EasySchematic editor for each project.
+One website for every brink-merge project. It hosts the OpenTakeoff plan canvas and the EasySchematic editor for each project.
 - **Phase 1** built the app shell: read-only and live.
 - **Phase 2** mounted the real EasySchematic editor in the Schematic tab. Edits are saved to the project's **schematic edit layer**, which survives re-imports (see [brink-merge/docs/schematic-edits.md](../brink-merge/docs/schematic-edits.md)).
-- **The cohesive app (this version)** makes it one Brink Design product: one app header, the [Brink design system](docs/design-system.md) everywhere (applied from the Brink Design Brand Guidelines v1.0: palette, Roboto, the logo, one icon family and the voice rules), and the EasySchematic editor mounted directly in the Schematic tab (no frame) with a Brink toolbar and side panels. The OpenTakeoff canvas (next phase) uses the same system.
+- **The cohesive app (this version)** makes it one Brink Design product: one app header, the [Brink design system](docs/design-system.md) everywhere (applied from the Brink Design Brand Guidelines v1.0: palette, Roboto, the logo, one icon family and the voice rules), and the EasySchematic editor mounted directly in the Schematic tab (no frame) with a Brink toolbar and side panels.
+- **Phase 3 (this version)** mounts the OpenTakeoff canvas in the Takeoff tab the same way. Plan PDFs are stored in Supabase Storage; takeoff edits are saved to the project's **takeoff edit layer**, which never overwrites the machine's originals, and each save re-runs the import, so the BOM and the schematic follow (see [brink-merge/docs/takeoff-edits.md](../brink-merge/docs/takeoff-edits.md)).
 
-**License.** The app includes EasySchematic, vendored in [`vendor/`](vendor/README.md) (AGPL-3.0). The app as a whole is AGPL-3.0, the license of this repository.
+**License.** The app includes EasySchematic and OpenTakeoff, vendored in [`vendor/`](vendor/README.md) (both AGPL-3.0). The app as a whole is AGPL-3.0, the license of this repository.
 
 | Route | What it shows |
 |---|---|
 | `/` **Projects** | Every project: current-import time, BOM totals (devices, cables, net / order LF), error and warning counts, and the latest Portal push when the database has `brink_portal_pushes`. Updates live. |
 | `/projects/:id/bom` **BOM & issues** | The live view of the current import: BOM, issues, rooms, devices, connections. Changed rows flash; a re-import switches the page to the new import. |
 | `/projects/:id/schematic` **Schematic** | The EasySchematic editor, opened on the project's schematic (brink-merge's rows with the edit layer applied), with the Brink toolbar, device library, inspector and layers panels. Moves, renames, room changes and connections save as you work, under your Cloudflare Access email. They appear live in other open tabs, and are kept across re-imports. The read-only outline of the generated rows is the Rows panel. Exports and reports are in the header's Project menu. |
-| `/projects/:id/takeoff` **Takeoff** | Phase 3 placeholder (the OpenTakeoff canvas mounts here), plus the current import's source hashes. |
+| `/projects/:id/takeoff` **Takeoff** | The OpenTakeoff canvas, opened on the current import's takeoff with the takeoff edit layer applied, over the project's plan PDFs. The Brink toolbar holds the tools; the left panel the sheets (upload, replace, remove); the right panel conditions, inspector and edits; the status bar scale, zoom and selection. Shapes, conditions and sheet scales save as you work, under your Cloudflare Access email, and re-run the import. They appear live in other tabs. The marked set, DXF, reports and print are in the Project menu. |
 | `/design` **Design system** | The Brink design system's kitchen sink, for review |
 
 `/projects/:id` opens the BOM & issues tab. The first dashboard's `/p/:id` links redirect.
 
 > **Reads are protected only by Cloudflare Access on the route.** The Worker does not check who reads, so anyone who can reach it can read every project. Do not deploy it without Cloudflare Access in front.
 >
-> **Writes** (schematic edits) are different. The Worker verifies the Access JWT itself (signature against the team's certs, plus the AUD tag) and records the email. With Access not configured, it refuses every write.
+> **Writes** (schematic edits, takeoff edits, plan uploads) are different. The Worker verifies the Access JWT itself (signature against the team's certs, plus the AUD tag) and records the email. With Access not configured, it refuses every write.
 
 ```
 browser ──GET /api/projects, /api/projects/:id, …/schematic──▶ Worker ──Hyperdrive (pg)──▶ Supabase Postgres
@@ -73,6 +74,20 @@ EasySchematic adds `@xyflow/react`, `zustand`, `html-to-image` and `jspdf`, pinn
   - All tabs of a project share one store, so switching tabs keeps the socket.
   - Edit-layer rows (`brink_schematic_edits`) are routed by project, not by import. The store hands them to the Schematic tab, which forwards them to the editor's sync.
 
+### The Takeoff tab
+
+**Where the canvas runs.** The canvas is upstream OpenTakeoff (`web/` of this repository's `main`), vendored in `vendor/opentakeoff` with one recorded patch (a host bridge). It mounts directly in the tab (`web/src/ot/workspace.tsx`), behind the lazy entry `@brink/takeoff-workspace`. Focus mode is pinned on, so upstream hides its own top bar, palette and tabs; the Brink toolbar, sheets panel, right panel and status bar (`web/src/ot/brink/`) drive the canvas through the bridge. `vendor/PATCHES.md` has every change. The Div 27 cable branch is not vendored; it arrives by re-sync (`scripts/sync-opentakeoff.mjs`) once it is merged to `main`.
+
+**Load.** The tab reads `GET /api/projects/:id/takeoff`: the import's raw takeoff export with the active takeoff edits applied by brink-merge's `applyTakeoffEdits`. The canvas opens it through upstream's own store seam (`setActiveStore`, `web/src/ot/store.ts`). Plan PDFs come from `GET …/sheets/:sheet/file`, which the Worker proxies from the private `brink-plans` bucket. Loading writes nothing.
+
+**Save.** The store adapter diffs what the canvas saves against what it loaded (brink-merge's `diffTakeoff`) and posts edit ops (`shape_put`, `shape_delete`, `condition_put`, `sheet_scale`) to `POST …/takeoff/edits`. Each op carries `expect`, as schematic ops do. In one transaction the Worker appends the edits under the verified Access email and re-runs the import with the edit layer (`writeMerge`), so the BOM, issues and schematic update, and the schematic edits re-apply.
+- An edit to a shape the machine made keeps its original ring, actor and method (`origin.proposed_verts_norm`). Only a person (a verified Access identity) can mark a takeoff `reviewed`; an agent's edit cannot.
+- The import's stored takeoff stays the raw export. A count that now differs from OpenTakeoff's report is a warning (`count_edited`); cable lengths stay the report's until it is re-exported.
+
+**Plans.** `POST …/sheets?name=&pages=` stores the bytes at a content-addressed path (`<project>/<sheet row>/<sha256>.pdf`) and records a `brink_sheets` row. A new file of the same name is a new revision; the old row and object are kept (`replaced_by`). `DELETE …/sheets/:sheet` marks the row removed.
+
+**Live.** Takeoff edits and sheet rows reach other tabs through the relay, routed by project (payloads and storage paths are never relayed). The canvas re-reads the server render through upstream's own sync bridge, which waits while a person is mid-gesture. A tab ignores its own `client_ref`.
+
 ### The Schematic tab
 
 **Where the editor runs.** The editor is upstream EasySchematic, vendored unmodified in `vendor/easyschematic`. It mounts directly in the tab (`web/src/es/workspace.tsx`): same document, same React tree, same Tailwind build. Its menu bar, side panels, toasts and theme hook are Brink modules swapped in at build time, and its colours are re-pointed at the Brink tokens; `vendor/PATCHES.md` lists every change and where each EasySchematic feature went in the Brink UI. The tab and the save sync talk through plain calls (`web/src/lib/esBridge.ts` has the message shapes).
@@ -114,24 +129,28 @@ EasySchematic adds `@xyflow/react`, `zustand`, `html-to-image` and `jspdf`, pinn
 | `src/index.ts` | Worker entry: the `/api` routes, then the static app |
 | `src/access.ts` | Cloudflare Access JWT verification (RS256 against the team's certs, AUD, issuer, expiry), and the local-only dev bypass |
 | `src/schematic.ts` | `GET …/schematic` (rows + edit layer) and `POST …/schematic/edits` (the edit-layer writes), using brink-merge's `src/edits.ts` |
+| `src/takeoff.ts`, `src/storage.ts` | `GET …/takeoff`, `POST …/takeoff/edits` (takeoff edit layer + re-import, using brink-merge's `src/takeoffEdits.ts` and `writeMerge`), the `…/sheets` routes, and the Supabase Storage calls |
 | `src/api/router.ts` | Method + path router. A path served for another method answers 405 with `Allow`. |
 | `src/db.ts` | Hyperdrive reads (project list with totals, snapshot, optional-table checks) |
 | `src/relay.ts`, `src/realtime.ts` | `RealtimeRelay` Durable Object and its Supabase Realtime upstream |
 | `src/shared/` | Table / column contract, routing and the change reducer, shared by the Worker and the page |
 | `web/src/main.tsx` | Routes |
-| `web/src/workspaces.ts` | The project tabs; later phases swap a placeholder for the real workspace here |
+| `web/src/workspaces.ts` | The project tabs |
+| `web/src/ot/` | The Takeoff workspace: mount (`workspace.tsx`), the store adapter (`store.ts`), the host bridge (`host.ts`), the Brink toolbar, panels, status bar and Project menu (`brink/`), module overrides |
 | `web/src/es/` | The Schematic workspace: mount (`workspace.tsx`), storage, save / live sync, the Brink toolbar and panels (`brink/`), module overrides |
 | `web/src/design/` | The Brink design system, from the Brink Design Brand Guidelines v1.0: tokens (`tokens.css`), Roboto, Tailwind theme, EasySchematic re-theme, components ([docs](docs/design-system.md)); `test/tokens.test.ts` checks the palette and contrast |
 | `web/public/brand/` | The Brink Design logo: the owner's master shield SVG (navy, white), the wordmark cut from it, the interim app icon ([README](web/public/brand/README.md)) |
-| `vendor/` | Vendored EasySchematic, its lock (commit + hashes), `PATCHES.md`; `scripts/sync-easyschematic.mjs` re-syncs and checks it |
+| `vendor/` | Vendored EasySchematic and OpenTakeoff, their locks (commit + hashes), `PATCHES.md`; `scripts/sync-easyschematic.mjs` and `scripts/sync-opentakeoff.mjs` re-sync and check them |
 | `web/src/pages/`, `web/src/components/`, `web/src/lib/` | Pages, UI pieces, the live socket and the stores |
 | `scripts/live-check.mjs` | Real-browser end-to-end check of the shell (Playwright); writes `docs/evidence/cohesive/live-check/` |
 | `scripts/es-check.mjs` | Real-browser end-to-end check of the Schematic tab (Playwright, two Access users); writes `docs/evidence/cohesive/es-check/` |
+| `scripts/takeoff-check.mjs` | Real-browser end-to-end check of the Takeoff tab (Playwright, two Access users, local Supabase Storage); writes `docs/evidence/takeoff/` |
 | `scripts/cohesive-shots.mjs` | Light and dark screenshots of every view, and the no-iframe / no-EasySchematic-chrome assertion; writes `docs/evidence/cohesive/` |
 
 **Schema.** brink-merge owns the schema (`brink-merge/supabase/migrations/`).
 - Phase 2 added one table, `brink_schematic_edits`, in an additive migration (`20261027120000_brink_schematic_edits.sql`).
-- The app writes only that table, and only through `POST …/schematic/edits`. Every other table is read-only to the app.
+- Phase 3 added `brink_takeoff_edits`, `brink_sheets` and the private Storage bucket `brink-plans` (`20261028120000_brink_takeoff.sql`), also additive.
+- The app writes the edit tables and `brink_sheets` through its POST / DELETE routes, and a takeoff save writes a new import (the re-run). Nothing else writes from the app.
 
 ## API
 
@@ -143,6 +162,12 @@ EasySchematic adds `@xyflow/react`, `zustand`, `html-to-image` and `jspdf`, pinn
 | `GET /api/projects/:id` | `Snapshot`: the current import's BOM, issues, schematic nodes and connections |
 | `GET /api/projects/:id/schematic` | `SchematicView`: the EasySchematic file (rows + edit layer), the active edits, and the edits this import cannot carry |
 | `POST /api/projects/:id/schematic/edits` | `EditResponse`. Body `{ importId, clientRef, ops: [{ kind, target, payload, expect } \| { kind: "revert", edit }] }`; one result per op: `saved`, `reverted`, `conflict` or `invalid`. 401 / 503 without an identity, 403 cross-origin, 415 not JSON, 409 on an older import. |
+| `GET /api/projects/:id/takeoff` | `TakeoffView`: the takeoff document (raw export + edit layer), the active edits, the edits this import cannot carry, and the current sheets |
+| `POST /api/projects/:id/takeoff/edits` | `TakeoffEditResponse`. Body `{ importId, clientRef, ops: [{ kind, target, payload, expect } \| { kind: "revert", edit }] }`; the same results and refusals as schematic edits. When anything saved, the import re-ran: `importId` is the new one. |
+| `GET /api/projects/:id/sheets` | `{ sheets: SheetSummary[] }`: the current plan PDFs |
+| `POST /api/projects/:id/sheets?name=&pages=` | `SheetUploadResponse`. Body: the PDF bytes (`application/pdf`, up to 100 MB). Access identity required. |
+| `GET /api/projects/:id/sheets/:sheet/file` | The PDF, proxied from Supabase Storage |
+| `DELETE /api/projects/:id/sheets/:sheet` | `{ removed }`. Access identity required. |
 | `GET /api/projects/:id/live` | WebSocket: `status` and `change` messages |
 | `GET /api/live` | WebSocket: `status` and `touch` messages |
 
@@ -152,15 +177,15 @@ The types are in `src/shared/protocol.ts`.
 
 Requires Node 22.12+ and Docker (for local Supabase).
 
-1. **Start local Supabase** (Postgres + Realtime) from `brink-merge/`:
+1. **Start local Supabase** (Postgres, Realtime and Storage) from `brink-merge/`:
    ```bash
    cd brink-merge && npm ci
    npx supabase start
    npx supabase status -o env      # API_URL, SERVICE_ROLE_KEY
    ```
-   Only the database, Realtime and the API gateway (Kong) are needed. If Docker Hub rate-limits image pulls, run:
+   Only the database, Realtime, Storage (plan PDFs) and the API gateway (Kong) are needed. If Docker Hub rate-limits image pulls, run:
    ```bash
-   SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io npx supabase start -x gotrue,storage-api,imgproxy,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+   SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io npx supabase start -x gotrue,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
    ```
    With gotrue excluded, `status` prints no keys. The local service-role key is then a JWT with `"role": "service_role"`, signed (HS256) with the Realtime container's `API_JWT_SECRET`.
 2. **Import the invented fixtures**:
@@ -170,7 +195,7 @@ Requires Node 22.12+ and Docker (for local Supabase).
    node bin/brink-merge.mjs fixtures/div27-minimal.takeoff.json --report fixtures/div27-minimal.report.json \
      --project "Brink Div 27 minimal (invented)" --db-url postgres://postgres:postgres@127.0.0.1:54322/postgres --out /tmp/m.json --bom /tmp/m.csv
    ```
-3. **Set the secrets.** In `dashboard/`, run `cp .dev.vars.example .dev.vars`, then set `SUPABASE_SERVICE_ROLE_KEY`. `.dev.vars` is gitignored.
+3. **Set the secrets.** In `dashboard/`, run `cp .dev.vars.example .dev.vars`, then set `SUPABASE_URL` (`http://127.0.0.1:54321`) and `SUPABASE_SERVICE_ROLE_KEY`. `.dev.vars` is gitignored.
    - **To edit locally without Cloudflare Access**, also set `DEV_ONLY_ACCESS_BYPASS_EMAIL=you@example.com` in `.dev.vars`. Edits are then recorded under that email with `editor_auth = 'dev-bypass'`.
    - The bypass works only when Access is **not** configured (no `ACCESS_TEAM_DOMAIN`) **and** the request came in on a loopback host (`127.0.0.1`, `localhost`, `[::1]`). No deployed route has such a host, and a test fails if `wrangler.toml` ever names the variable.
    - Without the bypass or Access, the editor opens, but changes are not saved (the status bar says why).
@@ -190,6 +215,7 @@ Requires Node 22.12+ and Docker (for local Supabase).
    ```bash
    npm run live-check              # with `npm run dev` running: the shell; writes docs/evidence/cohesive/live-check/; exits 1 on any failed check
    npm run es-check                # self-contained: the Schematic tab; writes docs/evidence/cohesive/es-check/
+   npm run takeoff-check           # self-contained: the Takeoff tab (needs Storage); writes docs/evidence/takeoff/
    npm run shots                   # with `npm run dev` running: light / dark screenshots; writes docs/evidence/cohesive/
    ```
    - `es-check` builds the app and starts its own `wrangler dev` with Cloudflare Access configured against a local stand-in team (an RSA key and its JWKS), so every save goes through real JWT verification.
@@ -225,8 +251,11 @@ DASHBOARD_TEST_DATABASE_URL=postgres://… npm test   # also the read API over H
   - an older import refused with 409
   - a revert
 - **`test/db.test.ts`** checks that `brink_portal_pushes` is queried only when it exists.
+- **`test/takeoffStore.test.ts`** covers the Takeoff tab's store adapter: loading writes nothing, saves become edit ops with `expect`, the save queue, conflicts, echo suppression and plan reads through the Worker.
+- **`test/takeoffApi.test.ts`** runs the takeoff routes on PGlite with brink-merge's migrations and a mock Storage server: request checks before any database work, a drawn count saved under the editor and re-running the import (the BOM follows, the stored takeoff stays the export), machine originals kept, conflicts, reverts, schematic edits carried into the re-run, and plan upload, read-back, de-dupe, revision and removal.
+- `test/worker.test.ts` also checks the takeoff and sheet routes (methods, cross-origin, non-JSON, no identity).
 - **`test/shared.test.ts`** covers the reducer, routing (edits by project) and the projection.
-- **`npm run check`** also runs `check:vendor`, which fails if any vendored EasySchematic file differs from the locked upstream commit without a recorded patch. It typechecks the vendored source with upstream's compiler options (`web/tsconfig.es.json`) together with the Schematic workspace and overrides.
+- **`npm run check`** also runs `check:vendor`, which fails if any vendored EasySchematic file differs from the locked upstream commit without a recorded patch. It typechecks the vendored source with upstream's compiler options (`web/tsconfig.es.json`) together with the Schematic workspace and overrides. The OpenTakeoff check does the same for `vendor/opentakeoff` (`web/tsconfig.ot.json`).
 
 The genuine Realtime path is covered by `npm run live-check` against local Supabase.
 
@@ -234,6 +263,7 @@ The genuine Realtime path is covered by `npm run live-check` against local Supab
 
 Every screenshot uses invented fixture data only.
 
+- **The Takeoff tab**: `docs/evidence/takeoff/` (light and dark, uploads, live edits in a second tab, phone width; [README](docs/evidence/takeoff/README.md) has expected and observed values).
 - **The cohesive app**: `docs/evidence/cohesive/`, re-taken after the Brand Guidelines were applied (light and dark: Projects, project header, Schematic tab, inspector, layers / rows panels, device editor, Project menu, Pack List and Cable Schedule reports, BOM & issues, Takeoff, `/design`, About & licenses, phone width; `shots.json` has the assertions), with the re-run checks in `es-check/` and `live-check/` (each with its `results.json`), and the logo files compared with the guidelines PDF in `brand/`.
 - **Phase 2** (the editor in its frame): `docs/evidence/phase2/`.
 - **Phase 1** (the read-only shell): `docs/evidence/phase1/`. The first dashboard's screenshots are in `docs/evidence/*.png`.
@@ -249,5 +279,8 @@ Nothing in this repository deploys the app. Before a deploy, the owner needs to:
 - **Hyperdrive.** Run `wrangler hyperdrive create` against the Supabase session pooler or direct connection. Put the config id in `wrangler.toml` in place of the all-zero placeholder.
   - The role must be able to SELECT the brink tables. Since Phase 2 it also needs `INSERT` on `brink_schematic_edits`, and `UPDATE (superseded_at, superseded_by, reverted_at, reverted_by)` on it.
   - The tables have RLS with no policies, so the role must bypass RLS (or own the tables). brink-merge's migrations create no roles.
+  - Since Phase 3 it also needs the takeoff grants in [brink-merge/docs/takeoff-edits.md](../brink-merge/docs/takeoff-edits.md): writes to `brink_takeoff_edits` and `brink_sheets`, and the import tables, because a takeoff save re-runs the import.
   - To show the Portal push status, the same role must also be able to read `pg_class` and `pg_publication_tables`.
+- **Storage.** The migration creates the private bucket `brink-plans` (100 MB per file, PDF only). Plan revisions are kept, not deleted; decide on a retention rule and a project storage limit.
+- **Takeoff edits.** Each save writes a new import (a copy of the raw takeoff jsonb). Decide whether to prune old imports. Concurrent edits of one target are last-write-wins with `expect` conflicts.
 - **Secrets.** Run `wrangler secret put SUPABASE_URL` and `wrangler secret put SUPABASE_SERVICE_ROLE_KEY`. Local runs used the legacy service-role JWT; the new `sb_secret_…` keys have not been tried with Realtime here.

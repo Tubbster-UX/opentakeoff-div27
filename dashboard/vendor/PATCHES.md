@@ -202,6 +202,7 @@ Upstream's top bar, tool rail, panel rail and status strip are replaced by Brink
 - The guided first takeoff on upstream's bundled sample plan, and "Connect your AI" (agents use the MCP servers)
 - On-device OCR and voice dictation (section 3)
 - "Clear workspace" (it deletes every plan in the browser-only store)
+- The report's "Optionally contribute" button, which sends the takeoff's derived data to an outside open-data endpoint (hidden by `ot-theme.css`; project data does not leave the app)
 
 ### 3. Module overrides
 

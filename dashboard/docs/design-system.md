@@ -1,6 +1,6 @@
 # Brink design system
 
-One look for the whole Brink app: the shell (Projects, the project header, BOM & issues), the schematic editor, and next the takeoff canvas. Neither EasySchematic's nor OpenTakeoff's own look is used.
+One look for the whole Brink app: the shell (Projects, the project header, BOM & issues), the schematic editor and the takeoff canvas. Neither EasySchematic's nor OpenTakeoff's own look is used.
 
 It follows the **Brink Design Brand Guidelines v1.0** (October 2026): colour, type, logo, iconography and voice. Where the guide leaves a choice open for a dense app (dark theme, secondary greys, status colours), this page records what we chose and why.
 
@@ -148,7 +148,7 @@ Files and their sources: [`web/public/brand/README.md`](../web/public/brand/READ
 
 From the guide: straightforward, capable, warm.
 - Say what happens, in short sentences and plain words. Specific beats impressive.
-- **we / us / our** when the app speaks for Brink Design ("Next, we put the OpenTakeoff canvas in this tab", "Our internal project app at Brink Design").
+- **we / us / our** when the app speaks for Brink Design ("Our internal project app at Brink Design").
 - No hype words, no exclamation points, no emoji, no lightning bolts or electric clichés.
 - The name is **Brink Design**: two words, title case. Never "Brink Design Co.", "BrinkDesign" or "BRINK DESIGN" in running text (the logo's capitals are artwork).
 - Headings and labels in sentence case.
@@ -183,19 +183,19 @@ From the guide: straightforward, capable, warm.
 - **One header** (`web/src/components/Shell.tsx`), a Brink Navy field: the white Brink Design wordmark, project switcher, the project tabs (Takeoff, Schematic, BOM & issues; Alt+1/2/3), then the open workspace's save status, the live-updates status, the **Project menu** (file-type actions the workspace contributes: exports, reports, title block, print sheets), the theme toggle and the user menu (Cloudflare Access identity, About & licenses).
 - **Workspaces** contribute to the header through `web/src/lib/chrome.ts` (`status`, `menu`) while they are mounted.
 - **Pages** use `Page` (title, meta line, actions) from `web/src/components/ui.tsx`.
-- **A workspace tab** (Schematic today, Takeoff next) is: a `Toolbar` under the header, a left `SidePanel` (library / sheets), the canvas, a right `SidePanel` with `TabList` tabs (inspector and the tool's own panels), and a status bar under the canvas. Mark Brink chrome inside a canvas tab with `data-bk-chrome`, so the tool's single-key shortcuts never fire from it.
+- **A workspace tab** (Takeoff, Schematic) is: a `Toolbar` under the header, a left `SidePanel` (library / sheets), the canvas, a right `SidePanel` with `TabList` tabs (inspector and the tool's own panels), and a status bar under the canvas. Mark Brink chrome inside a canvas tab with `data-bk-chrome`, so the tool's single-key shortcuts never fire from it.
 
 ## Brand files
 
 `web/public/brand/`: the shield (owner-supplied master SVG, navy, and its white version), the wordmark (cut from the master), and the interim app icon. Each file's source and the guide's file list are in [`web/public/brand/README.md`](../web/public/brand/README.md). They are imported as assets (the build's public folder is the vendored EasySchematic's, for its fonts).
 
-## For the OpenTakeoff canvas (next phase)
+## The OpenTakeoff canvas
 
-To match this system the takeoff tab should:
-1. mount the canvas in the tab like the schematic workspace (no frame), behind a typed lazy entry like `@brink/schematic-workspace`;
-2. replace OpenTakeoff's top bar, logo and menus with a Brink `Toolbar` (tools, zoom, undo) and put file-type actions (marked PDF, DXF, reports, print) in the header's Project menu through `chrome.ts`;
-3. use `SidePanel`s for sheets (left) and conditions / inspector (right), and the status bar for save and calibration state;
-4. map OpenTakeoff's design tokens (`web/src/styles/tokens.css`: `--sp-*`, `--fs-*`, colours) to the Brink tokens in a scoped CSS file, as `es-theme.css` does for EasySchematic; SVG presentation attributes there take literal colours (`web/src/lib/ui.js` `SVG`), so those need Brink values passed in, not CSS variables; condition palettes stay as they are (they are user data);
-5. keep its single-letter shortcuts inside the canvas and mark Brink chrome `data-bk-chrome`;
-6. use the `.dark` class for its dark mode;
-7. use Roboto (map OpenTakeoff's font variables to `--font-ui`), the Brink outline icons, and the voice rules above for its labels.
+The Takeoff tab follows this system (details in [`vendor/PATCHES.md`](../vendor/PATCHES.md), OpenTakeoff part):
+1. the canvas mounts in the tab, no frame, behind the typed lazy entry `@brink/takeoff-workspace` (`web/src/ot/load.ts`, `web/src/ot/workspace.tsx`);
+2. OpenTakeoff's top bar, logo, tool rail, palette band and status strip are gone (focus mode pinned on, plus `ot-theme.css`); the Brink `Toolbar` holds the tools, zoom, undo, condition and scale, and the header's Project menu holds the marked set, DXF, reports, JSON and print (`web/src/ot/brink/projectMenu.ts` through `chrome.ts`);
+3. `SidePanel`s hold the sheets (left) and conditions / inspector / edits (right); the status bar shows tool, sheet, scale, zoom, selection and the editor's email;
+4. `web/src/design/ot-theme.css` maps OpenTakeoff's tokens to the Brink tokens inside `.bk-ot`; literal colours in SVG presentation attributes are re-pointed at Brink literals at build time; condition palettes are untouched (they are user data);
+5. single-letter shortcuts stay inside the canvas; Brink chrome is marked `data-bk-chrome`;
+6. dark mode is the `.dark` class;
+7. Roboto everywhere, the Brink outline icons in the Brink chrome, and the voice rules above for Brink labels.
