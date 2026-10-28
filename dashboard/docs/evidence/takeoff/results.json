@@ -1,0 +1,159 @@
+{
+  "ranAt": "2026-10-28T16:08:34.491Z",
+  "project": "Brink Div 27 sample (invented)",
+  "access": "Cloudflare Access JWTs verified by the Worker (local stand-in team)",
+  "realtime": "local Supabase Realtime",
+  "storage": "local Supabase Storage (bucket brink-plans)",
+  "results": [
+    {
+      "name": "Takeoff tab mounts the OpenTakeoff canvas; with no plan file, the Brink empty state names the takeoff's sheet",
+      "ok": true,
+      "detail": "Takeoffs on sheets with no plan file sample-plan.pdf 41 Upload a file with that name to see them."
+    },
+    {
+      "name": "no iframe and no OpenTakeoff top bar, tool rail, logo or status strip: the Brink header, toolbar, sheets panel and right panel instead",
+      "ok": true,
+      "detail": "{\"iframes\":0,\"otTopbar\":0,\"otRail\":0,\"otLogo\":0,\"otStatus\":0,\"brinkToolbar\":1,\"brinkLogo\":1,\"sheets\":1,\"right\":1}"
+    },
+    {
+      "name": "the app header shows the Access identity",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "loading the takeoff writes nothing",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "the plan is stored in Supabase Storage under the Access email",
+      "ok": true,
+      "detail": "brink-plans/efd999f8-57f6-456b-8d44-dbb7cb617664/f79cc0d5-c9c3-4fa5-930b-cb8cb0897ff9/8bddc98ecd11f4dde7b6e3c606fbc45eda18bb7319b5413a9102b2f984f35c14.pdf, 891 bytes, 1 page"
+    },
+    {
+      "name": "the object is in the private bucket (storage.objects)",
+      "ok": true,
+      "detail": "brink-plans/efd999f8-57f6-456b-8d44-dbb7cb617664/f79cc0d5-c9c3-4fa5-930b-cb8cb0897ff9/8bddc98ecd11f4dde7b6e3c606fbc45eda18bb7319b5413a9102b2f984f35c14.pdf"
+    },
+    {
+      "name": "the Worker serves it back byte for byte (the browser never holds a Storage key)",
+      "ok": true,
+      "detail": "891 bytes"
+    },
+    {
+      "name": "the takeoff draws over the uploaded plan (its 41 machine shapes)",
+      "ok": true,
+      "detail": "41 takeoffs on view"
+    },
+    {
+      "name": "uploading and opening the plan saved no takeoff edit",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "BOM & issues (second user) shows the DATA-1 device line from the import",
+      "ok": true,
+      "detail": "DATA-1 7 EA"
+    },
+    {
+      "name": "drawing a count with the canvas's Count tool saves a shape_put edit under the Access email",
+      "ok": true,
+      "detail": "shp-a643558e-4984-4982-bd0e-8e7242d66807 at [\"0.310\",\"0.790\"]"
+    },
+    {
+      "name": "the save re-ran the import (a new current import)",
+      "ok": true,
+      "detail": "26c65de1 -> 4bad8da4"
+    },
+    {
+      "name": "the second tab's BOM shows DATA-1 +1, live (Supabase Realtime -> relay -> page)",
+      "ok": true,
+      "detail": "7 -> 8 EA in 309 ms"
+    },
+    {
+      "name": "BOM & issues says the count differs from the report because of an app edit (a warning, not an error)",
+      "ok": true,
+      "detail": "DATA-1: 8 EA after edits made in the Brink app; OpenTakeoff's report (exported before them) says 7. This BOM uses 8; cable lines still come from the report until it is re-exported"
+    },
+    {
+      "name": "moving an agent's marker saves a shape_put that keeps the machine's original ring and actor",
+      "ok": true,
+      "detail": "origin {\"actor\":\"agent\",\"edited\":true,\"proposed_verts_norm\":[[0.24509803921568626,0.3282828282828283]]}"
+    },
+    {
+      "name": "the import's stored takeoff is still the machine original (the edit is a layer)",
+      "ok": true,
+      "detail": "takeoff_sha256 dfec344966b1"
+    },
+    {
+      "name": "the Brink inspector says an agent made it and its original is kept",
+      "ok": true,
+      "detail": "DATA-1 count not reviewed Quantity 1 EA Sheet A-101 Label OPEN OFFICE 110 Made by An agent, manual Machine original kept (the original ring is stored with it) Last edit alex@brink.test, 10/28/2026, 4:"
+    },
+    {
+      "name": "deleting a takeoff saves a shape_delete edit",
+      "ok": true,
+      "detail": "shape_delete"
+    },
+    {
+      "name": "the second tab's BOM goes back to the import's count, live",
+      "ok": true,
+      "detail": "DATA-1 7 EA in 311 ms"
+    },
+    {
+      "name": "the second user's canvas shows the takeoff with A's edits",
+      "ok": true,
+      "detail": "41 on view"
+    },
+    {
+      "name": "A's new count appears on B's canvas, live (the canvas's own sync bridge re-hydrates)",
+      "ok": true,
+      "detail": "41 -> 42 in 778 ms"
+    },
+    {
+      "name": "the saving tab ignored its own echo (no reload notice)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "after a reload the edits persist (41 + 2 drawn - 1 deleted)",
+      "ok": true,
+      "detail": "42 on view, 4 active edits"
+    },
+    {
+      "name": "re-import with the brink-merge CLI: the canvas reloads the new import with the edits re-applied, and so does the BOM",
+      "ok": true,
+      "detail": "42 on view; DATA-1 8 EA on the new import"
+    },
+    {
+      "name": "the Project menu runs upstream's exporter: marked-set",
+      "ok": true,
+      "detail": "Brink Div 27 sample (invented) - marked set.pdf (9721 bytes)"
+    },
+    {
+      "name": "the Project menu runs upstream's exporter: dxf",
+      "ok": true,
+      "detail": "Brink Div 27 sample (invented)_A-101.dxf (8842 bytes)"
+    },
+    {
+      "name": "the Project menu runs upstream's exporter: takeoff-json",
+      "ok": true,
+      "detail": "Brink-Div-27-sample-invented.takeoff.json (30505 bytes)"
+    },
+    {
+      "name": "dark mode: the app's .dark class themes the canvas chrome",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phone width (390 px): no horizontal page scroll on the Takeoff tab",
+      "ok": true,
+      "detail": "0px"
+    },
+    {
+      "name": "no page errors in any tab",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}
