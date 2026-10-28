@@ -127,4 +127,24 @@ describe("route (relay fan-out)", () => {
     // not part of the snapshot: applyChange leaves it alone
     expect(applyChange(snap(), edit).kind).toBe("ignored");
   });
+
+  it("routes takeoff edits and plan sheets by project, and never relays a takeoff edit's payload", () => {
+    const edit = fromRealtimePayload({
+      table: "brink_takeoff_edits",
+      eventType: "INSERT",
+      new: { id: "t1", project_id: P, target_type: "shape", target_key: "shp-1", kind: "shape_put", payload: { shape: { verts_norm: [[0, 0]] } }, client_ref: "ot-tab", editor_email: "a@b.c" },
+    })!;
+    expect(edit.record).toMatchObject({ project_id: P, target_key: "shp-1", kind: "shape_put", client_ref: "ot-tab" });
+    expect(edit.record).not.toHaveProperty("payload");
+    expect(route(edit, client).send).toBe(true);
+    expect(route(edit, { projectId: P, importId: null }).send).toBe(true);
+    expect(route(edit, { projectId: "other", importId: I1 }).send).toBe(false);
+    expect(applyChange(snap(), edit).kind).toBe("ignored");
+    const sheet = fromRealtimePayload({ table: "brink_sheets", eventType: "INSERT", new: { id: "s1", project_id: P, name: "plan.pdf", byte_size: "891", rev: "1", storage_path: "secret/path.pdf", client_ref: "ot-tab" } })!;
+    expect(sheet.record).toMatchObject({ name: "plan.pdf", byte_size: 891, rev: 1 });
+    expect(sheet.record).not.toHaveProperty("storage_path");
+    expect(route(sheet, client).send).toBe(true);
+    expect(route(sheet, { projectId: "other", importId: I1 }).send).toBe(false);
+    expect(applyChange(snap(), sheet).kind).toBe("ignored");
+  });
 });

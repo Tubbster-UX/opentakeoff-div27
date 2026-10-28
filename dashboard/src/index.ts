@@ -26,7 +26,7 @@ import { listProjects, readSnapshot, withClient } from "./db.js";
 import type { Env } from "./env.js";
 import { HttpError, parseEditRequest, readSchematic, writeEdits } from "./schematic.js";
 import { StorageError } from "./storage.js";
-import { currentSheets, MAX_SHEET_BYTES, parseTakeoffEditRequest, readTakeoff, removeSheet, sheetFile, uploadSheet, writeTakeoffEdits } from "./takeoff.js";
+import { checkUpload, currentSheets, MAX_SHEET_BYTES, parseTakeoffEditRequest, readTakeoff, removeSheet, sheetFile, uploadSheet, writeTakeoffEdits } from "./takeoff.js";
 
 export { RealtimeRelay } from "./relay.js";
 
@@ -130,6 +130,7 @@ const api = new Router({ id: (v) => (UUID.test(v) ? null : "project id must be a
     const bytes = await req.arrayBuffer();
     const clientRef = req.headers.get("x-brink-client");
     try {
+      checkUpload(url.searchParams.get("name"), url.searchParams.get("pages"), bytes);
       const out = await withClient(env.HYPERDRIVE.connectionString, (p) => ctx.waitUntil(p), (db) =>
         uploadSheet(env, db, params.id!, url.searchParams.get("name"), url.searchParams.get("pages"), bytes, w.who, clientRef && /^[A-Za-z0-9_-]{8,64}$/.test(clientRef) ? clientRef : null));
       return json(out, out.unchanged ? 200 : 201);

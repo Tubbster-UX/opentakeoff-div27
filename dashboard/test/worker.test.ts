@@ -151,6 +151,39 @@ describe("worker", () => {
     expect(await (await fetch(`${base}/api/health`)).json()).toEqual({ ok: true, realtime: true });
   });
 
+  it("the takeoff and plan-sheet routes: methods, ids, and every write needs same-origin, its content type and a verified identity", async () => {
+    const S = "33333333-3333-4333-8333-333333333333";
+    const takeoff = `${base}/api/projects/${P}/takeoff`;
+    const sheets = `${base}/api/projects/${P}/sheets`;
+    expect((await fetch(takeoff, { method: "POST" })).headers.get("allow")).toBe("GET");
+    expect((await fetch(`${takeoff}/edits`)).headers.get("allow")).toBe("POST");
+    expect((await fetch(`${sheets}/${S}`)).headers.get("allow")).toBe("DELETE");
+    expect((await fetch(`${sheets}/${S}/file`, { method: "DELETE" })).headers.get("allow")).toBe("GET");
+    expect(new Set((await fetch(sheets, { method: "PUT" })).headers.get("allow")!.split(", "))).toEqual(new Set(["GET", "POST"]));
+    expect((await fetch(`${sheets}/not-a-uuid/file`)).status).toBe(400);
+    expect((await fetch(`${base}/api/projects/not-a-uuid/takeoff`)).status).toBe(400);
+
+    const body = JSON.stringify({ importId: I1, clientRef: "ot-test-client", ops: [{ kind: "shape_delete", target: "shp-1" }] });
+    const json = { "content-type": "application/json" };
+    expect((await fetch(`${takeoff}/edits`, { method: "POST", headers: { ...json, origin: "https://evil.example" }, body })).status).toBe(403);
+    expect((await fetch(`${takeoff}/edits`, { method: "POST", headers: { "content-type": "text/plain" }, body })).status).toBe(415);
+    const anon = await fetch(`${takeoff}/edits`, { method: "POST", headers: json, body });
+    expect(anon.status).toBe(401); // the dev bypass variable is set, but Access is configured: no bypass
+    const token = { "cf-access-jwt-assertion": await team.token() };
+    expect((await fetch(`${takeoff}/edits`, { method: "POST", headers: { ...json, ...token }, body: "{not json" })).status).toBe(400);
+    expect((await fetch(`${takeoff}/edits`, { method: "POST", headers: { ...json, ...token }, body: JSON.stringify({ importId: I1, clientRef: "x", ops: [] }) })).status).toBe(400);
+
+    const pdf = "%PDF-1.4\n%%EOF\n";
+    const pdfType = { "content-type": "application/pdf" };
+    expect((await fetch(`${sheets}?name=a.pdf`, { method: "POST", headers: { ...pdfType, origin: "https://evil.example" }, body: pdf })).status).toBe(403);
+    expect((await fetch(`${sheets}?name=a.pdf`, { method: "POST", headers: json, body: pdf })).status).toBe(415);
+    expect((await fetch(`${sheets}?name=a.pdf`, { method: "POST", headers: pdfType, body: pdf })).status).toBe(401);
+    // Identified: the name and the bytes are checked before anything is stored or read.
+    expect((await fetch(`${sheets}?name=a%23b.pdf`, { method: "POST", headers: { ...pdfType, ...token }, body: pdf })).status).toBe(400);
+    expect((await fetch(`${sheets}?name=a.pdf`, { method: "POST", headers: { ...pdfType, ...token }, body: "GIF89a" })).status).toBe(415);
+    expect((await fetch(`${sheets}/${S}`, { method: "DELETE", headers: json })).status).toBe(401);
+  });
+
   it("GET /api/me is the verified Access identity", async () => {
     expect(await (await fetch(`${base}/api/me`)).json()).toMatchObject({ email: null, auth: null, error: expect.stringMatching(/no Cloudflare Access identity/) });
     const me = await fetch(`${base}/api/me`, { headers: { "cf-access-jwt-assertion": await team.token({ email: "Sam@Brink.test" }) } });

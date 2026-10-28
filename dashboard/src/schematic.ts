@@ -17,6 +17,7 @@ import {
 import { assembleSchematic, SCHEMATIC_EDGES_SQL, SCHEMATIC_META_SQL, SCHEMATIC_NODES_SQL, type SchematicMetaRow } from "../../brink-merge/src/render.js";
 import type { ConnectionEdge, SchematicFile, SchematicNode } from "../../brink-merge/src/vendor/esTypes.js";
 import type { Identity } from "./access.js";
+import { HttpError } from "./http.js";
 import type { Queryable } from "./db.js";
 import type { EditRequest, EditResponse, EditResult, EditSummary, SchematicView } from "./shared/protocol.js";
 
@@ -65,11 +66,7 @@ export async function readSchematic(db: Queryable, projectId: string): Promise<S
   }
 }
 
-export class HttpError extends Error {
-  constructor(readonly status: number, message: string, readonly extra: Record<string, unknown> = {}) {
-    super(message);
-  }
-}
+export { HttpError };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

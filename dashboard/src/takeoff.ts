@@ -22,10 +22,9 @@ import {
 } from "../../brink-merge/src/takeoffEdits.js";
 import type { Identity } from "./access.js";
 import type { Queryable } from "./db.js";
-import type { Env } from "./env.js";
-import { HttpError } from "./schematic.js";
+import { HttpError } from "./http.js";
 import type { SheetSummary, SheetUploadResponse, TakeoffEditRequest, TakeoffEditResponse, TakeoffEditResult, TakeoffEditSummary, TakeoffView } from "./shared/protocol.js";
-import { getObject, PLANS_BUCKET, putObject } from "./storage.js";
+import { getObject, PLANS_BUCKET, putObject, type StorageEnv } from "./storage.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_OPS = 500;
@@ -219,7 +218,8 @@ async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
  * POST /api/projects/:id/sheets. The same bytes under the same name: unchanged. Other bytes: a new revision
  * (the old row and object stay, `replaced_by` points at the new row). The object is written before the row.
  */
-export async function uploadSheet(env: Env, db: Queryable, projectId: string, nameRaw: unknown, pagesRaw: unknown, bytes: ArrayBuffer, who: Identity, clientRef: string | null): Promise<SheetUploadResponse> {
+/** An upload's name, page count and bytes, checked before anything is stored (the route runs this before it connects). */
+export function checkUpload(nameRaw: unknown, pagesRaw: unknown, bytes: ArrayBuffer): { name: string; pages: number | null } {
   const name = checkSheetName(nameRaw);
   if (bytes.byteLength === 0) throw new HttpError(400, "the file is empty");
   if (bytes.byteLength > MAX_SHEET_BYTES) throw new HttpError(413, "plan files are limited to 100 MB");
@@ -227,6 +227,11 @@ export async function uploadSheet(env: Env, db: Queryable, projectId: string, na
   if (!head.includes("%PDF-")) throw new HttpError(415, "only PDF plans are stored; convert images and plan sets to PDF first");
   const pages = pagesRaw == null || pagesRaw === "" ? null : Number(pagesRaw);
   if (pages !== null && !(Number.isInteger(pages) && pages > 0 && pages < 100_000)) throw new HttpError(400, "pages must be a positive whole number");
+  return { name, pages };
+}
+
+export async function uploadSheet(env: StorageEnv, db: Queryable, projectId: string, nameRaw: unknown, pagesRaw: unknown, bytes: ArrayBuffer, who: Identity, clientRef: string | null): Promise<SheetUploadResponse> {
+  const { name, pages } = checkUpload(nameRaw, pagesRaw, bytes);
   const sha = await sha256Hex(bytes);
 
   const prev = (await db.query(`select ${SHEET_COLUMNS} from brink_sheets where project_id = $1 and name = $2 and removed_at is null and replaced_by is null`, [projectId, name])).rows[0];
@@ -254,7 +259,7 @@ export async function uploadSheet(env: Env, db: Queryable, projectId: string, na
 }
 
 /** GET /api/projects/:id/sheets/:sheet/file: the object, proxied (the browser never holds a Storage credential). */
-export async function sheetFile(env: Env, db: Queryable, projectId: string, sheetId: string): Promise<Response> {
+export async function sheetFile(env: StorageEnv, db: Queryable, projectId: string, sheetId: string): Promise<Response> {
   const row = (await db.query("select storage_bucket, storage_path, sha256, name from brink_sheets where id = $1 and project_id = $2", [sheetId, projectId])).rows[0];
   if (!row) throw new HttpError(404, "no such sheet");
   const obj = await getObject(env, String(row.storage_bucket), String(row.storage_path));

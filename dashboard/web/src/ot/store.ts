@@ -149,7 +149,7 @@ export function createBrinkTakeoffStore(o: BrinkStoreOptions) {
 
   // The save queue: the canvas debounces (700 ms); one request in flight, the latest payload wins.
   let latest: Record<string, unknown> | null = null;
-  let running: Promise<void> | null = null;
+  let running = false;
   let again = false;
   let waiters: { resolve: () => void; reject: (e: Error) => void }[] = [];
   let disposed = false;
@@ -193,9 +193,12 @@ export function createBrinkTakeoffStore(o: BrinkStoreOptions) {
   async function flush(): Promise<void> {
     if (running) {
       again = true;
-      return running;
+      return;
     }
-    running = (async () => {
+    // `running` is cleared in the same tick the loop ends (not in a later .finally), so a save queued by a waiter
+    // that was just resolved always starts a new round instead of being folded into one that already ended.
+    running = true;
+    try {
       do {
         again = false;
         const payload = latest;
@@ -207,11 +210,10 @@ export function createBrinkTakeoffStore(o: BrinkStoreOptions) {
         } catch (e) {
           for (const w of done) w.reject(e as Error);
         }
-      } while (again && !disposed);
-    })().finally(() => {
-      running = null;
-    });
-    return running;
+      } while ((again || waiters.length) && !disposed);
+    } finally {
+      running = false;
+    }
   }
 
   async function saveOnce(payload: Record<string, unknown> | null): Promise<void> {
