@@ -1,4 +1,4 @@
-# Vendored EasySchematic
+# Vendored code: EasySchematic and OpenTakeoff
 
 `easyschematic/` is a copy of [EasySchematic](https://github.com/duremovich/EasySchematic) by duremovich. EasySchematic is licensed under the GNU Affero General Public License v3; its license is in [`easyschematic/LICENSE`](easyschematic/LICENSE). The Brink app embeds it as the Schematic tab's editor.
 
@@ -45,3 +45,30 @@ The app pins what upstream's lock file resolved at this commit:
 - `jspdf` 4.2.1
 
 Upstream's own fix to `html-to-image` (`easyschematic/patches/html-to-image+1.11.13.patch`) is applied the way upstream applies it: `patch-package` in `postinstall`.
+
+## Vendored OpenTakeoff
+
+`opentakeoff/` is a copy of OpenTakeoff's plan canvas: this repository's own `web/` app as committed on `main` (AGPL-3.0-only, the repository's `LICENSE`, copied in as `opentakeoff/LICENSE`). The Brink app mounts it as the Takeoff tab's canvas.
+
+| | |
+|---|---|
+| Source | This repository, <https://github.com/Tubbster-UX/opentakeoff-div27>, `main` |
+| Commit | `00f9adca1705f0e3e9abe24f680b29a802033370` (2026-10-27). Its `web/` is byte-identical to upstream [OpenTakeoff](https://github.com/Kentucky-ai/opentakeoff) `798ee88`. |
+| What is copied | `LICENSE`, `web/package.json` (as `package.json`), all of `web/src/` (as `src/`) |
+| Record | [`opentakeoff.lock.json`](opentakeoff.lock.json): the source, the commit, the include list, a sha256 for every file, the patches and the patched files' hashes |
+| Changes | [`PATCHES.md`](PATCHES.md#opentakeoff): one patch (`opentakeoff-patches/0001-host-bridge.patch`), the module overrides, the theme, the storage adapter |
+
+**Not the Division 27 branch.** The cable-setup UI lives on `claude/div27-cable-setup-c6t9wu` and is not copied. Once that branch is merged to `main`, a re-sync brings it in as one reviewable diff.
+
+```bash
+cd dashboard
+node scripts/sync-opentakeoff.mjs --ref origin/main   # copy web/ at that commit from this repository's git objects, re-apply opentakeoff-patches/*.patch, rewrite the lock
+node scripts/sync-opentakeoff.mjs --check             # verify (part of npm run check): every file equals the lock, the lock equals git at that commit
+```
+
+The copy is read from git objects, never from the working tree, and the top-level `web/` is never modified by the app. After a sync:
+- review the diff, and that `0001-host-bridge.patch` still applies (the sync stops if it does not);
+- run `npm run check` (it also fails the build if a literal colour the theme re-points has left upstream's source);
+- re-run the Takeoff checks (`npm run takeoff-check`, `dashboard/README.md`).
+
+**Dependencies** (pinned to what upstream's lock file resolved at the commit): pdfjs-dist 4.10.38, pdf-lib 1.17.1, fflate 0.8.3, jsts 2.12.1, @turf/helpers, @turf/difference, @turf/boolean-overlap, @turf/boolean-contains 7.3.5. Upstream's OCR, voice and Microsoft 365 engines (onnxruntime-web, ppu-paddle-ocr, @huggingface/transformers, @azure/msal-browser) are not installed: the modules that load them are replaced (PATCHES.md, OpenTakeoff section 3).

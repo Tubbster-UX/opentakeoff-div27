@@ -1,0 +1,32 @@
+--- a/src/pages/TakeoffCanvas.jsx
++++ b/src/pages/TakeoffCanvas.jsx
+@@ -16,6 +16,8 @@
+ // pans. Geometry math reads tfRef (always current), so drawing stays accurate.
+ 
+ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
++// Brink app (dashboard/vendor/PATCHES.md, 0001-host-bridge): the host page reads the canvas's state and verbs here.
++import { useOtHost } from "@brink/ot-host";
+ import { keyText } from "../lib/keys.ts";
+ import { nextHatchId } from "../lib/takeoffConstants.ts";
+ import { buildTakeoffDocument, sheetEntry } from "../lib/takeoffDocument.js";
+@@ -10298,6 +10300,20 @@
+         <DropZoneOverlay zone={dragZone} />
+        </div>
+   );
++  // Brink app (dashboard/vendor/PATCHES.md, 0001-host-bridge): hand the host page this render's
++  // state and verbs, so its own toolbar, sheet list, inspector and status bar drive the canvas.
++  // Read-only here: the host only calls the canvas's own setters and functions.
++  useOtHost({
++    tool, setTool, poly: poly.length, finishOk, finishShape, dropLastPoint, undoShapeCommand, redoShapeCommand, armCopyText,
++    snapOn, setSnapOn, angleOn, setAngleOn, units, setUnits, darkMode, setDarkMode,
++    scaleFace, scaleItems, unitsPerPx, scaleNeedsConfirm,
++    sheets, active, setActive, page, setPage, pageCount, knownPages, sheetKey, tabLabel, openSheets, goToSheet, view, setView, sheetGroup,
++    openTabs, closeTab, fileInputRef, handleFiles, refreshSheets, closePdf, status,
++    conditions, activeCond, activateCondition, addCondition, selectedId, setSelectedId, selShape, shapes, visibleShapes,
++    leftTab, setLeftTab, takeoffsOpen, toggleTakeoffs, agentOpen, setAgentOpen, setShowRevisions, openEstimate, setGuideOpen,
++    setShowReport, showReport, exportMarkedSet, saveState, commitMsg, setCommitMsg, projectName,
++    tfRef, containerRef, zoomAround, fitToView, stage, workspaceActions, scales, panelByKey,
++  });
+   return (
+     // .app-shell: the print stylesheet collapses this 100vh flex column while the report is open
+     <div
