@@ -1,12 +1,13 @@
-// Messages between the Schematic tab (the app page) and the EasySchematic
-// editor frame it embeds (es-frame.html). Same origin; both sides check the
-// sender's origin and window before reading a message.
+// Messages between the Schematic tab and the editor's save / live sync
+// (web/src/es/sync.ts). Since the editor mounts in the app itself (no frame),
+// these are plain in-process calls; the message shapes are the ones Phase 2's
+// frame bridge used, so the sync logic is unchanged.
 import type { RowChange } from "../../../src/shared/protocol.js";
 
 export type SaveState = "loading" | "saving" | "saved" | "pending" | "error" | "suspended";
 
-/** Frame -> page. */
-export type FrameMessage =
+/** Editor sync -> tab. */
+export type EditorMessage =
   | {
       type: "es:status";
       state: SaveState;
@@ -20,8 +21,8 @@ export type FrameMessage =
     }
   | { type: "es:notice"; tone: "info" | "warn" | "error"; text: string };
 
-/** Page -> frame. */
-export type PageMessage =
+/** Tab -> editor sync. */
+export type TabMessage =
   /** A row of brink_schematic_edits changed (relayed by the Worker). */
   | { type: "es:edit-change"; change: RowChange }
   /** The project's current import changed (re-import / re-merge). */
@@ -29,6 +30,4 @@ export type PageMessage =
   /** Discard unsaved changes and reload the project schematic. */
   | { type: "es:reload" };
 
-export function isFrameMessage(v: unknown): v is FrameMessage {
-  return !!v && typeof v === "object" && typeof (v as { type?: unknown }).type === "string" && (v as { type: string }).type.startsWith("es:");
-}
+export type EditorStatus = Extract<EditorMessage, { type: "es:status" }>;

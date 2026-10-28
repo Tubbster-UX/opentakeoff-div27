@@ -1,6 +1,6 @@
 // Brink app Worker: the JSON API over Hyperdrive, the live WebSockets (handed
 // to the RealtimeRelay Durable Object), and the static single-page app
-// (including the EasySchematic editor frame, es-frame.html).
+// (one page; the Schematic tab mounts the EasySchematic editor in it).
 //
 //   GET  /api/health                         -> { ok, realtime: configured? }
 //   GET  /api/me                             -> Me: the Cloudflare Access identity, or why there is none (always 200)
@@ -47,7 +47,7 @@ const api = new Router({ id: (v) => (UUID.test(v) ? null : "project id must be a
     return json(view);
   })
   .add("POST", "/api/projects/:id/schematic/edits", async ({ req, env, ctx, url, params }) => {
-    // Same-origin only: the editor frame posts JSON; a cross-site form cannot.
+    // Same-origin only: the Schematic tab posts JSON; a cross-site form cannot.
     const origin = req.headers.get("origin");
     if (origin && origin !== url.origin) return json({ error: "cross-origin write refused" }, 403);
     if (!(req.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) return json({ error: "send application/json" }, 415);

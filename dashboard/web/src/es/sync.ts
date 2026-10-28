@@ -1,8 +1,8 @@
 // Saving the EasySchematic editor to the project's edit layer, and keeping it
 // in step with other people's edits.
 //
-// The editor is upstream EasySchematic, unmodified: it knows nothing about
-// Brink. This module watches its zustand store and compares it with a
+// The editor is upstream EasySchematic's engine (its store is unmodified): it
+// knows nothing about Brink. This module watches its zustand store and compares it with a
 // BASELINE (the project's schematic as last loaded or saved). Differences
 // become edit-layer ops (brink-merge/docs/schematic-edits.md):
 //   node label changed                 -> rename
@@ -17,8 +17,8 @@
 // tab's status bar as "not saved" rather than dropped silently, and "Discard"
 // reloads the saved schematic.
 //
-// Other people's edits arrive as relayed brink_schematic_edits rows (the page
-// forwards them). This tab ignores rows it wrote itself (client_ref); for the
+// Other people's edits arrive as relayed brink_schematic_edits rows (the
+// Schematic tab forwards them). This tab ignores rows it wrote itself (client_ref); for the
 // rest it re-reads the server's render and patches the targets that changed
 // into the store. A saved edit always wins over an unsaved local change to the
 // same target, and the person is told.
@@ -27,7 +27,7 @@ import { GRID_SIZE } from "../../../vendor/easyschematic/src/gridConstants";
 import { useSchematicStore } from "../../../vendor/easyschematic/src/store";
 import type { SchematicFile } from "../../../vendor/easyschematic/src/types";
 import type { EditRequest, EditResponse, EditSummary, RowChange, SchematicView } from "../../../src/shared/protocol.js";
-import type { FrameMessage, SaveState } from "../lib/esBridge.js";
+import type { EditorMessage, SaveState } from "../lib/esBridge.js";
 
 interface LooseNode {
   id: string;
@@ -252,10 +252,10 @@ export class EditorSync {
   private unsubscribe: (() => void) | null = null;
 
   private readonly projectId: string;
-  private readonly editor: string | null;
-  private readonly post: (m: FrameMessage) => void;
+  private editor: string | null;
+  private readonly post: (m: EditorMessage) => void;
 
-  constructor(projectId: string, editor: string | null, post: (m: FrameMessage) => void) {
+  constructor(projectId: string, editor: string | null, post: (m: EditorMessage) => void) {
     this.projectId = projectId;
     this.editor = editor;
     this.post = post;
@@ -263,11 +263,12 @@ export class EditorSync {
 
   /** Load the project's schematic into the editor (also after a re-import, or Discard). */
   async load(notice?: string): Promise<void> {
+    if (this.disposed) return;
     clearTimeout(this.timer);
     this.ready = false;
     this.setState("loading");
     const view = await this.fetchView();
-    if (!view) return;
+    if (!view || this.disposed) return;
     const store = useSchematicStore.getState();
     store.importFromJSON(view.file as unknown as SchematicFile);
     this.loadSeq = useSchematicStore.getState().loadSeq;
@@ -275,6 +276,7 @@ export class EditorSync {
     this.setActive(view.edits);
     // Let the editor finish its own load-time work (routing, measuring) before taking the baseline.
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, SETTLE_MS))));
+    if (this.disposed) return;
     this.base = storeSnap();
     this.ready = true;
     this.unsubscribe ??= useSchematicStore.subscribe(() => this.onStoreChange());
@@ -282,6 +284,27 @@ export class EditorSync {
     if (notice) this.post({ type: "es:notice", tone: "info", text: notice });
     for (const i of view.issues) this.post({ type: "es:notice", tone: "warn", text: i.message });
   }
+
+  /** The Access identity edits are saved under (known once /api/me answers, before the first load). */
+  setEditor(editor: string | null): void {
+    this.editor = editor;
+  }
+
+  /** The tab is closing: save what is pending, then stop listening. An in-flight save completes. */
+  dispose(): void {
+    if (this.disposed) return;
+    if (this.ready) {
+      clearTimeout(this.timer);
+      void this.flush();
+    }
+    this.disposed = true;
+    this.ready = false;
+    clearTimeout(this.resyncTimer);
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+  }
+
+  private disposed = false;
 
   /** Save now (Ctrl+S). */
   flushNow(): void {
@@ -356,7 +379,8 @@ export class EditorSync {
   }
 
   private emit(state: SaveState, pending: number, unsupported: string[]): void {
-    const msg: FrameMessage = { type: "es:status", state, pending, unsupported, savedAt: this.savedAt, editor: this.editor, ...(this.message ? { message: this.message } : {}) };
+    if (this.disposed) return;
+    const msg: EditorMessage = { type: "es:status", state, pending, unsupported, savedAt: this.savedAt, editor: this.editor, ...(this.message ? { message: this.message } : {}) };
     const key = JSON.stringify(msg);
     if (key === this.lastStatus) return;
     this.lastStatus = key;
@@ -462,7 +486,7 @@ export class EditorSync {
   private async resync(): Promise<void> {
     if (!this.ready) return;
     const view = await this.fetchView();
-    if (!view) return;
+    if (!view || !this.ready) return;
     if (view.import_id !== this.importId) {
       await this.load("The project was re-imported. The editor reloaded it; your saved edits were re-applied to the new import.");
       return;

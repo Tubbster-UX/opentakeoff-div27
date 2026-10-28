@@ -13,9 +13,12 @@ const ES_PKG = JSON.parse(readFileSync(resolve(ROOT, "vendor/easyschematic/packa
 
 /**
  * EasySchematic modules the Brink app replaces from outside the vendored tree (vendor/PATCHES.md says why).
- * Imports of these, from inside vendor/easyschematic/src, resolve to web/src/es/overrides/ instead.
+ * Imports of these, from inside vendor/easyschematic/src, resolve to the Brink module instead. Brink
+ * modules that import the upstream original (to wrap or re-place it) live outside the vendored tree, so
+ * their own import of it is not redirected.
  */
 const OVERRIDES: Record<string, string> = {
+  // No EasySchematic cloud, accounts, service worker or local MCP bridge.
   "templateApi.ts": "web/src/es/overrides/templateApi.ts",
   "cloudSync.ts": "web/src/es/overrides/cloudSync.ts",
   "sw-register.ts": "web/src/es/overrides/sw-register.ts",
@@ -23,6 +26,17 @@ const OVERRIDES: Record<string, string> = {
   "components/UserMenuButton.tsx": "web/src/es/overrides/UserMenuButton.tsx",
   "components/LoginDialog.tsx": "web/src/es/overrides/LoginDialog.tsx",
   "components/PendingSubmissionBanner.tsx": "web/src/es/overrides/PendingSubmissionBanner.tsx",
+  // The Brink UI in upstream App's layout slots.
+  "components/MenuBar.tsx": "web/src/es/brink/SchematicToolbar.tsx",
+  "components/DeviceLibrary.tsx": "web/src/es/brink/LibraryPanel.tsx",
+  "components/ViewOptionsPanel.tsx": "web/src/es/brink/RightPanel.tsx",
+  "components/ShowInfoPanel.tsx": "web/src/es/overrides/Nothing.tsx",
+  "components/SignalColorPanel.tsx": "web/src/es/overrides/Nothing.tsx",
+  "components/UpdatePill.tsx": "web/src/es/overrides/Nothing.tsx",
+  "components/BetaBanner.tsx": "web/src/es/overrides/Nothing.tsx",
+  "components/MobileGate.tsx": "web/src/es/overrides/Nothing.tsx",
+  "components/ToastContainer.tsx": "web/src/es/overrides/ToastContainer.tsx",
+  "hooks/useTheme.ts": "web/src/es/overrides/useTheme.ts",
 };
 /** Upstream generates this at build time (api/seed/generate-fallback.ts); the app builds the same list as a module. */
 const FALLBACK_JSON = "deviceLibrary.fallback.json";
@@ -51,9 +65,9 @@ function easySchematicOverrides(): Plugin {
 }
 
 // The app lives in web/; the Worker serves the build from dist/ ([assets] in wrangler.toml).
-// Same toolchain as EasySchematic (React 19, Vite 8, Tailwind 4 through PostCSS).
-// Two pages: the app (index.html) and the EasySchematic editor frame (es-frame.html), which the
-// Schematic tab embeds so the editor keeps its own document (styles, shortcuts, store).
+// Same toolchain as EasySchematic (React 19, Vite 8, Tailwind 4 through PostCSS). One page: the
+// EasySchematic editor mounts in the app itself (the Schematic tab), in the same document and the
+// same Tailwind build (web/src/app.css).
 export default defineConfig({
   root: "web",
   plugins: [easySchematicOverrides(), react()],
@@ -67,11 +81,13 @@ export default defineConfig({
   resolve: {
     // As upstream: TypeScript sources before .js.
     extensions: [".mjs", ".mts", ".ts", ".tsx", ".js", ".jsx", ".json"],
+    // The shell's typed entry to the Schematic workspace (web/src/es-workspace.d.ts).
+    alias: { "@brink/schematic-workspace": resolve(ROOT, "web/src/es/load.ts") },
   },
   build: {
     outDir: "../dist",
     emptyOutDir: true,
-    rollupOptions: { input: { main: resolve(ROOT, "web/index.html"), editor: resolve(ROOT, "web/es-frame.html") } },
+    rollupOptions: { input: { main: resolve(ROOT, "web/index.html") } },
   },
   // `npm run dev:web` (Vite HMR) forwards the API and the live sockets to `wrangler dev` on :8787.
   server: { proxy: { "/api": { target: "http://127.0.0.1:8787", ws: true } } },

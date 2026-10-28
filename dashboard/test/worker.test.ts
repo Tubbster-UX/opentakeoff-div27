@@ -159,7 +159,7 @@ describe("worker", () => {
   });
 
   it("serves the app shell for client-side routes and never hands the service key to the browser", async () => {
-    for (const path of ["/", `/projects/${P}`, `/projects/${P}/schematic`, `/p/${P}`, `/es-frame.html?project=${P}`]) {
+    for (const path of ["/", `/projects/${P}`, `/projects/${P}/schematic`, `/p/${P}`, `/projects/${P}/takeoff`, "/design"]) {
       const res = await fetch(`${base}${path}`);
       expect(res.status, path).toBe(200);
       expect(res.headers.get("content-type"), path).toContain("text/html");

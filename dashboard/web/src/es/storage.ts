@@ -1,12 +1,16 @@
-// The editor frame's localStorage. EasySchematic keeps its document and
-// several per-document settings in localStorage (its autosave, custom
-// templates, signal colors). In the Brink app the database is the store of
-// record and each frame shows one project, so those keys live in memory for
-// the frame's lifetime and never leak between projects or tabs. A short list
-// of personal UI preferences (theme, minimap, report layouts) persists, under
-// a "brink-es:" prefix so they never collide with a standalone EasySchematic
-// on the same origin. Installed before any EasySchematic module runs; no
-// vendored file is changed.
+// The page's localStorage as EasySchematic sees it. EasySchematic keeps its
+// document and several per-document settings in localStorage (its autosave,
+// custom templates, signal colors). In the Brink app the database is the store
+// of record, so those keys live in memory only, and are reset whenever the
+// editor opens a project (resetEditorDocument), so they never leak between
+// projects or browser tabs. A short list of personal UI preferences (theme,
+// minimap, report layouts) persists, under a "brink-es:" prefix so they never
+// collide with a standalone EasySchematic on the same origin.
+//
+// Installed once, before the first EasySchematic module evaluates (they read
+// localStorage at load): web/src/es/load.ts installs it and only then imports the
+// editor. The Brink shell keeps the real storage (design/theme.ts captures it
+// first). No vendored file is changed.
 
 import { CURRENT_SCHEMA_VERSION } from "../../../../brink-merge/src/vendor/esEnums.generated.js";
 
@@ -16,7 +20,7 @@ const PERSIST = [/^easyschematic-theme$/, /^easyschematic-show-minimap$/, /^easy
 /** EasySchematic's autosave key. Seeded with an empty document so it opens empty (no demo), then the project loads. */
 const AUTOSAVE = "easyschematic-autosave";
 
-class FrameStorage implements Storage {
+class EditorStorage implements Storage {
   private readonly mem = new Map<string, string>();
   private readonly real: Storage | null;
   constructor(real: Storage | null) {
@@ -76,14 +80,27 @@ class FrameStorage implements Storage {
   }
 }
 
-export function installFrameStorage(): void {
+let installed: EditorStorage | null = null;
+
+const EMPTY_DOC = () => JSON.stringify({ version: CURRENT_SCHEMA_VERSION, name: "", nodes: [], edges: [] });
+
+export function installEditorStorage(): void {
+  if (installed) return;
   let real: Storage | null = null;
   try {
     real = window.localStorage;
   } catch {
     real = null;
   }
-  const storage = new FrameStorage(real);
-  storage.setItem(AUTOSAVE, JSON.stringify({ version: CURRENT_SCHEMA_VERSION, name: "", nodes: [], edges: [] }));
+  const storage = new EditorStorage(real);
+  storage.setItem(AUTOSAVE, EMPTY_DOC());
+  installed = storage;
   Object.defineProperty(window, "localStorage", { configurable: true, enumerable: true, get: () => storage });
+}
+
+/** A project is opening in the editor: forget the previous project's memory-only keys and start from an empty document. */
+export function resetEditorDocument(): void {
+  if (!installed) return;
+  installed.clear();
+  installed.setItem(AUTOSAVE, EMPTY_DOC());
 }
