@@ -1,4 +1,7 @@
-// The Brink icon set: 16 px line icons, 1.5 px stroke, currentColor. Decorative by
+// The Brink icon set (Brand Guidelines v1.0, "Iconography": one outline family, one stroke
+// weight, never mixed with filled icons). 16 px grid, outline only, round caps and joins,
+// a 1.5 px stroke at EVERY rendered size (non-scaling stroke, `.bk-icon` in theme.css),
+// currentColor, so icons are navy on light grounds and white on navy. Decorative by
 // default (aria-hidden); a control that shows only an icon carries its own label.
 import type { ReactNode, SVGProps } from "react";
 
@@ -85,7 +88,6 @@ const P = {
   folder: <path d="M1.5 4h4.5l1.5 1.5h7v8h-13z" />,
   grid: <path d="M2.5 2.5h4.5v4.5h-4.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5h-4.5zM9 9h4.5v4.5H9z" />,
   external: <path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M12 9.5v4h-9.5V4h4" />,
-  dot: <circle cx="8" cy="8" r="3" fill="currentColor" stroke="none" />,
   plan: <path d="M1.5 3.5 5.5 2l5 1.5 4-1.5v10.5l-4 1.5-5-1.5-4 1.5zM5.5 2v10.5M10.5 3.5V14" />,
   schematic: (
     <>
@@ -105,9 +107,10 @@ const P = {
 
 export type IconName = keyof typeof P;
 
-export function Icon({ name, size = 16, ...rest }: { name: IconName; size?: number } & Omit<SVGProps<SVGSVGElement>, "name">) {
+export function Icon({ name, size = 16, className = "", ...rest }: { name: IconName; size?: number } & Omit<SVGProps<SVGSVGElement>, "name">) {
   return (
     <svg
+      className={`bk-icon ${className}`}
       viewBox="0 0 16 16"
       width={size}
       height={size}

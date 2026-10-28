@@ -293,4 +293,23 @@
     background: var(--bk-warn) !important;
     color: var(--bk-surface) !important;
   }
+  /* Page tabs: "add print sheet" / "add patch bay" print an emoji and "+"; show a Brink outline icon and "+". */
+  .bk-es button[title="Add print sheet"]::before,
+  .bk-es button[title="Add patch bay page"]::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-right: 2px;
+    vertical-align: -2px;
+    background: currentColor;
+    -webkit-mask: var(--bk-es-add-icon) center / contain no-repeat;
+    mask: var(--bk-es-add-icon) center / contain no-repeat;
+  }
+  .bk-es button[title="Add print sheet"] {
+    --bk-es-add-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 1.5h5.5L12.5 4.5v10h-8.5z'/%3E%3Cpath d='M9.5 1.5v3h3'/%3E%3C/svg%3E");
+  }
+  .bk-es button[title="Add patch bay page"] {
+    --bk-es-add-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='1.5' y='4.5' width='13' height='7' rx='1'/%3E%3Cpath d='M4.5 8h0M7 8h0M9.5 8h0M12 8h0'/%3E%3C/svg%3E");
+  }
 }
