@@ -1,0 +1,119 @@
+{
+  "base": "http://127.0.0.1:8787",
+  "project": "Brink Div 27 sample (invented)",
+  "ranAt": "2026-10-28T14:20:43.809Z",
+  "passed": 22,
+  "failed": 0,
+  "results": [
+    {
+      "name": "projects row shows the current import's BOM totals",
+      "ok": true,
+      "detail": "Brink Div 27 sample (invented) | 10/28/2026, 2:20:29 PM | 16 | 23 | 1,795.13 | 2,007.79 | 0 | 14"
+    },
+    {
+      "name": "Portal push column follows the database",
+      "ok": true,
+      "detail": "Portal push status is not shown: this database has no brink_portal_pushes table (brink-merge's Portal push migration has not been applied). Read 10/28/2026, 2:20:34 PM."
+    },
+    {
+      "name": "projects page: BOM edit updates the row's Net LF live",
+      "ok": true,
+      "detail": "1,795.13 -> 1,895.13 in 633 ms"
+    },
+    {
+      "name": "project link opens the BOM & Issues tab",
+      "ok": true,
+      "detail": "http://127.0.0.1:8787/projects/efd999f8-57f6-456b-8d44-dbb7cb617664/bom"
+    },
+    {
+      "name": "BOM qty UPDATE appears without reload",
+      "ok": true,
+      "detail": "7 -> 10 in 403 ms"
+    },
+    {
+      "name": "connection cable_length_ft UPDATE appears",
+      "ok": true,
+      "detail": "59.11 -> 69.61 in 515 ms"
+    },
+    {
+      "name": "issue INSERT appears (flashing)",
+      "ok": true,
+      "detail": "799 ms"
+    },
+    {
+      "name": "issue DELETE disappears",
+      "ok": true,
+      "detail": "804 ms"
+    },
+    {
+      "name": "Schematic tab: the editor mounted in the page (no iframe) and the generated-rows outline in its Rows panel",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Schematic outline: connection edit appears live",
+      "ok": true,
+      "detail": "69.61 -> 70.86 in 152 ms"
+    },
+    {
+      "name": "Takeoff tab: Phase 3 placeholder",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "brink-merge re-import moved current_import_id",
+      "ok": true,
+      "detail": "c9fb9f58-da61-49bd-9b07-55e7e65eb549 -> 24600756-38e4-4cc1-8183-8b8b26ab68be"
+    },
+    {
+      "name": "page switched to the new import",
+      "ok": true,
+      "detail": "663 ms after CLI start"
+    },
+    {
+      "name": "new import shows the fixture's own quantities",
+      "ok": true,
+      "detail": "line 2 qty 7"
+    },
+    {
+      "name": "no reload happened (projects -> tabs -> re-import)",
+      "ok": true,
+      "detail": "marker=same-document navigations=1"
+    },
+    {
+      "name": "no horizontal page scroll at 390 px: projects",
+      "ok": true,
+      "detail": "overflow 0px"
+    },
+    {
+      "name": "no horizontal page scroll at 390 px: bom",
+      "ok": true,
+      "detail": "overflow 0px"
+    },
+    {
+      "name": "no horizontal page scroll at 390 px: schematic",
+      "ok": true,
+      "detail": "overflow 0px"
+    },
+    {
+      "name": "no horizontal page scroll at 390 px: takeoff",
+      "ok": true,
+      "detail": "overflow 0px"
+    },
+    {
+      "name": "phone: project card shows the totals without sideways scroll",
+      "ok": true,
+      "detail": "Brink Div 27 sample (invented) imported 10/28/2026, 2:20:40 PM Devices 16 Cables 23 Errors 0 Net LF 1,795.13 Order LF 2,007.79 Warnings 14"
+    },
+    {
+      "name": "BOM table scrolls inside its own container at 390 px",
+      "ok": true,
+      "detail": "table overflow 484px inside .table-scroll"
+    },
+    {
+      "name": "no page errors",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

@@ -4,7 +4,8 @@ Internal Brink Design tool. It is never distributed and never shown to clients.
 
 One website for every brink-merge project. It will host both the OpenTakeoff plan canvas and the EasySchematic editor for each project.
 - **Phase 1** built the app shell: read-only and live.
-- **Phase 2 (this version)** mounts the real EasySchematic editor in the Schematic tab. Edits are saved to the project's **schematic edit layer**, which survives re-imports (see [brink-merge/docs/schematic-edits.md](../brink-merge/docs/schematic-edits.md)).
+- **Phase 2** mounted the real EasySchematic editor in the Schematic tab. Edits are saved to the project's **schematic edit layer**, which survives re-imports (see [brink-merge/docs/schematic-edits.md](../brink-merge/docs/schematic-edits.md)).
+- **The cohesive app (this version)** makes it one Brink Design product: one app header, the [Brink design system](docs/design-system.md) everywhere, and the EasySchematic editor mounted directly in the Schematic tab (no frame) with a Brink toolbar and side panels. The OpenTakeoff canvas (next phase) uses the same system.
 
 **License.** The app includes EasySchematic, vendored in [`vendor/`](vendor/README.md) (AGPL-3.0). The app as a whole is AGPL-3.0, the license of this repository.
 
@@ -12,8 +13,9 @@ One website for every brink-merge project. It will host both the OpenTakeoff pla
 |---|---|
 | `/` **Projects** | Every project: current-import time, BOM totals (devices, cables, net / order LF), error and warning counts, and the latest Portal push when the database has `brink_portal_pushes`. Updates live. |
 | `/projects/:id/bom` **BOM & Issues** | The live view of the current import: BOM, issues, rooms, devices, connections. Changed rows flash; a re-import switches the page to the new import. |
-| `/projects/:id/schematic` **Schematic** | The EasySchematic editor (upstream UI, unmodified), opened on the project's schematic: brink-merge's rows with the edit layer applied. Moves, renames, room changes and connections save as you work, under your Cloudflare Access email. They appear live in other open tabs, and are kept across re-imports. Below it: the read-only outline of the generated rows. |
+| `/projects/:id/schematic` **Schematic** | The EasySchematic editor, opened on the project's schematic (brink-merge's rows with the edit layer applied), with the Brink toolbar, device library, inspector and layers panels. Moves, renames, room changes and connections save as you work, under your Cloudflare Access email. They appear live in other open tabs, and are kept across re-imports. The read-only outline of the generated rows is the Rows panel. Exports and reports are in the header's Project menu. |
 | `/projects/:id/takeoff` **Takeoff** | Phase 3 placeholder (the OpenTakeoff canvas mounts here), plus the current import's source hashes. |
+| `/design` **Design system** | The Brink design system's kitchen sink, for review |
 
 `/projects/:id` opens the BOM & Issues tab. The first dashboard's `/p/:id` links redirect.
 
@@ -23,7 +25,7 @@ One website for every brink-merge project. It will host both the OpenTakeoff pla
 
 ```
 browser ──GET /api/projects, /api/projects/:id, …/schematic──▶ Worker ──Hyperdrive (pg)──▶ Supabase Postgres
-   │  └ editor frame (es-frame.html): EasySchematic           │   ▲
+   │  └ Schematic tab: EasySchematic, mounted in the page      │   ▲
    │       └─POST …/schematic/edits (Cf-Access-Jwt-Assertion)─┘   │ brink_schematic_edits
    ├──WebSocket /api/projects/:id/live (rows, edits)──┐            │
    └──WebSocket /api/live (list "touch")──────────────┴──▶ RealtimeRelay (Durable Object)
@@ -33,7 +35,7 @@ browser ──GET /api/projects, /api/projects/:id, …/schematic──▶ Worke
 
 ## Stack
 
-The shell uses EasySchematic's stack, so its editor mounts without a second toolchain:
+The shell uses EasySchematic's stack, so its editor mounts in the same React tree and the same Tailwind build:
 - React 19
 - Vite 8
 - Tailwind 4 (through PostCSS, as EasySchematic does)
@@ -41,7 +43,7 @@ The shell uses EasySchematic's stack, so its editor mounts without a second tool
 - react-router 7 for the routes
 
 The Worker serves the build (`dist/`) through its assets binding.
-- The build has two pages: the app (`index.html`) and the editor frame (`es-frame.html`).
+- The build has one page (`index.html`). The Schematic tab loads the editor as its own chunk on first use.
 - Unknown paths fall back to `index.html` (single-page app).
 - `/api/*` always reaches the Worker.
 
@@ -69,18 +71,18 @@ EasySchematic adds `@xyflow/react`, `zustand`, `html-to-image` and `jspdf`, pinn
   - Every "Live" status triggers a re-read, which covers changes made before the subscription was ready.
   - A change to `current_import_id` triggers a re-read. That happens on a re-import, or a `map_condition` re-merge.
   - All tabs of a project share one store, so switching tabs keeps the socket.
-  - Edit-layer rows (`brink_schematic_edits`) are routed by project, not by import. The store hands them to the Schematic tab, which forwards them to the editor frame.
+  - Edit-layer rows (`brink_schematic_edits`) are routed by project, not by import. The store hands them to the Schematic tab, which forwards them to the editor's sync.
 
-### The Schematic tab (Phase 2)
+### The Schematic tab
 
-**Where the editor runs.** The editor is upstream EasySchematic, vendored unmodified in `vendor/easyschematic` (`vendor/PATCHES.md` has every change the app makes around it). It runs in its own frame (`web/es-frame.html`, `web/src/es/`), so it keeps the document it expects: its CSS, window shortcuts, `document.title` and store. The tab and the frame talk by `postMessage` (`web/src/lib/esBridge.ts`).
+**Where the editor runs.** The editor is upstream EasySchematic, vendored unmodified in `vendor/easyschematic`. It mounts directly in the tab (`web/src/es/workspace.tsx`): same document, same React tree, same Tailwind build. Its menu bar, side panels, toasts and theme hook are Brink modules swapped in at build time, and its colours are re-pointed at the Brink tokens; `vendor/PATCHES.md` lists every change and where each EasySchematic feature went in the Brink UI. The tab and the save sync talk through plain calls (`web/src/lib/esBridge.ts` has the message shapes).
 
 **Load.**
-- The frame reads `GET /api/projects/:id/schematic`: brink-merge's rows with the project's active edits applied, by brink-merge's own `applyEdits`, which the Worker imports.
+- The tab reads `GET /api/projects/:id/schematic`: brink-merge's rows with the project's active edits applied, by brink-merge's own `applyEdits`, which the Worker imports.
 - It hands that file to EasySchematic's `importFromJSON`.
-- After the editor settles, the frame takes a **baseline** snapshot. Loading writes nothing.
+- After the editor settles, the sync takes a **baseline** snapshot. Loading writes nothing.
 
-**Save** (`web/src/es/sync.ts`). The frame watches EasySchematic's store and turns differences from the baseline into edit-layer ops:
+**Save** (`web/src/es/sync.ts`). The sync watches EasySchematic's store and turns differences from the baseline into edit-layer ops:
 
 | Change in the editor | Op |
 |---|---|
@@ -91,19 +93,19 @@ EasySchematic adds `@xyflow/react`, `zustand`, `html-to-image` and `jspdf`, pinn
 | A connection added | `connect` |
 | An added connection removed | `revert` |
 
-- Saves are debounced (700 ms, never mid-drag). `Ctrl/Cmd+S` saves at once.
+- Saves are debounced (700 ms, never mid-drag). `Ctrl/Cmd+S` saves at once. Leaving the tab saves what is pending.
 - Positions are saved on EasySchematic's 16 px grid, as its own load snaps them.
-- The status bar shows the save state and the editor's email.
+- The app header shows the save state; the status bar under the canvas shows the editor's email and the last save.
 - Anything the layer does not keep is listed as "will not be saved", with a Discard button, never dropped silently. That covers deleting a takeoff device, adding library devices, port or cable details, and manual routes.
 
 **Write** (`POST /api/projects/:id/schematic/edits`, `src/schematic.ts`).
 - The request is refused unless it is same-origin JSON from a **verified Access identity** (`src/access.ts`).
 - One transaction holds the project row lock. Each op is shape-checked, then applied to the schematic with the earlier ops applied. An op that would orphan or conflict is refused.
 - Each op carries `expect`: the active edit of its (target, kind) that the editor last saw. If someone else saved since, the op is refused as a **conflict**. The saved edit wins, and the editor reloads it and says so.
-- A request built on an older import is refused with `409 { currentImportId }`, and the frame reloads.
+- A request built on an older import is refused with `409 { currentImportId }`, and the editor reloads.
 
 **Live.**
-- Saved edits reach other tabs through the existing relay. The frame re-reads the server render and patches only the targets that changed.
+- Saved edits reach other tabs through the existing relay. The editor re-reads the server render and patches only the targets that changed.
 - A tab ignores rows carrying its own `client_ref` (its own echo).
 - A re-import (`current_import_id` moves) reloads the editor on the new import, with the edits re-applied.
 
@@ -118,11 +120,14 @@ EasySchematic adds `@xyflow/react`, `zustand`, `html-to-image` and `jspdf`, pinn
 | `src/shared/` | Table / column contract, routing and the change reducer, shared by the Worker and the page |
 | `web/src/main.tsx` | Routes |
 | `web/src/workspaces.ts` | The project tabs; later phases swap a placeholder for the real workspace here |
-| `web/es-frame.html`, `web/src/es/` | The EasySchematic editor frame: mount, storage, save / live sync, module overrides |
+| `web/src/es/` | The Schematic workspace: mount (`workspace.tsx`), storage, save / live sync, the Brink toolbar and panels (`brink/`), module overrides |
+| `web/src/design/` | The Brink design system: tokens (`tokens.css`), Tailwind theme, EasySchematic re-theme, components ([docs](docs/design-system.md)) |
+| `web/public/brand/` | The Brink Design logo files (placeholders until the owner's originals are copied in) |
 | `vendor/` | Vendored EasySchematic, its lock (commit + hashes), `PATCHES.md`; `scripts/sync-easyschematic.mjs` re-syncs and checks it |
 | `web/src/pages/`, `web/src/components/`, `web/src/lib/` | Pages, UI pieces, the live socket and the stores |
-| `scripts/live-check.mjs` | Real-browser end-to-end check of the shell (Playwright); writes `docs/evidence/phase1/` |
-| `scripts/es-check.mjs` | Real-browser end-to-end check of the Schematic tab (Playwright, two Access users); writes `docs/evidence/phase2/` |
+| `scripts/live-check.mjs` | Real-browser end-to-end check of the shell (Playwright); writes `docs/evidence/cohesive/live-check/` |
+| `scripts/es-check.mjs` | Real-browser end-to-end check of the Schematic tab (Playwright, two Access users); writes `docs/evidence/cohesive/es-check/` |
+| `scripts/cohesive-shots.mjs` | Light and dark screenshots of every view, and the no-iframe / no-EasySchematic-chrome assertion; writes `docs/evidence/cohesive/` |
 
 **Schema.** brink-merge owns the schema (`brink-merge/supabase/migrations/`).
 - Phase 2 added one table, `brink_schematic_edits`, in an additive migration (`20261027120000_brink_schematic_edits.sql`).
@@ -183,8 +188,9 @@ Requires Node 22.12+ and Docker (for local Supabase).
    ```
 6. **Browser checks** (Playwright):
    ```bash
-   npm run live-check              # with `npm run dev` running: the shell; writes docs/evidence/phase1/; exits 1 on any failed check
-   npm run es-check                # self-contained: the Schematic tab; writes docs/evidence/phase2/
+   npm run live-check              # with `npm run dev` running: the shell; writes docs/evidence/cohesive/live-check/; exits 1 on any failed check
+   npm run es-check                # self-contained: the Schematic tab; writes docs/evidence/cohesive/es-check/
+   npm run shots                   # with `npm run dev` running: light / dark screenshots; writes docs/evidence/cohesive/
    ```
    - `es-check` builds the app and starts its own `wrangler dev` with Cloudflare Access configured against a local stand-in team (an RSA key and its JWKS), so every save goes through real JWT verification.
    - It drives two browser contexts as two Access users. It starts from the generated schematic: it reverts the project's active edits and re-imports the fixture.
@@ -220,45 +226,17 @@ DASHBOARD_TEST_DATABASE_URL=postgres://… npm test   # also the read API over H
   - a revert
 - **`test/db.test.ts`** checks that `brink_portal_pushes` is queried only when it exists.
 - **`test/shared.test.ts`** covers the reducer, routing (edits by project) and the projection.
-- **`npm run check`** also runs `check:vendor`, which fails if any vendored EasySchematic file differs from the locked upstream commit without a recorded patch. It typechecks the vendored source with upstream's compiler options (`web/tsconfig.es.json`) together with the frame code and overrides.
+- **`npm run check`** also runs `check:vendor`, which fails if any vendored EasySchematic file differs from the locked upstream commit without a recorded patch. It typechecks the vendored source with upstream's compiler options (`web/tsconfig.es.json`) together with the Schematic workspace and overrides.
 
 The genuine Realtime path is covered by `npm run live-check` against local Supabase.
 
-## Evidence (Phase 1)
+## Evidence
 
-All of it is in `docs/evidence/phase1/` (`results.json` holds the check run). Every screenshot uses invented fixture data only.
+Every screenshot uses invented fixture data only.
 
-| File | What it shows |
-|---|---|
-| `01-projects.png` | Projects page |
-| `02-projects-live-change.png` | A BOM edit reaches the Projects row live |
-| `03-bom-issues.png` | BOM & Issues tab |
-| `04-bom-live-change.png`, `04b-…` | Live rows in BOM & Issues |
-| `05-schematic.png` | Schematic tab |
-| `06-takeoff.png` | Takeoff tab |
-| `07-reimport-switched.png` | The page switched to a re-import |
-| `08-phone-projects.png`, `09-phone-bom.png` | Phone width (390 px) |
-| `10-…`, `11-…` | The Portal push column, against a throwaway local database that had brink-merge's unmerged Portal push migration applied for the check. Nothing in this repository adds that table. |
-
-The first dashboard's screenshots are still in `docs/evidence/*.png`.
-
-## Evidence (Phase 2)
-
-All of it is in `docs/evidence/phase2/`; `results.json` holds the `npm run es-check` run. It ran against local Supabase (database, Realtime and Kong), so live updates went through genuine Supabase Realtime. Every screenshot uses invented fixture data only.
-
-| File | What it shows |
-|---|---|
-| `01-editor-loaded.png` | The Schematic tab with the EasySchematic editor on the sample project; the menu bar shows the Access email |
-| `02-device-moved.png`, `02b-…` | A device dragged in the editor, saved as a `move` edit |
-| `03-rename-in-device-editor.png` | Renaming the device in EasySchematic's own device editor |
-| `04-renamed-saved.png`, `04b-…` | The rename saved ("All changes saved") |
-| `05-second-tab-live.png`, `05b-…` | The second user's tab, which received both edits live |
-| `06-after-reload.png` | After a reload, both edits persist |
-| `07-after-reimport.png`, `07b-…` | After a re-import of the takeoff, the edits are still applied |
-| `08-orphaned-edit-issue.png`, `08b-issues-panel.png` | The renamed device deleted from a copy of the takeoff and re-imported: the orphaned edits are warning issues in BOM & Issues |
-| `09-editor-device-deleted.png`, `09b-…` | The editor without the deleted device; nothing else took its name |
-| `10-device-restored.png`, `10b-…` | The original takeoff re-imported: the device and its edits are back |
-| `11-phone-schematic.png` | Phone width (390 px) |
+- **The cohesive app**: `docs/evidence/cohesive/` (light and dark: Projects, project header, Schematic tab, inspector, layers / rows panels, device editor, Project menu, Pack List and Cable Schedule reports, BOM & Issues, Takeoff, `/design`, About & licenses, phone width; `shots.json` has the assertions), with the re-run checks in `es-check/` and `live-check/` (each with its `results.json`).
+- **Phase 2** (the editor in its frame): `docs/evidence/phase2/`.
+- **Phase 1** (the read-only shell): `docs/evidence/phase1/`. The first dashboard's screenshots are in `docs/evidence/*.png`.
 
 ## Before any deploy (owner decisions)
 

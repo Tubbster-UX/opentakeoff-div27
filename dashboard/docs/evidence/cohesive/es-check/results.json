@@ -1,0 +1,138 @@
+{
+  "ranAt": "2026-10-28T14:20:02.184Z",
+  "project": "Brink Div 27 sample (invented)",
+  "access": "Cloudflare Access JWTs verified by the Worker (local stand-in team)",
+  "realtime": "local Supabase Realtime",
+  "results": [
+    {
+      "name": "the API renders stable ids (dev-<OpenTakeoff shape id>-<copy>)",
+      "ok": true,
+      "detail": "dev-shp-afda9d7a-928e-4093-a553-50455d31ad92-1, dev-shp-af00fb2c-0fe6-45d8-acd7-0fd3a878ed06-1 in OPEN OFFICE 110"
+    },
+    {
+      "name": "Schematic tab mounts the EasySchematic editor with the project's schematic",
+      "ok": true,
+      "detail": "18 device nodes in the editor"
+    },
+    {
+      "name": "the app header shows the Access identity, not an EasySchematic log-in",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "no iframe and no EasySchematic logo or menu bar in the Schematic tab: the Brink header and toolbar instead",
+      "ok": true,
+      "detail": "{\"iframes\":0,\"esLogo\":0,\"esName\":0,\"esMenus\":0,\"brinkToolbar\":1,\"brinkLogo\":1}"
+    },
+    {
+      "name": "loading the editor writes nothing",
+      "ok": true,
+      "detail": "0 POSTs"
+    },
+    {
+      "name": "the Brink inspector shows the selected device and its takeoff source",
+      "ok": true,
+      "detail": "DATA-1-1"
+    },
+    {
+      "name": "Delete / Backspace in the Brink toolbar do not delete the selected device",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "the Project menu opens the pack list report",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "the Project menu opens the cable schedule report",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "opening reports writes nothing",
+      "ok": true,
+      "detail": "0 POSTs"
+    },
+    {
+      "name": "dragging a device in the editor saves a move edit under the Access email",
+      "ok": true,
+      "detail": "{\"x\":96,\"y\":112,\"parent\":\"room-open-office-110-206dbdad\"}"
+    },
+    {
+      "name": "the device really moved",
+      "ok": true,
+      "detail": "{\"x\":976,\"y\":64} -> {\"x\":1024,\"y\":105}"
+    },
+    {
+      "name": "renaming a device in EasySchematic's device editor saves a rename edit",
+      "ok": true,
+      "detail": "{\"label\":\"Reception desk (renamed in the app)\"}"
+    },
+    {
+      "name": "nothing in these edits is left unsaved",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "the second tab shows the rename and the move live (Supabase Realtime -> relay -> page -> editor)",
+      "ok": true,
+      "detail": "label in 12 ms; position {\"x\":976,\"y\":64} -> {\"x\":1024,\"y\":112} (A: {\"x\":1024,\"y\":105})"
+    },
+    {
+      "name": "the saving tab ignored its own echo (no reload, no conflict notice)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "after a reload both edits persist (the same position the second tab shows)",
+      "ok": true,
+      "detail": "{\"x\":1024,\"y\":112}"
+    },
+    {
+      "name": "reloading writes nothing new",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "re-import: the editor reloads the new import with the edits still applied",
+      "ok": true,
+      "detail": "import 32a027c5 -> 9b63ed92, dev-shp-afda9d7a-928e-4093-a553-50455d31ad92-1 at {\"x\":1024,\"y\":112}"
+    },
+    {
+      "name": "brink-merge reports the orphaned edit on the import (CLI)",
+      "ok": true,
+      "detail": "warning [schematic_edit_orphaned] Schematic edit (alex@brink.test, 2026-10-28): rename of \"DATA-1-2\" (dev-shp-af00fb2c-0fe6-45d8-acd7-0fd3a878ed06-1) to \"Reception desk (renamed in the app)\": dev-shp-af00fb2c-0fe6-45d8-acd7-0fd3a878ed06-1 is not in this import. Not applied; the edit is kept and applies again if its target comes back."
+    },
+    {
+      "name": "BOM & Issues shows the orphaned edit as a warning issue",
+      "ok": true,
+      "detail": "15 warning schematic_edit_orphaned DATA-1 Schematic edit (alex@brink.test, 2026-10-28): rename of \"DATA-1-2\" (dev-shp-af00fb2c-0fe6-45d8-acd7-0fd3a878ed06-1) to \"Reception desk (renamed in the app)\": dev-shp-af00fb2c-0fe6-45d8-acd7-0fd3a878ed06-1 is not in this import. Not applied; the edit is kept "
+    },
+    {
+      "name": "the orphaned edit is kept, not dropped",
+      "ok": true,
+      "detail": "2 active edits"
+    },
+    {
+      "name": "the editor does not show the deleted device, and nothing else took its name",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "re-importing with the device restored applies its edits again (no orphan issue)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phone width (390 px): no horizontal page scroll on the Schematic tab",
+      "ok": true,
+      "detail": "0px"
+    },
+    {
+      "name": "no page errors in either tab",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

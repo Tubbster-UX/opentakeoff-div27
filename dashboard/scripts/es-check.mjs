@@ -1,12 +1,14 @@
 #!/usr/bin/env node
-// End-to-end check of the Phase 2 Schematic tab in a real browser (Playwright, chromium):
-// the vendored EasySchematic editor, its saves to the edit layer, live updates,
-// and edits surviving re-imports. Self-contained: it builds the app, runs
+// End-to-end check of the Schematic tab in a real browser (Playwright, chromium):
+// the vendored EasySchematic editor mounted directly in the app (no frame) with the
+// Brink toolbar, panels and header, its saves to the edit layer, live updates, and
+// edits surviving re-imports. Self-contained: it builds the app, runs
 // `wrangler dev` with Cloudflare Access configured against a local stand-in team
 // (an RSA key and its JWKS, so every write goes through real JWT verification),
 // and drives two browser contexts as two different Access users.
 //
-//   1. open the Schematic tab: the editor loads the project's schematic; loading writes nothing
+//   1. open the Schematic tab: the editor loads the project's schematic; loading writes nothing;
+//      no iframe, no EasySchematic logo / menu bar: the Brink header and toolbar instead
 //   2. a second user opens the same project in another tab
 //   3. user A drags a device (real EasySchematic UI): a `move` edit is saved under A's email
 //   4. user A renames a device in EasySchematic's device editor: a `rename` edit is saved
@@ -16,9 +18,12 @@
 //   8. delete the renamed device from a copy of the takeoff and re-import: the orphaned edits are
 //      warning issues in BOM & Issues
 //   9. re-import the original: the device and its edits come back
-// Screenshots and results.json go to docs/evidence/phase2/. Uses only brink-merge's invented fixtures.
+//   also: the Brink inspector shows the selection; reports open from the Brink Project menu;
+//   plain keys typed in Brink chrome never act on the canvas
+// Screenshots and results.json go to docs/evidence/cohesive/es-check/ (Phase 2's run, in its
+// iframe, is kept in docs/evidence/phase2/). Uses only brink-merge's invented fixtures.
 //
-// usage: node scripts/es-check.mjs [--db postgres://...] [--project "Brink Div 27 sample (invented)"] [--out docs/evidence/phase2] [--no-build]
+// usage: node scripts/es-check.mjs [--db postgres://...] [--project "Brink Div 27 sample (invented)"] [--out docs/evidence/cohesive/es-check] [--no-build]
 // Needs: local Supabase (README "Run it locally") with SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY in .dev.vars,
 // and Playwright (`require('playwright')`).
 import { execFileSync, spawn } from "node:child_process";
@@ -37,7 +42,7 @@ const argv = process.argv.slice(2);
 const args = Object.fromEntries(argv.reduce((acc, a, i, all) => (a.startsWith("--") ? [...acc, [a.slice(2), all[i + 1]?.startsWith("--") ? true : all[i + 1] ?? true]] : acc), []));
 const DB = args.db ?? process.env.DATABASE_URL ?? "postgres://postgres:postgres@127.0.0.1:54322/postgres";
 const PROJECT = args.project ?? "Brink Div 27 sample (invented)";
-const OUT = resolve(args.out ?? join(ROOT, "docs/evidence/phase2"));
+const OUT = resolve(args.out ?? join(ROOT, "docs/evidence/cohesive/es-check"));
 const BRINK = resolve(ROOT, "../brink-merge");
 const TMP = mkdtempSync(join(tmpdir(), "brink-es-check-"));
 
@@ -122,7 +127,8 @@ async function openUser(email) {
   page.on("console", (m) => m.type() === "error" && !/WebSocket|ERR_CONNECTION|favicon/.test(m.text()) && errors.push(`${email}: ${m.text()}`));
   return { ctx, page, email };
 }
-const editorFrame = (page) => page.frameLocator("iframe[data-es-frame]");
+/** The editor, mounted in the page itself (the Schematic workspace root). */
+const editorFrame = (page) => page.locator("[data-es-root]");
 const saveState = (page) => page.locator("[data-save-state]").getAttribute("data-save-state");
 const waitSaved = (page, timeout = 20_000) => page.locator('[data-save-state="saved"]').waitFor({ timeout });
 const shot = async (page, name) => {
@@ -176,11 +182,50 @@ try {
   await waitSaved(A.page);
   const deviceCount = await editorFrame(A.page).locator('.react-flow__node-device').count();
   check("Schematic tab mounts the EasySchematic editor with the project's schematic", deviceCount === devices.length + view.file.nodes.filter((n) => n.id.startsWith("tr-")).length, `${deviceCount} device nodes in the editor`);
-  check("the menu bar shows the Access identity, not an EasySchematic log-in", (await editorFrame(A.page).locator(`[data-brink-editor="${ALEX}"]`).count()) === 1 && (await editorFrame(A.page).getByText("Log in", { exact: true }).count()) === 0);
+  check("the app header shows the Access identity, not an EasySchematic log-in", (await A.page.locator(`[data-brink-editor="${ALEX}"]`).count()) === 1 && (await A.page.getByText("Log in", { exact: true }).count()) === 0);
+  const chrome = {
+    iframes: await A.page.locator("iframe").count(),
+    esLogo: await A.page.locator('img[src*="favicon.svg"]').count(),
+    // Visible text only: the print-only title block keeps upstream's "EasySchematic" credit line (hidden on screen).
+    esName: await A.page.getByText("EasySchematic", { exact: true }).filter({ visible: true }).count(),
+    esMenus: await A.page.locator("[data-es-root] button", { hasText: /^(File|Export|Reports|Help)$/ }).count(),
+    brinkToolbar: await A.page.locator("[data-brink-toolbar] [role=toolbar]").count(),
+    brinkLogo: await A.page.locator("header [data-brink-logo]").count(),
+  };
+  check("no iframe and no EasySchematic logo or menu bar in the Schematic tab: the Brink header and toolbar instead", chrome.iframes === 0 && chrome.esLogo === 0 && chrome.esName === 0 && chrome.esMenus === 0 && chrome.brinkToolbar === 1 && chrome.brinkLogo === 1, JSON.stringify(chrome));
   await editorFrame(A.page).locator(".react-flow__controls-fitview").click();
   await A.page.waitForTimeout(1500);
   check("loading the editor writes nothing", posts.length === 0 && (await activeEdits(proj.id)).length === 0, `${posts.length} POSTs`);
   await shot(A.page, "01-editor-loaded.png");
+
+  // The Brink inspector shows the selected device.
+  await nodeLoc(A.page, moved.id).click({ position: { x: 40, y: 10 } });
+  await A.page.locator(`[data-inspector="${moved.id}"]`).waitFor({ timeout: 10_000 });
+  const inspectorName = await A.page.locator("[data-inspector-name]").inputValue();
+  check("the Brink inspector shows the selected device and its takeoff source", inspectorName === moved.data.label && (await A.page.locator(`[data-inspector="${moved.id}"]`).innerText()).includes(moved.data.brink.shapeId), inspectorName);
+  await shot(A.page, "01b-inspector.png");
+
+  // Plain keys typed in Brink chrome do not reach EasySchematic's canvas shortcuts.
+  await A.page.locator('[data-menu="insert"]').focus();
+  await A.page.keyboard.press("Delete");
+  await A.page.keyboard.press("Backspace");
+  await A.page.waitForTimeout(300);
+  check("Delete / Backspace in the Brink toolbar do not delete the selected device", (await nodeLoc(A.page, moved.id).count()) === 1 && posts.length === 0);
+  await A.page.keyboard.press("Escape");
+
+  // Reports open from the Brink Project menu (upstream's report generators and dialog).
+  for (const [id, title, file] of [["report-pack-list", /pack list/i, "01c-report-pack-list.png"], ["report-cable-schedule", /cable schedule/i, "01d-report-cable-schedule.png"]]) {
+    await A.page.locator('[data-menu="project-menu"]').click();
+    await A.page.locator(`[data-menuitem="${id}"]`).click();
+    const dlg = A.page.getByText(title).first();
+    await dlg.waitFor({ timeout: 10_000 });
+    await shot(A.page, file);
+    check(`the Project menu opens the ${id.replace("report-", "").replace("-", " ")} report`, await dlg.isVisible());
+    // Upstream's dialog closes on a click outside it.
+    await A.page.mouse.click(6, 700);
+    await A.page.waitForTimeout(300);
+  }
+  check("opening reports writes nothing", posts.length === 0, `${posts.length} POSTs`);
 
   // ---- 2. user B opens the same project ----
   const B = await openUser(SAM);
@@ -297,7 +342,7 @@ try {
   check("the orphaned edit is kept, not dropped", stillActive === 2, `${stillActive} active edits`);
   await A.page.locator('[data-tab="schematic"]').click();
   await waitSaved(A.page);
-  check("the editor does not show the deleted device, and nothing else took its name", (await nodeLoc(A.page, renamed.id).count()) === 0 && (await editorFrame(A.page).getByText(NEW_LABEL).count()) === 0);
+  check("the editor does not show the deleted device, and nothing else took its name", (await nodeLoc(A.page, renamed.id).count()) === 0 && (await editorFrame(A.page).locator(".react-flow").getByText(NEW_LABEL).count()) === 0);
   await editorFrame(A.page).locator(".react-flow__controls-fitview").click();
   await shot(A.page, "09-editor-device-deleted.png");
   await closeup(A.page, room.id, "09b-device-deleted-closeup.png");

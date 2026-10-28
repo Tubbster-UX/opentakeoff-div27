@@ -4,13 +4,14 @@
 //   1. Projects page: Live, totals match the database; a BOM edit updates the row live
 //   2. BOM & Issues tab: UPDATE a BOM line and a connection, INSERT / DELETE an issue,
 //      each appears without a reload
-//   3. Schematic tab: the generated-rows outline under the editor; a connection edit appears live
+//   3. Schematic tab: the editor mounted in the page (no iframe) and the generated-rows outline in
+//      its Rows panel; a connection edit appears live
 //   4. Takeoff tab: placeholder
 //   5. re-import with the brink-merge CLI: the page switches to the new import
 //   6. phone width (390 px): no horizontal page scroll on any view
-// Screenshots and results.json go to docs/evidence/phase1/. Uses only brink-merge's invented fixtures.
+// Screenshots and results.json go to docs/evidence/cohesive/live-check/ (Phase 1's run is kept in docs/evidence/phase1/). Uses only brink-merge's invented fixtures.
 //
-// usage: node scripts/live-check.mjs [--url http://127.0.0.1:8787] [--db postgres://...] [--project "Brink Div 27 sample (invented)"] [--out docs/evidence/phase1]
+// usage: node scripts/live-check.mjs [--url http://127.0.0.1:8787] [--db postgres://...] [--project "Brink Div 27 sample (invented)"] [--out docs/evidence/cohesive/live-check]
 // Needs Playwright (`require('playwright')`: global install, or `npx playwright install chromium`).
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -27,7 +28,7 @@ const args = Object.fromEntries(
 const BASE = args.url ?? "http://127.0.0.1:8787";
 const DB = args.db ?? process.env.DATABASE_URL ?? "postgres://postgres:postgres@127.0.0.1:54322/postgres";
 const PROJECT = args.project ?? "Brink Div 27 sample (invented)";
-const OUT = resolve(args.out ?? join(here, "../docs/evidence/phase1"));
+const OUT = resolve(args.out ?? join(here, "../docs/evidence/cohesive/live-check"));
 const BRINK = resolve(here, "../../brink-merge");
 const TMP = mkdtempSync(join(tmpdir(), "brink-live-check-"));
 
@@ -139,9 +140,10 @@ try {
 
   // --- 3. Schematic ---
   await page.locator('[data-tab="schematic"]').click();
-  await page.locator("iframe[data-es-frame]").waitFor();
+  await page.locator("[data-es-root] .react-flow__node-device").first().waitFor({ timeout: 30_000 });
+  await page.locator('[data-tab-key="rows"]').click();
   await page.locator("#schematic-outline").waitFor();
-  check("Schematic tab: editor frame and the generated-rows outline", (await page.locator("iframe[data-es-frame]").count()) === 1);
+  check("Schematic tab: the editor mounted in the page (no iframe) and the generated-rows outline in its Rows panel", (await page.locator("iframe").count()) === 0 && (await page.locator("[data-es-root]").count()) === 1);
   const t5 = Date.now();
   const len2 = Math.round((newLen + 1.25) * 100) / 100;
   await q("update brink_schematic_connections set cable_length_ft = $2 where import_id = $1 and seq = 1", [imp, len2]);

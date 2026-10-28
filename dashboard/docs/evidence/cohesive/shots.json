@@ -1,0 +1,52 @@
+{
+  "ranAt": "2026-10-28T14:21:12.836Z",
+  "base": "http://127.0.0.1:8787",
+  "project": "Brink Div 27 sample (invented)",
+  "results": [
+    {
+      "name": "Schematic tab: no iframe, no EasySchematic logo / name / menu bar; one Brink header and the Brink toolbar",
+      "ok": true,
+      "detail": "{\"iframes\":0,\"esLogo\":0,\"esName\":0,\"esMenus\":0,\"brinkToolbar\":1,\"brinkLogo\":1,\"headers\":1}"
+    },
+    {
+      "name": "the inspector shows the selected device",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "light phone (390 px): no horizontal page scroll on projects",
+      "ok": true,
+      "detail": "0px"
+    },
+    {
+      "name": "light phone (390 px): no horizontal page scroll on schematic",
+      "ok": true,
+      "detail": "0px"
+    },
+    {
+      "name": "light phone (390 px): no horizontal page scroll on bom",
+      "ok": true,
+      "detail": "0px"
+    },
+    {
+      "name": "dark phone (390 px): no horizontal page scroll on projects",
+      "ok": true,
+      "detail": "0px"
+    },
+    {
+      "name": "dark phone (390 px): no horizontal page scroll on schematic",
+      "ok": true,
+      "detail": "0px"
+    },
+    {
+      "name": "dark phone (390 px): no horizontal page scroll on bom",
+      "ok": true,
+      "detail": "0px"
+    },
+    {
+      "name": "no page errors",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

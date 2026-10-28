@@ -17,6 +17,7 @@
     "check:vendor": "node scripts/sync-easyschematic.mjs --check",
     "live-check": "node scripts/live-check.mjs",
     "es-check": "node scripts/es-check.mjs",
+    "shots": "node scripts/cohesive-shots.mjs",
     "dev:web": "vite",
     "postinstall": "patch-package --patch-dir vendor/easyschematic/patches"
   },
