@@ -10,7 +10,8 @@ import { createBrowserRouter, Navigate, RouterProvider, useParams } from "react-
 import { Shell } from "./components/Shell.js";
 import { Notice } from "./components/ui.js";
 import "./design/theme.js";
-import favicon from "../public/brand/Logo Transparent Black@2x.png";
+import favicon from "../public/brand/brink-design-app-icon.svg";
+import appIcon from "../public/brand/brink-design-app-icon-512.png";
 import { DesignPage } from "./pages/DesignPage.js";
 import { ProjectLayout } from "./pages/ProjectLayout.js";
 import { ProjectsPage } from "./pages/ProjectsPage.js";
@@ -26,10 +27,18 @@ import "@fontsource/roboto/latin-700.css";
 import "@fontsource/roboto/latin-ext-700.css";
 import "./app.css";
 
-const icon = document.createElement("link");
-icon.rel = "icon";
-icon.href = favicon;
-document.head.appendChild(icon);
+// The app icon (interim, from the shield master: web/public/brand/README.md): the shield is
+// below its 80 px minimum at favicon size, so browsers get the app icon and scale it.
+for (const [rel, href, type] of [
+  ["icon", favicon, "image/svg+xml"],
+  ["apple-touch-icon", appIcon, "image/png"],
+] as const) {
+  const link = document.createElement("link");
+  link.rel = rel;
+  link.href = href;
+  link.type = type;
+  document.head.appendChild(link);
+}
 
 /** The first dashboard's links were /p/:id. */
 function LegacyProjectLink() {

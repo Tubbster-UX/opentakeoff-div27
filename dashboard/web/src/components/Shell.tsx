@@ -1,7 +1,13 @@
 // The app frame: ONE header for the whole product, then the routed view, which
 // fills the rest of the viewport and scrolls inside itself (an app shell).
 //
-// Header, left to right: Brink logo, the project switcher, the project's tabs
+// The header is a Brink Navy field in both themes (`bk-inverse`: tokens.css), with the
+// white Brink Design WORDMARK at 72 px wide (the guide's minimum is 64 px) and its clear
+// space. It is a narrow header, so it uses the wordmark. The header is on every screen, so
+// no in-app screen shows the shield too (the guide: never both on one surface); the shield
+// is the app icon / favicon (docs/design-system.md, "Logo in the app").
+//
+// Header, left to right: Brink wordmark, the project switcher, the project's tabs
 // (Takeoff | Schematic | BOM & Issues), then the current workspace's save status,
 // the live-updates status, the Project menu (exports, reports, print, title block:
 // contributed by the workspace that is open), the theme toggle and the user menu
@@ -51,7 +57,7 @@ function ProjectSwitcher({ id, name, importLine }: { id: string; name: string; i
   ];
   return (
     <span className="flex min-w-0 items-center" title={importLine}>
-      <Menu label={<span className="max-w-[16rem] truncate font-semibold text-ink">{name}</span>} ariaLabel={`Project: ${name}. Switch project`} items={items} testId="project-switcher" triggerClassName="min-w-0 max-w-full" />
+      <Menu label={<span className="max-w-[16rem] truncate font-medium text-ink">{name}</span>} ariaLabel={`Project: ${name}. Switch project`} items={items} testId="project-switcher" triggerClassName="min-w-0 max-w-full" />
     </span>
   );
 }
@@ -91,10 +97,9 @@ export function AppHeader() {
   const { dark } = useThemeMode();
   const [about, setAbout] = useState(false);
   return (
-    <header data-bk-chrome data-print-hide className="relative z-20 flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0 border-b border-line bg-panel pl-3 pr-2 shadow-sm">
-      <Link to="/" className="bk-focus flex h-12 shrink-0 items-center gap-2.5 rounded-ctl pr-1 text-ink no-underline hover:text-ink" aria-label="Brink Design: all projects">
-        <Logo size={30} />
-        <span className="hidden text-sm font-semibold tracking-tight sm:inline">Brink Design</span>
+    <header data-bk-chrome data-print-hide className="bk-inverse relative z-20 flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0 border-b border-line bg-panel pl-2 pr-2 text-ink shadow-sm">
+      <Link to="/" className="bk-focus flex h-12 shrink-0 items-center rounded-ctl no-underline" aria-label="Brink Design: all projects" title="All projects">
+        <Logo variant="wordmark" width={72} tone="white" />
       </Link>
       {project && (
         <>

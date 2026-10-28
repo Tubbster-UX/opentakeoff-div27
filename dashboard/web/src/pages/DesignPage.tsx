@@ -1,6 +1,8 @@
 // /design: the Brink design system's kitchen sink, for review. Every token and core
 // component, live, in the current theme (toggle it in the header). Invented sample data.
 import { useEffect, useState, type ReactNode } from "react";
+import shieldNavy from "../../public/brand/brink-design-shield-navy.svg";
+import shieldWhite from "../../public/brand/brink-design-shield-white.svg";
 import { Page } from "../components/ui.js";
 import {
   Badge,
@@ -27,6 +29,17 @@ import {
   useThemeMode,
 } from "../design/index.js";
 
+const BRAND: [string, string, string][] = [
+  ["--bk-brand-navy", "Brink Navy", "Brand colour, logo ink, dark grounds"],
+  ["--bk-brand-navy-700", "Navy 700", "Large supporting fields beside navy"],
+  ["--bk-brand-blue", "Brink Blue", "The one accent (proposed in the guide)"],
+  ["--bk-brand-white", "White", "The default ground"],
+  ["--bk-brand-surface-raised", "Surface Raised", "Cards, table headers"],
+  ["--bk-brand-line", "Line", "Hairline rules"],
+  ["--bk-brand-border-strong", "Border Strong", "Input outlines"],
+  ["--bk-brand-ink-muted", "Ink Muted", "Captions, metadata"],
+];
+
 const COLORS: [string, string][] = [
   ["--bk-canvas", "App background"],
   ["--bk-surface", "Surface"],
@@ -38,6 +51,7 @@ const COLORS: [string, string][] = [
   ["--bk-ink", "Ink"],
   ["--bk-ink-2", "Ink 2"],
   ["--bk-ink-3", "Ink 3"],
+  ["--bk-primary", "Primary"],
   ["--bk-accent", "Accent"],
   ["--bk-accent-hover", "Accent hover"],
   ["--bk-accent-soft", "Accent soft"],
@@ -57,13 +71,19 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function Swatches() {
+function useTokenValues(names: string[]) {
   const { dark } = useThemeMode();
   const [values, setValues] = useState<Record<string, string>>({});
   useEffect(() => {
     const cs = getComputedStyle(document.documentElement);
-    setValues(Object.fromEntries(COLORS.map(([v]) => [v, cs.getPropertyValue(v).trim()])));
+    setValues(Object.fromEntries(names.map((v) => [v, cs.getPropertyValue(v).trim()])));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dark]);
+  return values;
+}
+
+function Swatches() {
+  const values = useTokenValues(COLORS.map(([v]) => v));
   return (
     <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5 p-0" data-swatches>
       {COLORS.map(([v, name]) => (
@@ -81,6 +101,23 @@ function Swatches() {
   );
 }
 
+function BrandPalette() {
+  return (
+    <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5 p-0" data-brand-palette>
+      {BRAND.map(([v, name, use]) => (
+        <li key={v} className="overflow-hidden rounded-panel border border-line">
+          <div className="h-12" style={{ background: `var(${v})` }} />
+          <div className="px-2.5 py-1.5">
+            <div className="text-xs font-medium">{name}</div>
+            <div className="font-num text-2xs text-ink-3">{getComputedStyle(document.documentElement).getPropertyValue(v).trim().toUpperCase()}</div>
+            <div className="text-2xs text-ink-3">{use}</div>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function DesignPage() {
   const [tab, setTab] = useState<"one" | "two" | "three">("one");
   const [dialog, setDialog] = useState(false);
@@ -89,29 +126,40 @@ export function DesignPage() {
     document.title = "Design system · Brink Design";
   }, []);
   return (
-    <Page title="Brink design system" meta="Tokens: dashboard/web/src/design/tokens.css · Docs: dashboard/docs/design-system.md · Sample data is invented." wide>
+    <Page title="Design system" meta="Tokens: dashboard/web/src/design/tokens.css · Docs: dashboard/docs/design-system.md · Sample data is invented." wide>
       <div className="grid gap-x-4 lg:grid-cols-2" data-kitchen-sink>
         <div className="lg:col-span-2">
-          <Section title="Colour tokens">
+          <Section title="Brand palette (Brand Guidelines v1.0)">
+            <BrandPalette />
+            <p className="mt-3 mb-0 text-xs text-ink-3">White grounds and navy type carry the app, the header is a Brink Navy field, and Brink Blue stays a small highlight. No warm, cream or tan grounds; no Brink Productions amber.</p>
+          </Section>
+          <Section title="Colour tokens (this theme)">
             <Swatches />
           </Section>
         </div>
-        <Section title="Brand and type">
-          <div className="mb-4 flex items-center gap-3">
-            <Logo size={48} />
-            <div>
-              <div className="text-lg font-semibold">Brink Design</div>
-              <div className="text-xs text-ink-3">Logo: web/public/brand/ (placeholder until the Drive files are copied in)</div>
+        <Section title="Logo">
+          <div className="grid gap-2.5 sm:grid-cols-2" data-logo-specimens>
+            <div className="flex items-center justify-center rounded-panel border border-line bg-[var(--bk-brand-white)] p-4">
+              <Logo variant="wordmark" width={128} tone="navy" />
+            </div>
+            <div className="flex items-center justify-center rounded-panel bg-[var(--bk-brand-navy)] p-4">
+              <Logo variant="wordmark" width={128} tone="white" />
             </div>
           </div>
-          <div className="space-y-1">
-            <div className="text-2xl font-semibold">24 · Page title</div>
-            <div className="text-xl font-semibold">20 · Figure</div>
-            <div className="text-lg font-semibold">16 · Dialog title</div>
-            <div className="text-base">14 · Body text</div>
-            <div className="text-sm">13 · Table and control text</div>
-            <div className="text-xs text-ink-2">12 · Secondary text</div>
-            <div className="text-2xs font-semibold tracking-wide text-ink-3 uppercase">11 · Panel heading</div>
+          <p className="mt-3 mb-0 text-xs text-ink-3">
+            The wordmark, navy on white and white on Brink Navy, with its clear space. The app header uses it at 72 px (minimum 64 px). The shield is the primary logo, but never shares a screen with the wordmark, so in the app it is the app icon only: <a href={shieldNavy}>shield, navy</a> · <a href={shieldWhite}>shield, white</a> (opens the file).
+          </p>
+        </Section>
+        <Section title="Type: Roboto">
+          <div className="space-y-2">
+            <div className="text-display font-bold">Display 48</div>
+            <div className="text-2xl font-bold">Heading 1 · 32 / 40</div>
+            <div className="text-xl font-bold">Heading 2 · 24 / 32 · page titles</div>
+            <div className="text-lg font-bold">Heading 3 · 18 / 24 · dialog and card titles</div>
+            <div className="text-lg font-light">Light 300 · 18 px and up only</div>
+            <div className="text-base">Body · 16 / 24 · We design, install and support the low-voltage systems your building runs on.</div>
+            <div className="text-sm">Small · 14 / 20 · tables, controls and the app's dense text</div>
+            <div className="bk-label text-ink-3">Label · 12 / 16 · Medium caps +0.12 em</div>
             <div className="num font-num text-sm">1,234.50 LF · tabular numerals</div>
           </div>
         </Section>
