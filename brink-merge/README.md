@@ -94,6 +94,8 @@ The repository root `.mcp.json` registers `opentakeoff` and `brink` side by side
 | `export_schematic` | Writes the EasySchematic file, rendered from the database |
 | `export_bom` | Writes the BOM as CSV or JSON |
 | `list_projects` | Projects and their current import |
+| `map_cable_part` | Sets the Portal part for one cable type, used by the Portal push |
+| `portal_push` | **Dry run only.** Plans a Draft Portal proposal from the current import and returns the exact request plan. Nothing is sent. |
 
 ## Database (Supabase / Postgres)
 
@@ -112,6 +114,8 @@ The schema is in `supabase/migrations/`. It is applied automatically by the CLI 
 | `brink_schematic_edits` | People's edits to the schematic (moves, renames, room changes, connections), kept as a layer over every import and keyed by ids that survive a re-import; see [docs/schematic-edits.md](docs/schematic-edits.md) |
 | `brink_takeoff_edits` | People's edits to the takeoff in the Brink app's takeoff canvas (shapes added, reshaped or deleted, conditions, sheet scales), kept as a layer over the import's raw takeoff (the machine original, never rewritten) and re-applied on every import; see [docs/takeoff-edits.md](docs/takeoff-edits.md) |
 | `brink_sheets` | The plan PDFs a project's takeoff is drawn on: an index of objects in the private Supabase Storage bucket `brink-plans` |
+| `brink_portal_cable_parts` | The Portal part for each cable type (Portal push) |
+| `brink_portal_pushes` | One row per Portal push attempt, dry run or live: plan, status and Portal ids |
 
 **Access:** every table has row-level security on and no policies, so only the service role can read or write.
 
@@ -136,8 +140,18 @@ The schema is in `supabase/migrations/`. It is applied automatically by the CLI 
 
 - **`kind`** is one of `device` (cable_setup), `tr` (role tr), `route` (role route) or `plain`. It must agree with the condition.
 - **`esDeviceType`, `signalType` and connector types** must be EasySchematic's own values.
-- **`portalSku`** is reserved for the Portal push and stays null.
+- **`portalSku`** is Portal's numeric partId, written as text. The Portal push reads it. It stays null until it is chosen.
 - **`status`:** the seeded rows are `proposed` until Alexavier confirms them.
+- **`cableParts`** (optional) maps each OpenTakeoff cable type to a Portal part, ordered by the box or by the foot. See [docs/portal-push.md](docs/portal-push.md).
+
+## Portal push
+
+`node bin/brink-merge.mjs portal-push --project "Job name"` plans a **Draft** Portal proposal from the project's current import. It is a **dry run** by default: it prints the exact ordered request plan, records the attempt, and sends nothing.
+- Only confirmed rows with a Portal partId are pushed. Anything else aborts the whole push before any write, and every offending line is listed.
+- A live push needs `--live`, plus `--confirm` with the plan hash the dry run printed, plus credentials in the environment.
+- The customer is left unset. Labor is waiting on [docs/portal-labor-proposal.md](docs/portal-labor-proposal.md).
+
+[docs/portal-push.md](docs/portal-push.md) has the rules, the API calls, and what the captures did not confirm.
 
 ## What the EasySchematic file contains
 
@@ -198,4 +212,5 @@ node scripts/es-open-check.mjs --es /path/to/EasySchematic --file job.schematic.
 ## Not in this stage
 
 - Real-coordinate placement (1b)
-- Portal push (`portalSku` is reserved)
+- Portal labor items (proposed; not built yet)
+- A live Portal push that has actually been run against Portal (only dry runs and mocked tests so far)
