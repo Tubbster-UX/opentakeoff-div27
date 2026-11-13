@@ -66,7 +66,8 @@ an autosave. Both importers ignore that key.
   (0.75 s after the last change, at most 2 s after the first), each write
   goes to a temp file renamed into place, and the last change is written
   synchronously when the process exits, whether the client closes stdin or
-  sends SIGINT, SIGTERM or SIGHUP. A crash loses at most about 2 seconds.
+  sends SIGINT, SIGTERM or SIGHUP. A crash loses at most about 2 seconds, and so
+  does a forced kill on Windows, where a signal cannot be caught.
 - **Where it says so:** `load_plan`'s reply carries `autosave.path`.
   `takeoff_summary` carries `autosave: { path, saved_at }`, or `error` when
   the last write failed; a pending change is written before the summary

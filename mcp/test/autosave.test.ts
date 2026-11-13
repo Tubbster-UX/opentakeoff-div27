@@ -13,7 +13,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { buildServer } from "../server.ts";
 import { Session } from "../src/session.ts";
-import { Autosave, autosaveModeFromEnv, defaultAutosavePath, type AutosaveOptions } from "../src/autosave.ts";
+import { Autosave, autosaveModeFromEnv, defaultAutosavePath, MAX_WAIT_MS, type AutosaveOptions } from "../src/autosave.ts";
 import { parseTakeoffImport, mergeTakeoffImport } from "../../web/src/lib/importTakeoff.js";
 
 const PLAN = fileURLToPath(new URL("../../demo/sample-plan.pdf", import.meta.url));
@@ -197,7 +197,8 @@ test("OPENTAKEOFF_AUTOSAVE=<path> writes that file; a directory takes the defaul
   const { dir, plan } = await tmpPlan();
   const custom = path.join(dir, "bid 27 autosave.json");
   assert.deepEqual(autosaveModeFromEnv(custom), { kind: "file", path: custom });
-  assert.deepEqual(autosaveModeFromEnv("rel/x.json", "/base"), { kind: "file", path: "/base/rel/x.json" });
+  // resolved against the cwd the platform's way: /base/rel/x.json on POSIX, D:\base\rel\x.json on Windows
+  assert.deepEqual(autosaveModeFromEnv("rel/x.json", "/base"), { kind: "file", path: path.resolve("/base", "rel/x.json") });
   const { client, autosave } = await pair({ mode: autosaveModeFromEnv(custom) });
   const loaded = await ok(client, "load_plan", { path: plan });
   assert.equal(loaded.autosave.path, custom);
@@ -382,6 +383,9 @@ test("a Session with no Autosave attached writes nothing and its replies are unc
 // The real stdio server, as a client launches it: the last change is on disk
 // when the process goes, whether the client closes stdin or sends SIGTERM —
 // both inside the debounce window, so only the exit hook can have written it.
+// Windows has no catchable SIGTERM: Node's kill() there terminates the process
+// outright and no exit hook runs. What Windows gets is the coalescing cap, so
+// there the SIGTERM case kills after MAX_WAIT_MS and checks the timer wrote it.
 for (const how of ["stdin closed", "SIGTERM"] as const) {
   test(`the stdio server writes the last change when it exits (${how})`, { timeout: 60_000 }, async () => {
     const { plan, auto } = await tmpPlan();
@@ -402,8 +406,10 @@ for (const how of ["stdin closed", "SIGTERM"] as const) {
     const exited = new Promise<void>((resolve) => {
       const poll = setInterval(() => { try { process.kill(pid, 0); } catch { clearInterval(poll); resolve(); } }, 20);
     });
-    if (how === "SIGTERM") process.kill(pid, "SIGTERM");
-    else await transport.close();
+    if (how === "SIGTERM") {
+      if (process.platform === "win32") await new Promise((r) => setTimeout(r, MAX_WAIT_MS + 1500));
+      process.kill(pid, "SIGTERM");
+    } else await transport.close();
     await exited;
     const doc = await readJson(auto);
     assert.equal(doc.shapes.length, 1);

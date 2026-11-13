@@ -133,7 +133,8 @@ Import takeoff ignore it, and `export_takeoff` never carries it.
 Writes are coalesced (0.75 s after the last change, at most 2 s after the
 first), atomic (a temp file in the same folder, then rename), and repeated
 synchronously at exit, so stdin closing, SIGINT, SIGTERM or SIGHUP all leave
-the last change on disk. A write only happens when the payload changed. A
+the last change on disk (on Windows a kill cannot be caught, so a forced kill
+there loses at most the last ~2 s, like a crash). A write only happens when the payload changed. A
 failed write never fails a tool call: `takeoff_summary` reports it in
 `autosave.error` and stderr gets one line.
 
