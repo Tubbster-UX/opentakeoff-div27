@@ -139,9 +139,9 @@ The editor lists each such change as "will not be saved" in the status bar under
 
 # OpenTakeoff
 
-Vendored commit: `00f9adca1705f0e3e9abe24f680b29a802033370`, this repository's `main` (see [README.md](README.md#vendored-opentakeoff)). Its `web/` is byte-identical to upstream OpenTakeoff `798ee88` ("Scan star: the agent's mark, in the app and the PDF watermark (#571)"), which `main` merged.
+Vendored commit: `31f2b552069214cfb7f6b9c12fd6df0db4fa908f`, the launch integration that merges the Division 27 cable branch (`claude/div27-cable-setup-c6t9wu`) onto this repository's `main` (see [README.md](README.md#vendored-opentakeoff)). Its `web/` is upstream OpenTakeoff `798ee88` ("Scan star: the agent's mark, in the app and the PDF watermark (#571)") plus the Division 27 cable work: cable setup, Link Run (`W`), the Runs panel, holds, trunk/branch, the duplicate check, per-run vertical, parts per cable and pull, medium and limits, box/reel rounding and the marked-set route chips (docs/design/CABLE_SETUP_PLAN.md).
 
-The Division 27 cable-setup UI (branch `claude/div27-cable-setup-c6t9wu`) is **not** vendored. It arrives through a re-sync (`node scripts/sync-opentakeoff.mjs --ref origin/main`) once that branch is merged to `main`. Until then the canvas carries a Division 27 export's `cable_setup`, `role` and `cable_runs` fields through untouched (brink-merge reads them; the canvas does not show them).
+The Division 27 cable UI is vendored: cable setup in condition properties, Link Run (`W`), the Runs panel, holds and the marked-set route chips arrive with the canvas, and a Division 27 export's `cable_setup`, `role`, `route_kind` and `cable_runs` now show and edit in the Takeoff tab. The host-bridge patch applied unchanged.
 
 ## Patches to vendored files
 

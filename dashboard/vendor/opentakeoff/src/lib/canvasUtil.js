@@ -66,6 +66,9 @@ export const instantiateTemplate = (t) => ({
   ...(t.laborType != null ? { laborType: t.laborType } : {}),
   ...(t.subfloorType != null ? { subfloorType: t.subfloorType } : {}),
   ...(t.roll_setup ? { roll_setup: { ...t.roll_setup } } : {}),   // #136 — deep-copied like grout: a template's roll spec must never be shared by reference
+  ...(t.cable_setup ? { cable_setup: { ...t.cable_setup } } : {}),   // Division 27 — a template's cable spec is copied, never shared
+  ...(t.role === "tr" || t.role === "route" ? { role: t.role } : {}),
+  ...(t.role === "route" && (t.route_kind === "trunk" || t.route_kind === "branch") ? { route_kind: t.route_kind } : {}),   // trunk / branch rides with the route role
   // instantiateMaterial (lib/materials.js) deep-copies the nested grout
   // geometry — a shallow spread here aliased the CT-1 seed's one grout object
   // into every fresh-workspace condition across every project in the session
@@ -83,6 +86,9 @@ export const conditionToTemplate = (c) => ({
   ...(c.laborType != null ? { laborType: c.laborType } : {}),
   ...(c.subfloorType != null ? { subfloorType: c.subfloorType } : {}),
   ...(c.roll_setup ? { roll_setup: { ...c.roll_setup } } : {}),   // #136 — the roll spec is part of what makes a CPT-1 template CPT-1
+  ...(c.cable_setup ? { cable_setup: { ...c.cable_setup } } : {}),   // Division 27 — so is a device condition's cable setup
+  ...(c.role === "tr" || c.role === "route" ? { role: c.role } : {}),
+  ...(c.role === "route" && (c.route_kind === "trunk" || c.route_kind === "branch") ? { route_kind: c.route_kind } : {}),
   // ids are minted on instantiation; grout never shared by reference; prices are per project (lib/estimate.js), never carried by a template
   materials: (c.materials || []).map(({ id: _id, price: _price, ...m }) => (m.grout ? { ...m, grout: { ...m.grout } } : m)),
 });

@@ -12,7 +12,7 @@
   ],
   "conditions": [
     {
-      "id": "cnd-6cfe0749-7623-4114-966c-e08be6397b08",
+      "id": "cnd-d76fa3f2-8c78-4041-984b-593c07510de9",
       "finish_tag": "TR",
       "color": "#c96442",
       "fill": "#c96442",
@@ -36,7 +36,7 @@
       "columns": []
     },
     {
-      "id": "cnd-e90afb40-4c7c-44f1-8241-d4bb32a6c57d",
+      "id": "cnd-c4a08f15-2620-4ea4-9c4d-9772b6f99482",
       "finish_tag": "DATA-1",
       "color": "#2f7d54",
       "fill": "#2f7d54",
@@ -81,7 +81,7 @@
       "columns": []
     },
     {
-      "id": "cnd-e2cf76e7-ddb1-40c1-9382-9460ab2b1257",
+      "id": "cnd-128e3464-b7f6-446f-b6e4-c8d1e672ed29",
       "finish_tag": "WAP-1",
       "color": "#2563eb",
       "fill": "#2563eb",
@@ -105,7 +105,7 @@
       "columns": []
     },
     {
-      "id": "cnd-10ed4c86-ed1d-4fdb-b7cd-4fd172bb2b46",
+      "id": "cnd-6e8d3a0f-189b-4736-9d88-d3da5efe498e",
       "finish_tag": "CAM-1",
       "color": "#9333ea",
       "fill": "#9333ea",
@@ -140,7 +140,7 @@
       "columns": []
     },
     {
-      "id": "cnd-8f31a56d-6c0c-429e-aff6-2e43b1fe2971",
+      "id": "cnd-ccc29572-4c76-488f-9d92-77160628aea0",
       "finish_tag": "ACS-1",
       "color": "#b8860b",
       "fill": "#b8860b",
@@ -164,7 +164,7 @@
       "columns": []
     },
     {
-      "id": "cnd-b6d83eef-73de-4ba0-a83e-26268d2a44cf",
+      "id": "cnd-d98e119c-af93-4586-9df6-77ed209de85e",
       "finish_tag": "TRUNK",
       "color": "#0d9488",
       "fill": "#0d9488",
@@ -188,7 +188,7 @@
       "columns": []
     },
     {
-      "id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+      "id": "cnd-03112616-d457-477d-bce7-2913fd69b459",
       "finish_tag": "BRANCH",
       "color": "#be185d",
       "fill": "#be185d",
@@ -218,7 +218,7 @@
       "sheet": "sample-plan.pdf",
       "rows": [
         {
-          "id": "cnd-6cfe0749-7623-4114-966c-e08be6397b08",
+          "id": "cnd-d76fa3f2-8c78-4041-984b-593c07510de9",
           "finish_tag": "TR",
           "color": "#c96442",
           "multiplier": 1,
@@ -230,7 +230,7 @@
           "ea": 2
         },
         {
-          "id": "cnd-e90afb40-4c7c-44f1-8241-d4bb32a6c57d",
+          "id": "cnd-c4a08f15-2620-4ea4-9c4d-9772b6f99482",
           "finish_tag": "DATA-1",
           "color": "#2f7d54",
           "multiplier": 1,
@@ -242,7 +242,7 @@
           "ea": 7
         },
         {
-          "id": "cnd-e2cf76e7-ddb1-40c1-9382-9460ab2b1257",
+          "id": "cnd-128e3464-b7f6-446f-b6e4-c8d1e672ed29",
           "finish_tag": "WAP-1",
           "color": "#2563eb",
           "multiplier": 2,
@@ -254,7 +254,7 @@
           "ea": 2
         },
         {
-          "id": "cnd-10ed4c86-ed1d-4fdb-b7cd-4fd172bb2b46",
+          "id": "cnd-6e8d3a0f-189b-4736-9d88-d3da5efe498e",
           "finish_tag": "CAM-1",
           "color": "#9333ea",
           "multiplier": 1,
@@ -266,7 +266,7 @@
           "ea": 3
         },
         {
-          "id": "cnd-8f31a56d-6c0c-429e-aff6-2e43b1fe2971",
+          "id": "cnd-ccc29572-4c76-488f-9d92-77160628aea0",
           "finish_tag": "ACS-1",
           "color": "#b8860b",
           "multiplier": 1,
@@ -278,7 +278,7 @@
           "ea": 2
         },
         {
-          "id": "cnd-b6d83eef-73de-4ba0-a83e-26268d2a44cf",
+          "id": "cnd-d98e119c-af93-4586-9df6-77ed209de85e",
           "finish_tag": "TRUNK",
           "color": "#0d9488",
           "multiplier": 1,
@@ -290,7 +290,7 @@
           "ea": 0
         },
         {
-          "id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+          "id": "cnd-03112616-d457-477d-bce7-2913fd69b459",
           "finish_tag": "BRANCH",
           "color": "#be185d",
           "multiplier": 1,
@@ -340,11 +340,11 @@
   "cable": {
     "summary": [
       {
-        "condition_id": "cnd-e90afb40-4c7c-44f1-8241-d4bb32a6c57d",
+        "condition_id": "cnd-c4a08f15-2620-4ea4-9c4d-9772b6f99482",
         "finish_tag": "DATA-1",
         "device_type": "wall_outlet",
         "cable_type": "CAT6A CMP",
-        "tr_id": "shp-d37b8ba5-6ce2-4501-970e-7f8ed064c9bd",
+        "tr_id": "shp-f852984a-470b-47d0-a44f-613b2f3ac017",
         "tr_name": "MDF",
         "multiplier": 1,
         "waste_pct": 12,
@@ -364,11 +364,11 @@
         "leg_warning": false
       },
       {
-        "condition_id": "cnd-e90afb40-4c7c-44f1-8241-d4bb32a6c57d",
+        "condition_id": "cnd-c4a08f15-2620-4ea4-9c4d-9772b6f99482",
         "finish_tag": "DATA-1",
         "device_type": "wall_outlet",
         "cable_type": "CAT6A CMP",
-        "tr_id": "shp-4437a653-6f5b-4642-bf48-646073eb4ea7",
+        "tr_id": "shp-b9e6a982-6845-46db-935f-fd45607eb808",
         "tr_name": "IDF-1",
         "multiplier": 1,
         "waste_pct": 12,
@@ -388,11 +388,11 @@
         "leg_warning": false
       },
       {
-        "condition_id": "cnd-e2cf76e7-ddb1-40c1-9382-9460ab2b1257",
+        "condition_id": "cnd-128e3464-b7f6-446f-b6e4-c8d1e672ed29",
         "finish_tag": "WAP-1",
         "device_type": "wap",
         "cable_type": "CAT6A CMP",
-        "tr_id": "shp-d37b8ba5-6ce2-4501-970e-7f8ed064c9bd",
+        "tr_id": "shp-f852984a-470b-47d0-a44f-613b2f3ac017",
         "tr_name": "MDF",
         "multiplier": 2,
         "waste_pct": 12,
@@ -411,11 +411,11 @@
         "leg_warning": false
       },
       {
-        "condition_id": "cnd-e2cf76e7-ddb1-40c1-9382-9460ab2b1257",
+        "condition_id": "cnd-128e3464-b7f6-446f-b6e4-c8d1e672ed29",
         "finish_tag": "WAP-1",
         "device_type": "wap",
         "cable_type": "CAT6A CMP",
-        "tr_id": "shp-4437a653-6f5b-4642-bf48-646073eb4ea7",
+        "tr_id": "shp-b9e6a982-6845-46db-935f-fd45607eb808",
         "tr_name": "IDF-1",
         "multiplier": 2,
         "waste_pct": 12,
@@ -434,11 +434,11 @@
         "leg_warning": false
       },
       {
-        "condition_id": "cnd-10ed4c86-ed1d-4fdb-b7cd-4fd172bb2b46",
+        "condition_id": "cnd-6e8d3a0f-189b-4736-9d88-d3da5efe498e",
         "finish_tag": "CAM-1",
         "device_type": "camera",
         "cable_type": "CAT6 CMP",
-        "tr_id": "shp-d37b8ba5-6ce2-4501-970e-7f8ed064c9bd",
+        "tr_id": "shp-f852984a-470b-47d0-a44f-613b2f3ac017",
         "tr_name": "MDF",
         "multiplier": 1,
         "waste_pct": 12,
@@ -458,11 +458,11 @@
         "leg_warning": false
       },
       {
-        "condition_id": "cnd-10ed4c86-ed1d-4fdb-b7cd-4fd172bb2b46",
+        "condition_id": "cnd-6e8d3a0f-189b-4736-9d88-d3da5efe498e",
         "finish_tag": "CAM-1",
         "device_type": "camera",
         "cable_type": "CAT6 CMP",
-        "tr_id": "shp-4437a653-6f5b-4642-bf48-646073eb4ea7",
+        "tr_id": "shp-b9e6a982-6845-46db-935f-fd45607eb808",
         "tr_name": "IDF-1",
         "multiplier": 1,
         "waste_pct": 12,
@@ -482,11 +482,11 @@
         "leg_warning": false
       },
       {
-        "condition_id": "cnd-8f31a56d-6c0c-429e-aff6-2e43b1fe2971",
+        "condition_id": "cnd-ccc29572-4c76-488f-9d92-77160628aea0",
         "finish_tag": "ACS-1",
         "device_type": "access_door",
         "cable_type": "18/4 SHLD CMP",
-        "tr_id": "shp-4437a653-6f5b-4642-bf48-646073eb4ea7",
+        "tr_id": "shp-b9e6a982-6845-46db-935f-fd45607eb808",
         "tr_name": "IDF-1",
         "multiplier": 1,
         "waste_pct": 10,
@@ -507,7 +507,7 @@
     ],
     "by_tr": [
       {
-        "tr_id": "shp-d37b8ba5-6ce2-4501-970e-7f8ed064c9bd",
+        "tr_id": "shp-f852984a-470b-47d0-a44f-613b2f3ac017",
         "tr_name": "MDF",
         "ea": 14,
         "pulls": 6,
@@ -521,7 +521,7 @@
         "over_length_runs": 1
       },
       {
-        "tr_id": "shp-4437a653-6f5b-4642-bf48-646073eb4ea7",
+        "tr_id": "shp-b9e6a982-6845-46db-935f-fd45607eb808",
         "tr_name": "IDF-1",
         "ea": 2,
         "pulls": 8,
@@ -590,7 +590,7 @@
     },
     "runs": [
       {
-        "run_id": "run-dfa1e64e-6d27-41ae-b571-06af84369ec7",
+        "run_id": "run-527f6e9f-591e-43ee-8b3e-736769c910b4",
         "condition": "DATA-1",
         "device_type": "wall_outlet",
         "cable_type": "CAT6A CMP",
@@ -626,7 +626,7 @@
         "notes": "route scale on A-101 not confirmed by a person"
       },
       {
-        "run_id": "run-10fa28d6-4b48-43f1-b739-f82a026ee92b",
+        "run_id": "run-5bca3231-dfe2-4bc7-948b-3477396aa002",
         "condition": "DATA-1",
         "device_type": "wall_outlet",
         "cable_type": "CAT6A CMP",
@@ -662,7 +662,7 @@
         "notes": "route scale on A-101 not confirmed by a person"
       },
       {
-        "run_id": "run-66e44f6e-dd34-4d0c-a7ea-6357a54dd680",
+        "run_id": "run-c5a7fd5e-4660-44d0-8d83-38c164745a0d",
         "condition": "DATA-1",
         "device_type": "wall_outlet",
         "cable_type": "CAT6A CMP",
@@ -698,7 +698,7 @@
         "notes": "route scale on A-101 not confirmed by a person"
       },
       {
-        "run_id": "run-fa73740c-41d6-45c6-9b21-dbc06e1ac8e9",
+        "run_id": "run-fac88bbd-14b7-403c-a944-1a9bf57e8d42",
         "condition": "DATA-1",
         "device_type": "wall_outlet",
         "cable_type": "CAT6A CMP",
@@ -734,7 +734,7 @@
         "notes": "route scale on A-101 not confirmed by a person"
       },
       {
-        "run_id": "run-ed7c5969-ee3e-497e-8bda-df2c69d6cb4c",
+        "run_id": "run-7b085ffc-2f3b-440a-8e01-e4ff80ff4d93",
         "condition": "DATA-1",
         "device_type": "wall_outlet",
         "cable_type": "CAT6A CMP",
@@ -770,7 +770,7 @@
         "notes": "route scale on A-101 not confirmed by a person"
       },
       {
-        "run_id": "run-1841d439-c0cb-4382-b708-ec6a452d3742",
+        "run_id": "run-10e034a8-4fb0-447f-b819-305d7b6f750d",
         "condition": "WAP-1",
         "device_type": "wap",
         "cable_type": "CAT6A CMP",
@@ -805,7 +805,7 @@
         "notes": "route scale on A-101 not confirmed by a person"
       },
       {
-        "run_id": "run-37948565-8d03-4239-834c-4a563aab0626",
+        "run_id": "run-fc347437-5acc-42b9-ade9-a07a4dfb024f",
         "condition": "WAP-1",
         "device_type": "wap",
         "cable_type": "CAT6A CMP",
@@ -840,7 +840,7 @@
         "notes": "route scale on A-101 not confirmed by a person"
       },
       {
-        "run_id": "run-ac588853-059f-464b-b525-9a1372bcc197",
+        "run_id": "run-22e905ff-8759-4a34-a436-23c714500152",
         "condition": "CAM-1",
         "device_type": "camera",
         "cable_type": "CAT6 CMP",
@@ -878,7 +878,7 @@
         "notes": "vertical 280 ft (run override; condition 13 ft); per cable 335.01 ft exceeds 295 ft (TIA-568 copper permanent link, 90 m); route scale on A-101 not confirmed by a person"
       },
       {
-        "run_id": "run-0af21fd1-1294-4c53-b3b7-33e895d031c8",
+        "run_id": "run-2b114968-149b-4372-97d4-22bdc8ca4672",
         "condition": "CAM-1",
         "device_type": "camera",
         "cable_type": "CAT6 CMP",
@@ -914,7 +914,7 @@
         "notes": "route scale on A-101 not confirmed by a person"
       },
       {
-        "run_id": "run-75b8de42-ba7f-4396-8f97-7e96b4227060",
+        "run_id": "run-7e0d84a4-abe2-4a72-9995-cb7efeb6cf18",
         "condition": "CAM-1",
         "device_type": "camera",
         "cable_type": "CAT6 CMP",
@@ -950,7 +950,7 @@
         "notes": "route scale on A-101 not confirmed by a person"
       },
       {
-        "run_id": "run-59669b8c-eb02-45e0-83ca-e235f49471dd",
+        "run_id": "run-cdbea918-9b53-44b8-bfe0-5efa8ed5fcc2",
         "condition": "ACS-1",
         "device_type": "access_door",
         "cable_type": "18/4 SHLD CMP",
@@ -986,7 +986,7 @@
         "notes": "vertical 9 ft (run override; condition has none); route scale on A-101 not confirmed by a person"
       },
       {
-        "run_id": "run-0eccdba1-f074-4221-8f70-e7fd00fb9a57",
+        "run_id": "run-bb035713-ac7b-4254-a487-592f67a0ef26",
         "condition": "ACS-1",
         "device_type": "access_door",
         "cable_type": "18/4 SHLD CMP",
@@ -1025,8 +1025,8 @@
     "unlinked": {
       "devices": [
         {
-          "shape_id": "shp-e8746c04-d90a-4b0f-8e97-d8149bdb2143",
-          "condition_id": "cnd-e90afb40-4c7c-44f1-8241-d4bb32a6c57d",
+          "shape_id": "shp-8d9d6d2f-c149-4561-ad25-e2b87094f1e9",
+          "condition_id": "cnd-c4a08f15-2620-4ea4-9c4d-9772b6f99482",
           "finish_tag": "DATA-1",
           "sheet_id": "sample-plan.pdf",
           "label": "LOBBY 101",
@@ -1036,8 +1036,8 @@
       ],
       "routes": [
         {
-          "shape_id": "shp-ed5d9fa4-0449-4c31-b29f-953839ba3c8f",
-          "condition_id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+          "shape_id": "shp-2914eb2c-ea34-4cf0-b4d1-55b3a56895f8",
+          "condition_id": "cnd-03112616-d457-477d-bce7-2913fd69b459",
           "finish_tag": "BRANCH",
           "sheet_id": "sample-plan.pdf",
           "length_lf": 9.72,
@@ -1048,12 +1048,12 @@
     },
     "held": [
       {
-        "shape_id": "shp-5da37891-58e6-499c-8429-8633b6f95463",
-        "condition_id": "cnd-e90afb40-4c7c-44f1-8241-d4bb32a6c57d",
+        "shape_id": "shp-29db689b-67c6-4457-9a6f-28fd695334ea",
+        "condition_id": "cnd-c4a08f15-2620-4ea4-9c4d-9772b6f99482",
         "finish_tag": "DATA-1",
         "sheet_id": "sample-plan.pdf",
         "label": "LOBBY 101",
-        "hold_id": "hold-71296ab4-0613-4ab2-892c-cc1e3423e4ee",
+        "hold_id": "hold-8248556b-5276-4fa9-90f1-409767b45082",
         "reason": "Furnished and installed by others",
         "review": "pending",
         "sheet": "A-101"
@@ -1061,10 +1061,10 @@
     ],
     "holds": [
       {
-        "id": "hold-71296ab4-0613-4ab2-892c-cc1e3423e4ee",
+        "id": "hold-8248556b-5276-4fa9-90f1-409767b45082",
         "reason": "Furnished and installed by others",
         "device_shape_ids": [
-          "shp-5da37891-58e6-499c-8429-8633b6f95463"
+          "shp-29db689b-67c6-4457-9a6f-28fd695334ea"
         ],
         "held": 1,
         "review": "pending",
@@ -1072,13 +1072,13 @@
       }
     ],
     "warnings": [
-      "1 linked run exceeds its length limit per cable. Over 295 ft (TIA-568 copper permanent link, 90 m): CAM-1 run-ac588853-059f-464b-b525-9a1372bcc197 335.01 ft. Check the route; if it stands, the run needs a closer TR, or a length test and an owner notice.",
+      "1 linked run exceeds its length limit per cable. Over 295 ft (TIA-568 copper permanent link, 90 m): CAM-1 run-22e905ff-8759-4a34-a436-23c714500152 335.01 ft. Check the route; if it stands, the run needs a closer TR, or a length test and an owner notice.",
       "12 linked runs take route length from a sheet whose scale no person has confirmed (A-101). Every cable length there rests on that scale: confirm it in the canvas before pricing."
     ],
     "pathway": {
       "rows": [
         {
-          "condition_id": "cnd-b6d83eef-73de-4ba0-a83e-26268d2a44cf",
+          "condition_id": "cnd-d98e119c-af93-4586-9df6-77ed209de85e",
           "finish_tag": "TRUNK",
           "route_kind": "trunk",
           "segments": 12,
@@ -1090,7 +1090,7 @@
           "multiplier": 1
         },
         {
-          "condition_id": "cnd-2da95ad8-7065-4317-b9c3-601ae72e9d93",
+          "condition_id": "cnd-03112616-d457-477d-bce7-2913fd69b459",
           "finish_tag": "BRANCH",
           "route_kind": "branch",
           "segments": 13,

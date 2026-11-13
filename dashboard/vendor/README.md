@@ -52,13 +52,13 @@ Upstream's own fix to `html-to-image` (`easyschematic/patches/html-to-image+1.11
 
 | | |
 |---|---|
-| Source | This repository, <https://github.com/Tubbster-UX/opentakeoff-div27>, `main` |
-| Commit | `00f9adca1705f0e3e9abe24f680b29a802033370` (2026-10-27). Its `web/` is byte-identical to upstream [OpenTakeoff](https://github.com/Kentucky-ai/opentakeoff) `798ee88`. |
+| Source | This repository, <https://github.com/Tubbster-UX/opentakeoff-div27>: the launch integration of `main` and the Division 27 cable branch |
+| Commit | `31f2b552069214cfb7f6b9c12fd6df0db4fa908f`. Its `web/` is upstream [OpenTakeoff](https://github.com/Kentucky-ai/opentakeoff) `798ee88` plus the Division 27 cable work ([plan](../../docs/design/CABLE_SETUP_PLAN.md)). |
 | What is copied | `LICENSE`, `web/package.json` (as `package.json`), all of `web/src/` (as `src/`) |
 | Record | [`opentakeoff.lock.json`](opentakeoff.lock.json): the source, the commit, the include list, a sha256 for every file, the patches and the patched files' hashes |
 | Changes | [`PATCHES.md`](PATCHES.md#opentakeoff): one patch (`opentakeoff-patches/0001-host-bridge.patch`), the module overrides, the theme, the storage adapter |
 
-**Not the Division 27 branch.** The cable-setup UI lives on `claude/div27-cable-setup-c6t9wu` and is not copied. Once that branch is merged to `main`, a re-sync brings it in as one reviewable diff.
+**The Division 27 cable work is included.** It was vendored by re-syncing from the commit that merged `claude/div27-cable-setup-c6t9wu` onto `main`. Re-sync from `main` again (`--ref origin/main`) once that merge lands there, to point the lock at `main`'s own commit.
 
 ```bash
 cd dashboard

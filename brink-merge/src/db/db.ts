@@ -69,8 +69,29 @@ export async function openDb(opts: { url?: string | null; pgliteDir?: string | n
 
 export const MIGRATIONS_DIR = fileURLToPath(new URL("../../supabase/migrations/", import.meta.url));
 
-/** Apply supabase/migrations/*.sql in name order, once each (tracked in brink_schema_migrations). */
+/** Advisory-lock key that serializes migrate() across processes sharing one Postgres. */
+const MIGRATE_LOCK = 727_274_019;
+
+/** Apply supabase/migrations/*.sql in name order, once each (tracked in brink_schema_migrations).
+ *  On Postgres the whole run is one transaction holding an advisory lock, so two processes
+ *  migrating the same database at once (parallel test files, two CLI runs) cannot both
+ *  apply the same file: the second waits, then sees it done. PGlite is one process. */
 export async function migrate(db: Db, dir: string = MIGRATIONS_DIR): Promise<string[]> {
+  if (db.kind === "postgres") {
+    return db.transaction(async (tx) => {
+      await tx.query("select pg_advisory_xact_lock($1)", [MIGRATE_LOCK]);
+      await tx.query("create table if not exists brink_schema_migrations (name text primary key, applied_at timestamptz not null default now())");
+      const done = new Set((await tx.query<{ name: string }>("select name from brink_schema_migrations")).rows.map((r) => r.name));
+      const applied: string[] = [];
+      for (const name of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
+        if (done.has(name)) continue;
+        await tx.query(readFileSync(`${dir}/${name}`, "utf8"));
+        await tx.query("insert into brink_schema_migrations (name) values ($1)", [name]);
+        applied.push(name);
+      }
+      return applied;
+    });
+  }
   await db.exec("create table if not exists brink_schema_migrations (name text primary key, applied_at timestamptz not null default now())");
   const done = new Set((await db.query<{ name: string }>("select name from brink_schema_migrations")).rows.map((r) => r.name));
   const applied: string[] = [];

@@ -6,8 +6,9 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { siblingPostgres } from "./pgSibling.js";
 import { main } from "../src/cli.js";
-import { migrate, openPglite, openPostgres, type Db } from "../src/db/db.js";
+import { migrate, openPglite, type Db } from "../src/db/db.js";
 import {
   currentImport, loadActiveEdits, loadBomLines, loadCatalog, loadIssues, recordEdit, renderEdited, renderSchematic, revertEdit, saveMerge, seedCatalog,
 } from "../src/db/repository.js";
@@ -116,26 +117,10 @@ describe("applyEdits", () => {
   });
 });
 
-// PGlite always; a real Postgres / local Supabase too when BRINK_TEST_DATABASE_URL is set. db.test.ts
-// needs that database empty, so this suite creates (and drops) a sibling database on the same server.
-async function siblingPostgres(): Promise<Db> {
-  const admin = await openPostgres(process.env.BRINK_TEST_DATABASE_URL!);
-  const name = `brink_edits_test_${process.pid}_${Date.now()}`;
-  await admin.exec(`create database ${name}`);
-  const url = new URL(process.env.BRINK_TEST_DATABASE_URL!);
-  url.pathname = `/${name}`;
-  const db = await openPostgres(url.toString());
-  return {
-    ...db,
-    close: async () => {
-      await db.close();
-      await admin.exec(`drop database if exists ${name}`);
-      await admin.close();
-    },
-  };
-}
+// PGlite always; a real Postgres / local Supabase too when BRINK_TEST_DATABASE_URL is set, on a
+// sibling database (test/pgSibling.ts) because db.test.ts needs that one empty.
 const targets: [string, () => Promise<Db>][] = [["PGlite", () => openPglite()]];
-if (process.env.BRINK_TEST_DATABASE_URL) targets.push(["Postgres", siblingPostgres]);
+if (process.env.BRINK_TEST_DATABASE_URL) targets.push(["Postgres", () => siblingPostgres("edits")]);
 
 describe.each(targets)("edits survive re-import (%s, real fixtures)", (_name, open) => {
   let db: Db;

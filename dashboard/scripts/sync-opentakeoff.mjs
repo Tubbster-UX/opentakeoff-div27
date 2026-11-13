@@ -13,8 +13,9 @@
 // patch files in vendor/opentakeoff-patches/, applied in name order after the copy and
 // described in vendor/PATCHES.md. --check fails on any other difference.
 //
-// Not the Division 27 branch: the cable-setup UI (claude/div27-cable-setup-c6t9wu) arrives
-// through a re-sync once that branch is merged to main (`--ref origin/main`).
+// The Division 27 cable work (claude/div27-cable-setup-c6t9wu) is included: it was
+// vendored from the commit that merged it onto main; re-sync with `--ref origin/main`
+// once that merge lands on main.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";

@@ -96,6 +96,7 @@ const COL_DIM = {
   total_sf_net: "area", waste_sf: "area",
   lf: "len", lf_net: "len", waste_lf: "len", perimeter_ref: "len",
   "roll:order_lf": "len", "roll:seam_lf": "len",
+  "cable:cable_lf": "len", "cable:cable_lf_order": "len",
 };
 export const METRIC_LABELS = { area: "m²", len: "m" };        // on-screen table
 export const METRIC_CSV_LABELS = { area: "m2", len: "m" };    // CSV/XLSX (ASCII, matches the legend PDF)
@@ -251,6 +252,34 @@ export function rollColProfile(rollByCond) {
     get: (r, ctx) => {
       const ri = ctx?.rollByCond?.get(r.id);
       return ri ? f.get(ri, r.multiplier || 1) : "";
+    },
+  }));
+}
+
+// ── Division 27 cable runs (docs/design/CABLE_SETUP.md) ─────────────────────
+// The figured cable schedule beside the device count: pulls (one per linked
+// location), cables, and cable LF net / with waste. Values arrive via
+// ctx.cableByCond (Map(condition_id → lib/cable.js cableByCondition entry),
+// already ×N and waste-applied there), the roll seam again. Emitted only
+// when a cable takeoff exists (frozen 13 → … → labor → roll → cable), so a
+// project without a cable condition is byte-identical.
+export const CABLE_FIELDS = [
+  { key: "cable:pulls", header: "Pulls", get: (q) => q.pulls },
+  { key: "cable:cables", header: "Cables", get: (q) => q.cables },
+  { key: "cable:cable_lf", header: "Cable LF", get: (q) => q.cable_lf },
+  { key: "cable:cable_lf_order", header: "Cable LF w/Waste", get: (q) => q.cable_lf_order },
+];
+
+export function cableColProfile(cableByCond) {
+  if (!(cableByCond instanceof Map) || !cableByCond.size) return [];
+  return CABLE_FIELDS.map((f) => ({
+    key: f.key,
+    header: f.header,
+    defaultVisible: true,
+    cable: true,
+    get: (r, ctx) => {
+      const q = ctx?.cableByCond?.get(r.id);
+      return q ? f.get(q) : "";
     },
   }));
 }

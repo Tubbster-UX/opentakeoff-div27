@@ -5,7 +5,8 @@
 // machine work reviewed, and an edit whose target left the takeoff becomes a
 // warning, never dropped and never re-aimed.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { migrate, openPglite, openPostgres, type Db } from "../src/db/db.js";
+import { siblingPostgres } from "./pgSibling.js";
+import { migrate, openPglite, type Db } from "../src/db/db.js";
 import {
   currentImport, loadActiveTakeoffEdits, loadBomLines, loadCatalog, loadImportInput, loadIssues, recordTakeoffEdit, renderTakeoff, revertTakeoffEdit, saveMerge, seedCatalog,
 } from "../src/db/repository.js";
@@ -177,7 +178,8 @@ describe("diffTakeoff", () => {
 });
 
 const targets: [string, () => Promise<Db>][] = [["PGlite", () => openPglite()]];
-if (process.env.BRINK_TEST_DATABASE_URL) targets.push(["Postgres", () => openPostgres(process.env.BRINK_TEST_DATABASE_URL!)]);
+// a sibling database: db.test.ts needs BRINK_TEST_DATABASE_URL itself empty (test/pgSibling.ts)
+if (process.env.BRINK_TEST_DATABASE_URL) targets.push(["Postgres", () => siblingPostgres("takeoff_edits")]);
 
 describe.each(targets)("takeoff edit layer on %s", (_name, open) => {
   let db: Db;
