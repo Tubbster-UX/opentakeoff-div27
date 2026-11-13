@@ -44,7 +44,11 @@ export interface CableData {
 
 const LF_TOLERANCE = 0.011;
 
-export function readCable(takeoff: OtTakeoff, report: OtReport | null, issues: Issues): CableData {
+/**
+ * `editedShapeIds`: shapes the takeoff edit layer changed (takeoffEdits.ts). A run whose route LF no longer matches
+ * because a person edited its route in the app is a warning that names that edit, not a report / takeoff mismatch.
+ */
+export function readCable(takeoff: OtTakeoff, report: OtReport | null, issues: Issues, editedShapeIds: ReadonlySet<string> = new Set()): CableData {
   const empty: CableData = { runs: [], summary: [], order: [], pathway: [], unlinkedDevices: [], unlinkedRoutes: [], held: [], warnings: [] };
   const cable = report?.cable;
   if (!cable) return empty;
@@ -88,9 +92,16 @@ export function readCable(takeoff: OtTakeoff, report: OtReport | null, issues: I
         const c = shapes.get(id)?.computed;
         sum += c?.plan_lf ?? c?.perimeter_lf ?? 0;
       }
-      if (Math.abs(r2(sum) - run.routeLf) > LF_TOLERANCE) {
+      const edited = routeShapeIds.filter((id) => editedShapeIds.has(id));
+      if (Math.abs(r2(sum) - run.routeLf) > LF_TOLERANCE && edited.length) {
+        issues.warn("route_edited", `run ${run.runId} (${run.conditionKey}): its route was edited in the Brink app (now ${r2(sum)} LF); the cable length on this BOM is still OpenTakeoff's report value from before the edit (${run.routeLf} LF route). Re-export the report from OpenTakeoff to update the cable math`, { conditionKey: run.conditionKey, refs: { runId: run.runId, editedShapeIds: edited } });
+      } else if (Math.abs(r2(sum) - run.routeLf) > LF_TOLERANCE) {
         issues.error("route_lf_mismatch", `run ${run.runId} (${run.conditionKey}): the report says route ${run.routeLf} LF, the takeoff's route shapes sum to ${r2(sum)} LF; re-export both files from one session`, { conditionKey: run.conditionKey, refs: { runId: run.runId } });
       }
+    }
+    const goneDevices = (rec?.device_shape_ids ?? []).filter((id) => !shapes.has(id) && editedShapeIds.has(id));
+    if (goneDevices.length) {
+      issues.warn("run_device_edited", `run ${run.runId} (${run.conditionKey}): its device was deleted in the Brink app; the run's ${run.cables} cable(s) stay on this BOM from OpenTakeoff's report until the report is re-exported`, { conditionKey: run.conditionKey, refs: { runId: run.runId, deviceShapeIds: goneDevices } });
     }
     if (run.status !== "linked") {
       issues.warn("run_not_linked", `run ${run.runId} (${run.conditionKey}) is ${run.status}: ${run.reason || "no reason given"}; OpenTakeoff excludes it from cable totals, so its device has no cable on this BOM`, { conditionKey: run.conditionKey, refs: { runId: run.runId } });

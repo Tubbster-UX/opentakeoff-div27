@@ -85,7 +85,7 @@ The repository root `.mcp.json` registers `opentakeoff` and `brink` side by side
 
 | Tool | What it does |
 |---|---|
-| `import_takeoff` | Takes an OpenTakeoff export and report. Produces the rollup, BOM and schematic, stored as the project's current import, and returns totals and every issue. |
+| `import_takeoff` | Takes an OpenTakeoff export and report. Produces the rollup, BOM and schematic, stored as the project's current import, re-applies the project's schematic edits, and returns totals and every issue. |
 | `bom` | BOM lines (issues left out) |
 | `list_issues` | Errors and warnings for the current import |
 | `catalog` | The Brink catalog map |
@@ -94,6 +94,8 @@ The repository root `.mcp.json` registers `opentakeoff` and `brink` side by side
 | `export_schematic` | Writes the EasySchematic file, rendered from the database |
 | `export_bom` | Writes the BOM as CSV or JSON |
 | `list_projects` | Projects and their current import |
+| `map_cable_part` | Sets the Portal part for one cable type, used by the Portal push |
+| `portal_push` | **Dry run only.** Plans a Draft Portal proposal from the current import and returns the exact request plan. Nothing is sent. |
 
 ## Database (Supabase / Postgres)
 
@@ -109,6 +111,11 @@ The schema is in `supabase/migrations/`. It is applied automatically by the CLI 
 | `brink_bom_lines` | BOM lines |
 | `brink_issues` | Issues |
 | `brink_schematics`, `brink_schematic_nodes`, `brink_schematic_connections` | The schematic, one row per node and per connection; `cable_length_ft` is the measured per-cable LF |
+| `brink_schematic_edits` | People's edits to the schematic (moves, renames, room changes, connections), kept as a layer over every import and keyed by ids that survive a re-import; see [docs/schematic-edits.md](docs/schematic-edits.md) |
+| `brink_takeoff_edits` | People's edits to the takeoff in the Brink app's takeoff canvas (shapes added, reshaped or deleted, conditions, sheet scales), kept as a layer over the import's raw takeoff (the machine original, never rewritten) and re-applied on every import; see [docs/takeoff-edits.md](docs/takeoff-edits.md) |
+| `brink_sheets` | The plan PDFs a project's takeoff is drawn on: an index of objects in the private Supabase Storage bucket `brink-plans` |
+| `brink_portal_cable_parts` | The Portal part for each cable type (Portal push) |
+| `brink_portal_pushes` | One row per Portal push attempt, dry run or live: plan, status and Portal ids |
 
 **Access:** every table has row-level security on and no policies, so only the service role can read or write.
 
@@ -133,8 +140,18 @@ The schema is in `supabase/migrations/`. It is applied automatically by the CLI 
 
 - **`kind`** is one of `device` (cable_setup), `tr` (role tr), `route` (role route) or `plain`. It must agree with the condition.
 - **`esDeviceType`, `signalType` and connector types** must be EasySchematic's own values.
-- **`portalSku`** is reserved for the Portal push and stays null.
+- **`portalSku`** is Portal's numeric partId, written as text. The Portal push reads it. It stays null until it is chosen.
 - **`status`:** the seeded rows are `proposed` until Alexavier confirms them.
+- **`cableParts`** (optional) maps each OpenTakeoff cable type to a Portal part, ordered by the box or by the foot. See [docs/portal-push.md](docs/portal-push.md).
+
+## Portal push
+
+`node bin/brink-merge.mjs portal-push --project "Job name"` plans a **Draft** Portal proposal from the project's current import. It is a **dry run** by default: it prints the exact ordered request plan, records the attempt, and sends nothing.
+- Only confirmed rows with a Portal partId are pushed. Anything else aborts the whole push before any write, and every offending line is listed.
+- A live push needs `--live`, plus `--confirm` with the plan hash the dry run printed, plus credentials in the environment.
+- The customer is left unset. Labor is waiting on [docs/portal-labor-proposal.md](docs/portal-labor-proposal.md).
+
+[docs/portal-push.md](docs/portal-push.md) has the rules, the API calls, and what the captures did not confirm.
 
 ## What the EasySchematic file contains
 
@@ -146,9 +163,29 @@ The schema is in `supabase/migrations/`. It is applied automatically by the CLI 
   - The OT `cable_type` is the line label.
 - **Rooms:** taken from the takeoff's shape labels; each TR gets its own room.
 - **Layout:** a plain grid. Placement at real plan coordinates is Stage 1b.
+- **Ids:** stable. They come from OpenTakeoff's shape and run ids (`dev-<shape>-<copy>`, `tr-<shape>`, `cable-<run>-<copy>-<n>`, `room-<slug>-<hash>`), so a re-import of the same takeoff reproduces them.
 - **Issues note:** a note node lists the issues.
 
 Devices with no linked run (unlinked or held) are drawn with no cable. Devices that cannot be drawn (unmapped) are listed in the note and the issues.
+
+## Schematic edits survive re-imports
+
+People edit the schematic in the Brink app (`dashboard/`). Their moves, renames, room changes and connections are stored as a layer in `brink_schematic_edits`, keyed by the stable ids, and never written into an import's rows.
+- Every render applies the layer: `get_schematic`, `export_schematic`, and the CLI's `--out` with `--db`.
+- Every import applies it again (CLI `--db`, `import_takeoff`, `map_condition`'s re-merge).
+- An edit whose target left the takeoff becomes a `schematic_edit_orphaned` warning on the new import. An edit that no longer fits becomes `schematic_edit_conflict`. Either way the edit is kept, and nothing else receives it.
+
+Rules and the table: [docs/schematic-edits.md](docs/schematic-edits.md).
+
+## Takeoff edits survive re-imports
+
+People also edit the takeoff itself in the Brink app's Takeoff tab (the OpenTakeoff canvas). Those edits are a second layer, `brink_takeoff_edits`, keyed by OpenTakeoff's shape, condition and sheet ids:
+- The import's raw takeoff, as exported, is never rewritten. The BOM and schematic are built from it with the layer applied (`merge(..., { takeoffEdits })`), on every import: the app's save, the CLI's `--db`, `import_takeoff` and `map_condition`.
+- Machine work keeps its original: an edit of an agent's shape keeps the agent's ring (`origin.proposed_verts_norm`), actor and method. Only a verified person can mark machine work reviewed.
+- Counts follow the edits (`count_edited` warning where they differ from the report). Cable lengths stay OpenTakeoff's report values until the report is re-exported (`route_edited`, `run_device_edited`).
+- An edit whose target left the takeoff becomes a `takeoff_edit_orphaned` warning; one made on an older machine version is applied with `takeoff_edit_base_changed`.
+
+Rules and the tables: [docs/takeoff-edits.md](docs/takeoff-edits.md).
 
 ## Tests
 
@@ -175,6 +212,5 @@ node scripts/es-open-check.mjs --es /path/to/EasySchematic --file job.schematic.
 ## Not in this stage
 
 - Real-coordinate placement (1b)
-- Portal push (`portalSku` is reserved)
-- Live mirroring into an EasySchematic tab
-- The combined dashboard website
+- Portal labor items (proposed; not built yet)
+- A live Portal push that has actually been run against Portal (only dry runs and mocked tests so far)

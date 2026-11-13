@@ -11,8 +11,8 @@
   ],
   "conditions": [
     {
-      "id": "cnd-17b98553-8f07-4c9f-a7dd-a8ff44906011",
-      "created_at": "2026-10-27T16:41:36.107Z",
+      "id": "cnd-06d1a85a-da3e-482f-a9a0-1aac4865391d",
+      "created_at": "2026-11-13T06:06:35.682Z",
       "finish_tag": "TR",
       "color": "#c96442",
       "fill": "#c96442",
@@ -23,8 +23,8 @@
       "role": "tr"
     },
     {
-      "id": "cnd-6a7c5cc2-1951-448e-9b95-024c7d3f0352",
-      "created_at": "2026-10-27T16:41:36.109Z",
+      "id": "cnd-4d7db691-16c4-4eb6-b724-23923af257b3",
+      "created_at": "2026-11-13T06:06:35.684Z",
       "finish_tag": "DATA-1",
       "color": "#2f7d54",
       "fill": "#2f7d54",
@@ -42,8 +42,8 @@
       }
     },
     {
-      "id": "cnd-c5f9a813-e4df-4bd0-aa53-a290b2db4f7d",
-      "created_at": "2026-10-27T16:41:36.112Z",
+      "id": "cnd-1b7c29c2-36cc-491b-abe8-4aa3ee53ed6f",
+      "created_at": "2026-11-13T06:06:35.687Z",
       "finish_tag": "ROUTE",
       "color": "#2563eb",
       "fill": "#2563eb",
@@ -56,9 +56,9 @@
   ],
   "shapes": [
     {
-      "id": "shp-22a0d33d-f40d-4938-bea7-51d184884fad",
+      "id": "shp-2254d7dd-c2db-4eee-aee1-742db8078350",
       "sheet_id": "sample-plan.pdf",
-      "condition_id": "cnd-17b98553-8f07-4c9f-a7dd-a8ff44906011",
+      "condition_id": "cnd-06d1a85a-da3e-482f-a9a0-1aac4865391d",
       "measure_role": "count",
       "verts_norm": [
         [
@@ -81,9 +81,9 @@
       "label": "MDF"
     },
     {
-      "id": "shp-81899d86-1eb8-410b-877c-ae6bb5f8210e",
+      "id": "shp-c920450a-d65a-4e75-a905-0d280be6fc33",
       "sheet_id": "sample-plan.pdf",
-      "condition_id": "cnd-6a7c5cc2-1951-448e-9b95-024c7d3f0352",
+      "condition_id": "cnd-4d7db691-16c4-4eb6-b724-23923af257b3",
       "measure_role": "count",
       "verts_norm": [
         [
@@ -104,9 +104,9 @@
       }
     },
     {
-      "id": "shp-6f9a6ea0-ae32-4fbb-a845-19f416ab30ed",
+      "id": "shp-e00c4d18-f667-4f05-896f-8ce5eec007b6",
       "sheet_id": "sample-plan.pdf",
-      "condition_id": "cnd-6a7c5cc2-1951-448e-9b95-024c7d3f0352",
+      "condition_id": "cnd-4d7db691-16c4-4eb6-b724-23923af257b3",
       "measure_role": "count",
       "verts_norm": [
         [
@@ -127,9 +127,9 @@
       }
     },
     {
-      "id": "shp-01bc9227-4258-4e01-9bc5-4eec187d2c82",
+      "id": "shp-f408df93-abe8-427d-a14c-905d0779957d",
       "sheet_id": "sample-plan.pdf",
-      "condition_id": "cnd-6a7c5cc2-1951-448e-9b95-024c7d3f0352",
+      "condition_id": "cnd-4d7db691-16c4-4eb6-b724-23923af257b3",
       "measure_role": "count",
       "verts_norm": [
         [
@@ -150,9 +150,9 @@
       }
     },
     {
-      "id": "shp-d64ec280-b820-4265-9462-5f3a8c00358a",
+      "id": "shp-c3a2679e-05f8-494c-ba0a-e40c36bc40b5",
       "sheet_id": "sample-plan.pdf",
-      "condition_id": "cnd-c5f9a813-e4df-4bd0-aa53-a290b2db4f7d",
+      "condition_id": "cnd-1b7c29c2-36cc-491b-abe8-4aa3ee53ed6f",
       "measure_role": "linear",
       "verts_norm": [
         [
@@ -178,9 +178,9 @@
       }
     },
     {
-      "id": "shp-fdd4a5e1-60e1-4641-b658-81d9787d7351",
+      "id": "shp-6fd0d43c-51e1-4311-a82f-3b44d6cde2d2",
       "sheet_id": "sample-plan.pdf",
-      "condition_id": "cnd-c5f9a813-e4df-4bd0-aa53-a290b2db4f7d",
+      "condition_id": "cnd-1b7c29c2-36cc-491b-abe8-4aa3ee53ed6f",
       "measure_role": "linear",
       "verts_norm": [
         [
@@ -206,9 +206,9 @@
       }
     },
     {
-      "id": "shp-bdb02308-915d-4ea6-9735-94dc63adf2af",
+      "id": "shp-76897a83-2a65-45cf-9ac2-80e7a5f5e01e",
       "sheet_id": "sample-plan.pdf",
-      "condition_id": "cnd-c5f9a813-e4df-4bd0-aa53-a290b2db4f7d",
+      "condition_id": "cnd-1b7c29c2-36cc-491b-abe8-4aa3ee53ed6f",
       "measure_role": "linear",
       "verts_norm": [
         [
@@ -238,19 +238,19 @@
   "rfis": [],
   "cable_runs": [
     {
-      "id": "run-34f8ff06-0694-48e8-9f26-227e1dea9070",
+      "id": "run-212a65df-a3f1-4e4d-a7ba-512607cccb47",
       "device_shape_ids": [
-        "shp-81899d86-1eb8-410b-877c-ae6bb5f8210e"
+        "shp-c920450a-d65a-4e75-a905-0d280be6fc33"
       ],
       "route_shape_ids": [
-        "shp-d64ec280-b820-4265-9462-5f3a8c00358a"
+        "shp-c3a2679e-05f8-494c-ba0a-e40c36bc40b5"
       ],
-      "tr_id": "shp-22a0d33d-f40d-4938-bea7-51d184884fad",
+      "tr_id": "shp-2254d7dd-c2db-4eee-aee1-742db8078350",
       "provenance": {
         "method": "manual",
         "actor": "agent",
         "reviewed": false,
-        "created_at": "2026-10-27T16:41:36.113Z"
+        "created_at": "2026-11-13T06:06:35.688Z"
       }
     }
   ],

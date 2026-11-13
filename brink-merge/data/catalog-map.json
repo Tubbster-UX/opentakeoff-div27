@@ -97,5 +97,34 @@
       "status": "proposed",
       "note": "Route condition (branch): pathway LF, not a cable quantity."
     }
+  ],
+  "cableParts": [
+    {
+      "cableType": "CAT6A CMP",
+      "portalSku": null,
+      "orderBasis": "box",
+      "packageFt": 1000,
+      "portalUnitOfMeasure": null,
+      "status": "proposed",
+      "note": "Portal push: one Portal item per 1000 ft box, quantity = OpenTakeoff's box count. Portal partId and unitOfMeasure to be confirmed."
+    },
+    {
+      "cableType": "CAT6 CMP",
+      "portalSku": null,
+      "orderBasis": "box",
+      "packageFt": 1000,
+      "portalUnitOfMeasure": null,
+      "status": "proposed",
+      "note": "Portal push: one Portal item per 1000 ft box, quantity = OpenTakeoff's box count. Portal partId and unitOfMeasure to be confirmed."
+    },
+    {
+      "cableType": "18/4 SHLD CMP",
+      "portalSku": null,
+      "orderBasis": "ft",
+      "packageFt": null,
+      "portalUnitOfMeasure": null,
+      "status": "proposed",
+      "note": "Portal push: sold by the foot, quantity = OpenTakeoff's order LF rounded up. OpenTakeoff has no box size for it. Portal partId and unitOfMeasure to be confirmed."
+    }
   ]
 }

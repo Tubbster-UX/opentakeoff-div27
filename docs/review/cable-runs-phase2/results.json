@@ -1,0 +1,109 @@
+{
+  "checks": [
+    {
+      "check": "import: 2 unlinked devices and 2 unlinked routes carry the amber cue",
+      "ok": true,
+      "detail": {
+        "devices": 2,
+        "routes": 2,
+        "tr": [
+          "MDF"
+        ]
+      }
+    },
+    {
+      "check": "import: the TR prints its name (MDF) on the sheet",
+      "ok": true,
+      "detail": [
+        "MDF"
+      ]
+    },
+    {
+      "check": "Runs panel: 1 pull, 2 cables of 3 devices, pending counted",
+      "ok": true,
+      "detail": "1 pull · 2 cables of 3 devices\n152.66 LF net · 170.98 LF with waste\n2 unlinked\n1 pending review (counted)\nAccept all"
+    },
+    {
+      "check": "Runs panel: 2 unlinked devices + 2 unlinked routes listed",
+      "ok": true
+    },
+    {
+      "check": "Runs panel: the TR name field holds MDF",
+      "ok": true
+    },
+    {
+      "check": "Link Run readout: DATA-1 → 1 seg → MDF, route 33.33 LF, per cable 76.33 LF, 2 cables = 152.66 LF",
+      "ok": true,
+      "detail": "LINK RUN\nDATA-1 → 1 seg → MDF\nLink ⏎\nEsc\nroute 33.33 LF · per cable 76.33 LF · 2 cables = 152.66 LF"
+    },
+    {
+      "check": "Enter links: 2 pulls, 4 cables, 1 unlinked left",
+      "ok": true,
+      "detail": "2 pulls · 4 cables of 3 devices\n305.32 LF net · 341.96 LF with waste\n1 unlinked\n1 pending review (counted)\nAccept all"
+    },
+    {
+      "check": "Enter links: the device cue clears (1 unlinked device on the sheet)",
+      "ok": true
+    },
+    {
+      "check": "⌘Z unlinks the new run",
+      "ok": true
+    },
+    {
+      "check": "⇧⌘Z re-links it",
+      "ok": true
+    },
+    {
+      "check": "Accept all clears the pending count",
+      "ok": true
+    },
+    {
+      "check": "⌘Z after Accept restores the pending run",
+      "ok": true
+    },
+    {
+      "check": "Enter with no segment refuses and links nothing",
+      "ok": true
+    },
+    {
+      "check": "condition editor: wall outlet, 2 per location, CAT6A, 23 / 10 / 10",
+      "ok": true,
+      "detail": {
+        "type": "wall_outlet",
+        "per": "2",
+        "kind": "CAT6A",
+        "v": "23",
+        "ld": "10",
+        "lt": "10"
+      }
+    },
+    {
+      "check": "clearing Vertical withholds the runs (0 pulls) and says why inline",
+      "ok": true,
+      "detail": "0 pulls · 0 cables of 3 devices\n0 LF net · 0 LF with waste\n3 unlinked\nAccept all"
+    },
+    {
+      "check": "entering it again restores 2 pulls",
+      "ok": true
+    },
+    {
+      "check": "Report: Cable summary with Device EA beside Pulls and the TOTAL row",
+      "ok": true,
+      "detail": "CABLE SUMMARY\nCondition\tDevice type\tCable type\tTR\tMultiplier\tWaste %\tDevice EA\tPulls\tCables\tMeasured route LF\tCable LF (net)\tCable LF (order, with waste)\tUnlinked devices\tPending runs\tNote\nDATA-1\twall_outlet\tCAT6A\tMDF\t1\t12\t3\t2\t4\t66.66\t305.32\t341.96\t1\t1\t\nSubtotal by TR\t\t\tMDF\t\t\t3\t2\t4\t66.66\t305.32\t341.96\t1\t1\t\nSubtotal by cable type\t\tCAT6A\t\t\t\t3\t2\t4\t66.66\t305.32\t341.96\t1\t1\t\nTOTAL\t\t\t\t\t\t3\t2\t4\t66.66\t305.3"
+    },
+    {
+      "check": "Report Show closes the Report and selects the unlinked device",
+      "ok": true
+    },
+    {
+      "check": "no console errors",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": [],
+  "blocked": [
+    "https://static.cloudflareinsights.com/beacon.min.js",
+    "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+  ]
+}

@@ -21,7 +21,15 @@ import { UserError } from "./format.ts";
  * provenance: a distributed deliverable should say what produced it. */
 export const PDF_PRODUCER = "OpenTakeoff";
 
-export type ExportKind = "json" | "pdf" | "dxf" | "xlsx";
+/** Stamped as docProps dc:creator AND Application on every workbook
+ * export_report writes (web/src/lib/xlsx.js buildXlsx `producer`; kind
+ * "report_xlsx"). Excel and
+ * LibreOffice rewrite Application and add lastModifiedBy when they save, so a
+ * workbook the estimator opened and saved — prices typed in — no longer
+ * reads as ours, and a re-export refuses to replace it. */
+export const XLSX_PRODUCER = "OpenTakeoff";
+
+export type ExportKind = "json" | "pdf" | "dxf" | "xlsx" | "report_xlsx";
 
 /** First `n` bytes, without reading a large export into memory to look at its head. */
 async function head(p: string, n: number): Promise<Buffer> {
@@ -57,8 +65,16 @@ async function isOwnExport(outPath: string, kind: ExportKind): Promise<boolean> 
       const sheet = unzipSync(new Uint8Array(await readFile(outPath)))["xl/worksheets/sheet1.xml"];
       return !!sheet && strFromU8(sheet).includes("Prepared with OpenTakeoff");
     }
-    if ((await head(outPath, 5)).toString("latin1") !== "%PDF-") return false;
     const { readFile } = await import("node:fs/promises");
+    if (kind === "report_xlsx") {
+      // export_report's workbook: a zip whose docProps say OpenTakeoff wrote
+      // it and nobody saved it since (export_estimate's is "xlsx" above)
+      if ((await head(outPath, 4)).toString("latin1") !== "PK\x03\x04") return false;
+      const { xlsxProvenance } = await import("../../web/src/lib/xlsx.js");
+      const p = await xlsxProvenance(new Uint8Array(await readFile(outPath)));
+      return !!p && p.creator === XLSX_PRODUCER && p.application === XLSX_PRODUCER && p.lastModifiedBy === null;
+    }
+    if ((await head(outPath, 5)).toString("latin1") !== "%PDF-") return false;
     const { PDFDocument } = await import("pdf-lib");
     const doc = await PDFDocument.load(await readFile(outPath), {
       ignoreEncryption: true,

@@ -130,3 +130,11 @@ test("saveCompany drops empty fields; nothing left removes the key", () => {
 test("LOGO_LIMIT is the documented cap", () => {
   assert.equal(LOGO_LIMIT, 200_000);
 });
+
+test("isSvg: an SVG logo is recognized by type or, with no type, by name — it rasterizes at the logo box, not its decoded size", async () => {
+  const { isSvg } = await import("../src/lib/identity.js");
+  assert.equal(isSvg({ type: "image/svg+xml", name: "logo.svg" }), true);
+  assert.equal(isSvg({ type: "", name: "Brand.SVG" }), true);
+  assert.equal(isSvg({ type: "image/png", name: "logo.png" }), false);
+  assert.equal(isSvg(null), false);
+});

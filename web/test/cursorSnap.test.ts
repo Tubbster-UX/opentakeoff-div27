@@ -6,8 +6,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { snapsToVectors } from "../src/lib/cursorSnap.js";
 
-test("selection boxes place the raw cursor: import, image, pin, Copy text, Select", () => {
-  for (const tool of ["schedule", "image", "pin", "textcopy", "select"])
+test("selection boxes place the raw cursor: import, image, pin, Copy text, Select, Link Run", () => {
+  for (const tool of ["schedule", "image", "pin", "textcopy", "select", "cablelink"])
     assert.equal(snapsToVectors(tool), false, tool);
 });
 

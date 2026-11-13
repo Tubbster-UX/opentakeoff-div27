@@ -1,0 +1,143 @@
+/* Brink Design tokens: the one file to edit to re-colour the app.
+ *
+ * Source: Brink Design Brand Guidelines v1.0 (October 2026), "Color palette" and
+ * "Color in use". HEX is the reference. Every colour the Brink UI (shell, schematic
+ * editor chrome, and later the takeoff canvas) shows comes from these variables;
+ * components never use raw colours.
+ *
+ *   - White grounds and navy type carry most of the app; Brink Navy frames it (the app
+ *     header); Brink Blue is the ONE accent, kept to small highlights: links, focus,
+ *     selection, the live-change flash. Primary buttons are navy, not blue.
+ *   - No warm, cream or tan grounds. Amber (#DEA31E) belongs to Brink Productions and
+ *     is never used here; the warning colour is a burnt orange.
+ *   - Never navy text on Navy 700, never white text on Surface Raised.
+ *
+ * Contrast: test/tokens.test.ts parses this file and checks every pair the UI uses
+ * (WCAG 2.1: 4.5:1 for text, 3:1 for borders, focus rings and icons). The table is in
+ * dashboard/docs/design-system.md. Keep it green when re-colouring.
+ *
+ * Dark theme: the `.dark` class on <html> (set by web/src/design/theme.ts, and before
+ * first paint by the inline script in index.html). The same class drives
+ * EasySchematic's own dark mode, so there is one theme for the whole app.
+ * `.bk-inverse` (the app header) is a Brink Navy field in both themes.
+ */
+:root {
+  /* The guide's palette, by name (reference values; use the role tokens below in components) */
+  --bk-brand-navy: #0d161f;      /* Brink Navy: the brand colour, logo ink, dark grounds */
+  --bk-brand-navy-700: #1e2d3d;  /* Navy 700: large supporting fields beside navy */
+  --bk-brand-blue: #1f5a96;      /* Brink Blue: the one accent (PROPOSED in the guide) */
+  --bk-brand-white: #ffffff;
+  --bk-brand-surface-raised: #f3f5f7;
+  --bk-brand-line: #d5dbe1;
+  --bk-brand-border-strong: #6b7884;
+  --bk-brand-ink-muted: #4e5b67;
+
+  /* Grounds */
+  --bk-canvas: #ffffff;        /* app background behind panels (White: the default ground) */
+  --bk-surface: #ffffff;       /* panels, cards, dialogs */
+  --bk-surface-2: #f3f5f7;     /* Surface Raised: side panels, table headers */
+  --bk-hover: #e9edf1;         /* hover fill for rows and quiet buttons (derived, cool) */
+  --bk-pressed: #dde3e9;       /* pressed / open / toggled quiet fill (derived, cool) */
+  --bk-line: #d5dbe1;          /* Line: hairlines and dividers */
+  --bk-line-strong: #6b7884;   /* Border Strong: input and control outlines */
+
+  /* Type */
+  --bk-ink: #0d161f;           /* Brink Navy: primary text (18.2:1 on white) */
+  --bk-ink-2: #33414e;         /* secondary text (derived between navy and Ink Muted) */
+  --bk-ink-3: #4e5b67;         /* Ink Muted: captions, metadata, icons, placeholders */
+
+  /* The one accent: Brink Blue */
+  --bk-accent: #1f5a96;
+  --bk-accent-hover: #184878;
+  --bk-accent-soft: #e8eff7;   /* selected row tint, info backgrounds */
+  --bk-on-accent: #ffffff;     /* text on an accent fill (7.1:1) */
+  --bk-accent-fill: #1f5a96;   /* filled controls that carry white text (EasySchematic's blue buttons) */
+  --bk-accent-fill-hover: #184878;
+
+  /* Primary actions: Brink Navy fill (blue stays a small highlight) */
+  --bk-primary: #0d161f;
+  --bk-primary-hover: #1e2d3d;
+  --bk-on-primary: #ffffff;
+
+  /* Status (state only, never decoration; always with text) */
+  --bk-ok: #17703e;
+  --bk-ok-soft: #e7f3ec;
+  --bk-warn: #a6480b;          /* burnt orange: not Brink Productions amber */
+  --bk-warn-soft: #fbede4;
+  --bk-danger: #b42318;
+  --bk-danger-soft: #fbe8e6;
+  --bk-ok-fill: #17703e;       /* status fills that carry white text (both themes) */
+  --bk-warn-fill: #a6480b;
+  --bk-danger-fill: #b42318;
+  --bk-flash: #dce8f5;         /* a live change, fading out (a Brink Blue tint) */
+
+  /* Schematic canvas */
+  --bk-paper: #ffffff;         /* the drawing area */
+  --bk-paper-origin: #f3f5f7;  /* outside the printable origin */
+
+  /* Focus */
+  --bk-focus: var(--bk-accent);
+
+  /* Elevation (navy-tinted) */
+  --bk-shadow-sm: 0 1px 2px rgb(13 22 31 / 0.06);
+  --bk-shadow-md: 0 4px 12px rgb(13 22 31 / 0.08), 0 1px 3px rgb(13 22 31 / 0.06);
+  --bk-shadow-lg: 0 16px 40px rgb(13 22 31 / 0.18), 0 2px 6px rgb(13 22 31 / 0.08);
+  --bk-scrim: rgb(13 22 31 / 0.5);
+
+  color-scheme: light;
+}
+
+/* Dark: Brink Navy / Navy 700 grounds, white and cool-neutral text, a lighter tint of Brink Blue. */
+:root.dark,
+.bk-inverse {
+  --bk-canvas: #0d161f;        /* Brink Navy */
+  --bk-surface: #1e2d3d;       /* Navy 700 (white text 14.0:1) */
+  --bk-surface-2: #16222f;     /* between Navy and Navy 700: side panels, table headers */
+  --bk-hover: #2a3b4e;
+  --bk-pressed: #34475c;
+  --bk-line: #34465a;
+  --bk-line-strong: #7d8a96;   /* input outlines (4.0:1 on Navy 700) */
+
+  --bk-ink: #ffffff;
+  --bk-ink-2: #d5dbe1;         /* the Line neutral, as text on navy */
+  --bk-ink-3: #a9b4bf;
+
+  --bk-accent: #8ebbea;        /* Brink Blue, lightened for navy grounds (7.0:1 on Navy 700) */
+  --bk-accent-hover: #b3d1f1;
+  --bk-accent-soft: #1f3a57;
+  --bk-on-accent: #0d161f;
+  --bk-accent-fill: #1f5a96;   /* Brink Blue itself carries white text (7.1:1) */
+  --bk-accent-fill-hover: #184878;
+
+  --bk-primary: #ffffff;       /* white fill, navy text */
+  --bk-primary-hover: #d5dbe1;
+  --bk-on-primary: #0d161f;
+
+  --bk-ok: #6fd69a;
+  --bk-ok-soft: #173a2a;
+  --bk-warn: #f4a06b;
+  --bk-warn-soft: #3d2a1e;
+  --bk-danger: #ff8f86;
+  --bk-danger-soft: #40201f;
+  --bk-flash: #1f3a57;
+
+  --bk-paper: #142030;
+  --bk-paper-origin: #0d161f;
+
+  --bk-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --bk-shadow-md: 0 4px 12px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.4);
+  --bk-shadow-lg: 0 16px 40px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.4);
+  --bk-scrim: rgb(0 0 0 / 0.6);
+
+  color-scheme: dark;
+}
+
+/* The app header: a Brink Navy field with white type, in both themes. */
+.bk-inverse {
+  --bk-surface: #0d161f;
+  --bk-surface-2: #0d161f;
+  --bk-hover: #1e2d3d;         /* Navy 700 */
+  --bk-pressed: #2a3b4e;
+  --bk-line: #2a3b4e;
+  --bk-ink-3: #c0c9d2;
+}

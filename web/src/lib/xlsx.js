@@ -14,7 +14,8 @@
 // the on-screen table: waste applied only to order quantities, never measured.
 
 import { GETTERS, colGetter, applyUnits, METRIC_CSV_LABELS } from "./reportColumns.js";
-import { grandTotals, materialsSummary, roundSheetRow, hasMultipliers, BY_SHEET_BASE_NOTE } from "./totals.js";
+import { grandTotals, materialsSummary, roundSheetRow, hasMultipliers, BY_SHEET_BASE_NOTE, materialCoverage, materialNote } from "./totals.js";
+import { cableTables } from "./cable.js";
 import { round2 } from "./num.js";
 import { M_PER_FT, M2_PER_SF } from "./units";
 
@@ -100,14 +101,30 @@ const STYLES_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
 // ---------------------------------------------------------------------------
 // Workbook assembly
 
+// The authorship stamp (opt-in): docProps/core.xml dc:creator plus
+// docProps/app.xml Application. The MCP server stamps "OpenTakeoff" so its
+// overwrite guard (mcp/src/safewrite.ts) can recognize a workbook it wrote.
+// Excel and LibreOffice rewrite Application (and add lastModifiedBy) when
+// they save, which is what tells a workbook the estimator edited apart from
+// ours. With no producer the package is the canvas download it always was.
+const coreXml = (producer) => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+  '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">' +
+  `<dc:creator>${escXml(producer)}</dc:creator></cp:coreProperties>`;
+const appXml = (producer) => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+  '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">' +
+  `<Application>${escXml(producer)}</Application></Properties>`;
+
 /**
  * Zip sheet definitions into an .xlsx byte array.
  * @param {Array<{name: string, rows: any[][]}>} sheets one entry per tab, in order
+ * @param {{producer?: string}} [opts] producer: stamp docProps (dc:creator and
+ *   Application) with this name. Omitted (the canvas): no docProps parts.
  * @returns {Promise<Uint8Array>} download with MIME
  *   application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
  */
-export async function buildXlsx(sheets) {
+export async function buildXlsx(sheets, opts = {}) {
   const { zipSync, strToU8 } = await import("fflate"); // lazy — same pattern as ingest.js
+  const producer = opts.producer ? String(opts.producer) : "";
   const used = new Set();
   const names = sheets.map((s) => sanitizeSheetName(s.name, used));
 
@@ -118,11 +135,15 @@ export async function buildXlsx(sheets) {
     '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
     '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>',
     ...sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`),
+    ...(producer ? ['<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>',
+      '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>'] : []),
     "</Types>"].join("");
 
   const rootRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
     '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+    (producer ? '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
+      '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>' : "") +
     "</Relationships>";
 
   const workbook = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
@@ -144,7 +165,39 @@ export async function buildXlsx(sheets) {
     "xl/styles.xml": strToU8(STYLES_XML),
   };
   sheets.forEach((s, i) => { files[`xl/worksheets/sheet${i + 1}.xml`] = strToU8(sheetXml(s.rows)); });
+  if (producer) {
+    files["docProps/core.xml"] = strToU8(coreXml(producer));
+    files["docProps/app.xml"] = strToU8(appXml(producer));
+  }
   return zipSync(files);
+}
+
+/**
+ * Read a workbook's authorship stamp back: dc:creator and cp:lastModifiedBy
+ * from docProps/core.xml, Application from docProps/app.xml. Null when the
+ * bytes are not a zip; a field the package does not carry reads null. Only
+ * the two docProps parts are inflated.
+ * @param {Uint8Array} bytes
+ * @returns {Promise<{creator: string|null, lastModifiedBy: string|null, application: string|null}|null>}
+ */
+export async function xlsxProvenance(bytes) {
+  const { unzipSync, strFromU8 } = await import("fflate");
+  let parts;
+  try {
+    parts = unzipSync(bytes, { filter: (f) => f.name === "docProps/core.xml" || f.name === "docProps/app.xml" });
+  } catch {
+    return null;
+  }
+  const field = (part, re) => {
+    if (!parts[part]) return null;
+    const m = re.exec(strFromU8(parts[part]));
+    return m ? m[1].trim() : null;
+  };
+  return {
+    creator: field("docProps/core.xml", /<dc:creator>([^<]*)<\/dc:creator>/),
+    lastModifiedBy: field("docProps/core.xml", /<cp:lastModifiedBy>([^<]*)<\/cp:lastModifiedBy>/),
+    application: field("docProps/app.xml", /<Application>([^<]*)<\/Application>/),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -171,9 +224,16 @@ export async function buildXlsx(sheets) {
  * @param {"imperial"|"metric"} [args.units] display units — "metric" converts
  *   the Conditions, By-sheet, floor × room, and Shapes tabs to m2/m (SY retires)
  *   exactly like the CSV. "imperial" (default) is byte-identical.
+ * @param {object|null} [args.cable] computeCableTakeoff() result (lib/cable.js):
+ *   appends the "Cable summary" and "Cable runs" tabs. The fixed five-tab list
+ *   above is unchanged; these two exist ONLY when a cable condition exists, so
+ *   a project without one gets the same workbook it always did. A third,
+ *   "Pathway", follows only once a route condition is tagged trunk or branch;
+ *   "Cable order" (boxes / reels per cable type) only once a condition
+ *   states package_ft.
  * @returns {Array<{name: string, rows: any[][]}>}
  */
-export function reportWorkbook({ rows = [], bySheet = [], shapeRows = [], cols = null, ctx = null, sheetLabel = null, units = "imperial", byFloorRoom = [] }) {
+export function reportWorkbook({ rows = [], bySheet = [], shapeRows = [], cols = null, ctx = null, sheetLabel = null, units = "imperial", byFloorRoom = [], cable = null }) {
   const columns = applyUnits(cols || [], units, METRIC_CSV_LABELS);
   const label = (id) => (sheetLabel ? sheetLabel(id) : id);
   const M = units === "metric";
@@ -206,10 +266,9 @@ export function reportWorkbook({ rows = [], bySheet = [], shapeRows = [], cols =
   if (hasMultipliers(bySheet)) bySheetRows.push([], [BY_SHEET_BASE_NOTE]);
 
   // Materials — per condition, then the combined buy list (mirrors the CSV)
-  const basisLabel = (b) => (b === "linear" ? "LF" : b === "count" ? "EA" : b === "seam_lf" ? "seam LF" : "SF");
   const materials = [["Finish", "Material", "Qty", "Unit", "Coverage", "Note"]];
   for (const r of rows) for (const m of (r.materials || [])) {
-    materials.push([r.finish_tag, m.name, m.qty, m.unit, `1 ${m.unit || "unit"} / ${m.per} ${basisLabel(m.basis)}`, m.note || ""]);
+    materials.push([r.finish_tag, m.name, m.qty, m.unit, materialCoverage(m), materialNote(m)]);
   }
   const combined = materialsSummary(rows);
   if (combined.length) {
@@ -252,11 +311,30 @@ export function reportWorkbook({ rows = [], bySheet = [], shapeRows = [], cols =
     }
   }
 
+  // Cable summary / Cable runs (Division 27) — full-precision cells, the same
+  // matrices the CSV sections print (lib/cable.js cableTables), so a bid
+  // workbook can reference them directly. The Unlinked list rides at the foot
+  // of the summary tab, and a leg warning prints above it.
+  const cableTabs = [];
+  const cableT = cableTables(cable, { sheetLabel, L, lengthUnit: LU });
+  if (cableT) {
+    const summary = [...cableT.warnings.map((w) => [w]), ...cableT.summary];
+    if (cableT.unlinked.length > 1) summary.push([], ["Unlinked"], ...cableT.unlinked);
+    cableTabs.push({ name: "Cable summary", rows: summary }, { name: "Cable runs", rows: cableT.runs });
+    // "Pathway" (trunk/branch, each segment once) exists only once a route
+    // condition is tagged trunk or branch — the J-hook / tray basis
+    if (cableT.pathway) cableTabs.push({ name: "Pathway", rows: cableT.pathway });
+    // "Cable order" (boxes / reels per cable type) exists only once a
+    // condition states package_ft
+    if (cableT.order) cableTabs.push({ name: "Cable order", rows: cableT.order });
+  }
+
   return [
     { name: "Conditions", rows: conditions },
     { name: "By sheet", rows: bySheetRows },
     { name: "Materials", rows: materials },
     { name: "Shapes", rows: shapesTab },
     { name: "By floor × room", rows: floorRoom },
+    ...cableTabs,
   ];
 }

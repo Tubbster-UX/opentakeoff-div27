@@ -10,14 +10,16 @@ import { resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { bomToCsv } from "../bom.js";
-import { catalogRowSchema, loadCatalogMap, rowEnumProblems, type CatalogRow } from "../catalog.js";
+import { catalogRowSchema, loadCatalogMap, rowEnumProblems, type CablePart, type CatalogRow } from "../catalog.js";
 import { migrate, type Db } from "../db/db.js";
 import {
-  currentImport, listProjects, loadBomLines, loadCatalog, loadImportInput, loadIssues, renderSchematic, saveMerge, seedCatalog, upsertCatalogRow, type ImportSummary,
+  currentImport, listProjects, loadActiveEditsByName, loadActiveTakeoffEditsByName, loadBomLines, loadCatalog, loadImportInput, loadIssues, renderSchematic, saveMerge, seedCatalog, upsertCablePart, upsertCatalogRow, type ImportSummary,
 } from "../db/repository.js";
+import { parsePartId } from "../portal/plan.js";
+import { portalPush } from "../portal/push.js";
 import type { Issue } from "../issues.js";
 import { loadInput, type LoadedInput } from "../load.js";
-import { merge, type MergeResult } from "../pipeline.js";
+import { merge, projectNameFor, type MergeResult } from "../pipeline.js";
 import { CURRENT_SCHEMA_VERSION } from "../vendor/esEnums.generated.js";
 
 export const DEFAULT_MAP = new URL("../../data/catalog-map.json", import.meta.url).pathname;
@@ -44,13 +46,22 @@ export async function prepare(state: BrinkState, mapPath = DEFAULT_MAP): Promise
     await migrate(state.db);
     const existing = await loadCatalog(state.db);
     if (!existing.rows.length) await seedCatalog(state.db, loadCatalogMap(mapPath));
+    else if (!existing.cableParts?.length) {
+      // a database seeded before the Portal push: add the default cable-part rows
+      const cableParts = loadCatalogMap(mapPath).cableParts;
+      if (cableParts?.length) await seedCatalog(state.db, { version: 1, rows: [], cableParts });
+    }
   })();
   return state.ready;
 }
 
 async function runMerge(state: BrinkState, input: LoadedInput, project?: string): Promise<{ result: MergeResult; saved: ImportSummary }> {
   const map = await loadCatalog(state.db);
-  const result = merge(input, map, { project });
+  // People's schematic edits survive: the project's edit layer is re-applied to the new import.
+  const edits = await loadActiveEditsByName(state.db, projectNameFor(input, project));
+  // And their takeoff edits (the app's takeoff canvas): re-applied over the export, which is stored as exported.
+  const takeoffEdits = await loadActiveTakeoffEditsByName(state.db, projectNameFor(input, project));
+  const result = merge(input, map, { project, edits, takeoffEdits });
   const saved = await saveMerge(state.db, input, result);
   return { result, saved };
 }
@@ -63,6 +74,7 @@ function summarize(result: MergeResult, saved: ImportSummary) {
     totals: t,
     devices_by_condition: result.schematic.deviceCounts,
     connections: result.schematic.file.edges.length,
+    schematic_edits: { applied: result.editsApplied.length, not_applied: result.issues.filter((i) => i.code === "schematic_edit_orphaned" || i.code === "schematic_edit_conflict").length },
     unmapped: result.mapping.unmapped,
     ...issueCounts(result.issues),
     issues: result.issues.map((i) => `${i.severity} [${i.code}] ${i.message}`),
@@ -126,9 +138,12 @@ export function buildServer(state: BrinkState): McpServer {
   }));
 
   server.registerTool("catalog", {
-    description: "The Brink catalog map: one row per OpenTakeoff condition (finish tag) with its EasySchematic deviceType, model, port, expected cable type, reserved Portal SKU and status (proposed / confirmed).",
+    description: "The Brink catalog map: one row per OpenTakeoff condition (finish tag) with its EasySchematic deviceType, model, port, expected cable type, Portal partId (portalSku) and status (proposed / confirmed), plus cable_parts: the Portal part per cable type for portal_push.",
     inputSchema: {},
-  }, run(async () => reply({ rows: (await loadCatalog(state.db)).rows })));
+  }, run(async () => {
+    const map = await loadCatalog(state.db);
+    return reply({ rows: map.rows, cable_parts: map.cableParts ?? [] });
+  }));
 
   server.registerTool("map_condition", {
     description: `Add or change one catalog row (optional fields left out keep the existing row's values), then re-merge every project's current import against the new map (a new import each; the old ones stay). es_device_type, signal_type and connector types must be EasySchematic's own values (refused otherwise). Set status "confirmed" only when the user has confirmed the mapping. kind: device (a condition with a cable_setup), tr (role tr: one patch panel per TR marker), route (role route: pathway LF, no device; es_device_type null), plain (anything else).`,
@@ -144,7 +159,7 @@ export function buildServer(state: BrinkState): McpServer {
       connector_type: z.string().optional().describe("Connector of that port (default rj45)"),
       rear_connector_type: z.string().optional().describe("Wall plates / patch panels: field-termination face (default punch-down-110)"),
       cable_type: z.string().nullable().optional().describe("Expected OpenTakeoff cable_type; a different value is flagged"),
-      portal_sku: z.string().nullable().optional().describe("Reserved for the Portal push"),
+      portal_sku: z.string().nullable().optional().describe("Portal partId (a positive integer, as text) used by portal_push; null when not chosen"),
       status: z.enum(["proposed", "confirmed"]),
       note: z.string().optional(),
     },
@@ -177,6 +192,7 @@ export function buildServer(state: BrinkState): McpServer {
     });
     const problems = rowEnumProblems(row);
     if ((row.kind === "device" || row.kind === "tr") && !row.esDeviceType) problems.push({ code: "invalid_device_type", message: `a ${row.kind} row needs es_device_type` });
+    if (row.portalSku != null && parsePartId(row.portalSku) === null) problems.push({ code: "invalid_device_type", message: `portal_sku ${JSON.stringify(row.portalSku)} is not a Portal partId (a positive integer)` });
     if (problems.length) return fail(`refused, nothing written: ${problems.map((p) => p.message).join("; ")}`);
     await upsertCatalogRow(state.db, row);
     const remerged = [];
@@ -189,7 +205,7 @@ export function buildServer(state: BrinkState): McpServer {
   }));
 
   server.registerTool("get_schematic", {
-    description: "A compact view of the current import's EasySchematic schematic: rooms with their devices, connections with measured cable lengths, and templates. export_schematic writes the full file.",
+    description: "A compact view of the current import's EasySchematic schematic, with the edits people made in the Brink app applied: rooms with their devices, connections with measured cable lengths, and templates. export_schematic writes the full file.",
     inputSchema: { project: z.string() },
   }, run(async ({ project }: { project: string }) => {
     const cur = await requireImport(state, project);
@@ -203,7 +219,7 @@ export function buildServer(state: BrinkState): McpServer {
   }));
 
   server.registerTool("export_schematic", {
-    description: "Render the current import's schematic from the database and write it as an EasySchematic project file (open it with EasySchematic's Load). Give the user the path.",
+    description: "Render the current import's schematic from the database (generated rows plus the edits people made in the Brink app) and write it as an EasySchematic project file (open it with EasySchematic's Load). Give the user the path.",
     inputSchema: { project: z.string(), path: z.string() },
   }, run(async ({ project, path }: { project: string; path: string }) => {
     const cur = await requireImport(state, project);
@@ -222,6 +238,43 @@ export function buildServer(state: BrinkState): McpServer {
     const out = resolve(path);
     writeFileSync(out, format === "json" ? JSON.stringify({ project, import_id: cur.importId, lines }, null, 2) + "\n" : bomToCsv({ lines }));
     return reply({ path: out, format: format ?? "csv", lines: lines.length });
+  }));
+
+  server.registerTool("map_cable_part", {
+    description: "Portal push: add or change the Portal part for one OpenTakeoff cable_type (cable is pushed from the BOM's cable order lines). order_basis box = OpenTakeoff's box / reel count (package_ft must match OpenTakeoff's box size); ft = order LF rounded up to whole feet. portal_unit_of_measure is the part's unitOfMeasure exactly as Portal shows it; a live push aborts when Portal reports another. Set status \"confirmed\" only on the user's say-so.",
+    inputSchema: {
+      cable_type: z.string().describe("OpenTakeoff cable_type exactly as on the BOM, e.g. CAT6A CMP"),
+      portal_sku: z.string().nullable().describe("Portal partId (a positive integer, as text); null when not chosen"),
+      order_basis: z.enum(["box", "ft"]),
+      package_ft: z.number().positive().nullable().optional(),
+      portal_unit_of_measure: z.string().nullable().optional(),
+      status: z.enum(["proposed", "confirmed"]),
+      note: z.string().optional(),
+    },
+  }, run(async (a: { cable_type: string; portal_sku: string | null; order_basis: CablePart["orderBasis"]; package_ft?: number | null; portal_unit_of_measure?: string | null; status: CablePart["status"]; note?: string }) => {
+    if (a.portal_sku != null && parsePartId(a.portal_sku) === null) return fail(`refused, nothing written: portal_sku ${JSON.stringify(a.portal_sku)} is not a Portal partId (a positive integer)`);
+    const part: CablePart = {
+      cableType: a.cable_type, portalSku: a.portal_sku, orderBasis: a.order_basis, packageFt: a.package_ft ?? null,
+      portalUnitOfMeasure: a.portal_unit_of_measure ?? null, status: a.status, ...(a.note ? { note: a.note } : {}),
+    };
+    await upsertCablePart(state.db, part);
+    return reply({ cable_part: part });
+  }));
+
+  server.registerTool("portal_push", {
+    description: "DRY RUN ONLY: plan a Draft Portal proposal from the project's current import and return the exact ordered request plan (no request is sent to Portal). Only confirmed catalog rows with a Portal partId are pushed; any unconfirmed, unmapped or bad line aborts the whole plan and is listed. Each run is recorded in brink_portal_pushes. A live push is run by a person from the CLI (brink-merge portal-push --live --confirm <plan hash>), never from this tool.",
+    inputSchema: {
+      project: z.string(),
+      exclude_cable: z.boolean().optional().describe("Leave every cable line out (listed as not pushed)"),
+      proposal_name: z.string().optional(),
+      area_name: z.string().optional(),
+    },
+  }, run(async (a: { project: string; exclude_cable?: boolean; proposal_name?: string; area_name?: string }) => {
+    const r = await portalPush(state.db, { project: a.project, live: false, excludeCable: a.exclude_cable, proposalName: a.proposal_name, areaName: a.area_name });
+    return reply({
+      outcome: r.outcome, sent_to_portal: false, push_id: r.pushId, plan_hash: r.plan.hash, proposal_name: r.plan.proposalName, area_name: r.plan.areaName,
+      errors: r.plan.errors, items: r.plan.items, not_pushed: r.plan.notPushed, requests: r.requests,
+    });
   }));
 
   return server;

@@ -57,7 +57,8 @@
             "type": "number"
           },
           "basis": {
-            "type": "string"
+            "type": "string",
+            "description": "Which of the condition's totals the row divides by per. Writers emit area (the default when absent), linear, count, seam_lf (the figured roll-layout seam length), cables or pulls (the condition's linked cables and pulls from its cable runs, for a condition with a cable_setup; ×N applied, unlinked and held devices excluded). seam_lf, cables and pulls are figured, not measured, and read 0 without a roll_setup or a linked run. The engine reads any other value as area."
           },
           "unit": {
             "type": "string"
@@ -86,6 +87,79 @@
         "object",
         "null"
       ]
+    },
+    "cable_setup": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Division 27 cable opt-in on a count condition (web/src/lib/cable.js): device_type, cables_per_location, cable_type, vertical_ft, loop_device_ft, loop_tr_ft, and optionally medium, max_link_ft and package_ft. Presence of a device_type makes the condition a device condition; null or absent opts out.",
+      "properties": {
+        "device_type": {
+          "type": "string"
+        },
+        "cables_per_location": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cable_type": {
+          "type": "string"
+        },
+        "vertical_ft": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "loop_device_ft": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "loop_tr_ft": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "package_ft": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Optional feet per box or reel the cable is bought in. Never minted; absent = not stated. Boxes are figured per cable_type from the pooled order LF (waste and multiplier in): ceil(order LF / package_ft)."
+        },
+        "medium": {
+          "enum": [
+            "copper",
+            "fiber",
+            "coax"
+          ],
+          "description": "Optional: what the cable is, stated from the project spec (never read from cable_type). Absent = unspecified, checked as copper."
+        },
+        "max_link_ft": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Optional: the longest link per cable the project spec or the system's datasheet allows, in feet. Every run on the condition is checked against it; absent = 295 ft (TIA-568 copper) for copper or no medium, and no check for fiber or coax. A flag only: it never changes a quantity."
+        }
+      },
+      "additionalProperties": true
+    },
+    "role": {
+      "enum": [
+        "tr",
+        "route"
+      ],
+      "description": "\"tr\" flags a count condition whose markers are telecom rooms (the origins cable runs home to); \"route\" flags a linear condition whose shapes are cable routes (the ones no linked run uses are reported unlinked). Absent on every other condition."
+    },
+    "route_kind": {
+      "enum": [
+        "trunk",
+        "branch"
+      ],
+      "description": "On a role \"route\" condition only: \"trunk\" = shared pathway many runs ride, traced once; \"branch\" = one device out to the trunk. Splits each run's route LF into branch, trunk and unspecified LF and drives the pathway rollup (each segment counted once). Absent = unspecified; ignored on any other condition."
     },
     "tile_setup": {
       "type": [

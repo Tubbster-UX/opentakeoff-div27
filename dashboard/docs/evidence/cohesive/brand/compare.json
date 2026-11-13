@@ -1,0 +1,38 @@
+[
+ {
+  "case": "shield-navy p3",
+  "pdf_px": [
+   959,
+   826
+  ],
+  "iou": 0.9732,
+  "xor_over_ink": 0.0271
+ },
+ {
+  "case": "shield-white p4",
+  "pdf_px": [
+   599,
+   516
+  ],
+  "iou": 0.9631,
+  "xor_over_ink": 0.0376
+ },
+ {
+  "case": "wordmark-navy p5",
+  "pdf_px": [
+   879,
+   374
+  ],
+  "iou": 0.9925,
+  "xor_over_ink": 0.0075
+ },
+ {
+  "case": "wordmark-white p5",
+  "pdf_px": [
+   879,
+   374
+  ],
+  "iou": 0.9924,
+  "xor_over_ink": 0.0076
+ }
+]

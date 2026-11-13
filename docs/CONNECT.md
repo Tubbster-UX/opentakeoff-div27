@@ -108,5 +108,9 @@ runs, and [MCP.md](MCP.md) walks the whole tool surface.
 - **Staged tools.** Some clients cope better with a smaller tool list. Set
   `OPENTAKEOFF_MCP_STAGED_TOOLS=1` in the server's environment to start with the setup tools
   only; details in [`mcp/README.md`](../mcp/README.md#staged-tool-exposure-opt-in).
+- **Auto-save.** The agent's takeoff is written beside the plan as
+  `<plan> - takeoff autosave.json` after every change, so it survives the session ending. Set
+  `OPENTAKEOFF_AUTOSAVE=0` to turn that off, or `OPENTAKEOFF_AUTOSAVE=<path>` to write somewhere
+  else; details in [`MCP.md`](MCP.md#auto-save).
 - **Building from source or running in Docker:** [`MCP.md`](MCP.md#setup) and
   [`mcp/README.md`](../mcp/README.md).

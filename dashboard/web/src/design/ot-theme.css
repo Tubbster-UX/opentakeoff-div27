@@ -1,0 +1,408 @@
+/* OpenTakeoff's canvas, re-themed to the Brink tokens without editing its components.
+ *
+ * OpenTakeoff styles itself through
+ *   1. its design tokens (upstream web/src/styles/tokens.css: --paper-*, --ink*, --cobalt,
+ *      --c-*, the --sp / --fs / --ctl scales, --f-* fonts), read by thousands of inline
+ *      styles, and
+ *   2. a few global classes in upstream's app.css (.btn-primary, .btn-ghost, .field-label,
+ *      .text-input, .card, .panel, .badge, .skeleton...).
+ * Upstream's tokens.css and app.css are NOT loaded (tokens.css fetches Google Fonts and both
+ * style the whole document). This file defines the same variables and classes, inside
+ * `.bk-ot` (the element the Takeoff tab mounts the canvas in; upstream renders nothing
+ * outside its own tree), pointed at the Brink tokens. So OpenTakeoff's cobalt is the Brink
+ * accent, its paper and ink are the Brink surfaces and ink, its type is Roboto, and its light
+ * / dark follow the app's `.dark` class.
+ *
+ * SVG presentation attributes do not resolve CSS variables: the canvas overlay's literal
+ * colours (selection, drafting, guides, grips) are re-pointed at Brink literals at build time
+ * (vite.config.ts OT_LITERALS; vendor/PATCHES.md).
+ *
+ * Left alone on purpose:
+ *   - condition colours and hatches (PALETTE / HATCH_IDS, FLOORING_DEFAULTS): user data;
+ *   - --well (PDF thumbnails and stamp previews are light media in every theme);
+ *   - the marked set PDF and the printed report: upstream's export colours (print.css below).
+ *
+ * Chrome replaced by the Brink UI and hidden here: the tool rail, the panel rail, the status
+ * strip and the canvas corner buttons (fit / invert / focus). Upstream's top bar, palette
+ * band, sheet tabs and compact strip are not rendered at all (its focus mode, pinned on).
+ */
+@import "../../../vendor/opentakeoff/src/styles/print.css";
+@import "../../../vendor/opentakeoff/src/styles/brand.css";
+
+.bk-ot {
+  /* surfaces: bright = base surface, cream = raised card, shadow = hover / pressed */
+  --paper-cream: var(--bk-surface);
+  --paper-bright: var(--bk-surface);
+  --paper-shadow: var(--bk-hover);
+  --ink: var(--bk-ink);
+  --ink-soft: var(--bk-ink-2);
+  --ink-muted: var(--bk-ink-3);
+  --ink-faint: var(--bk-line);
+  --cobalt: var(--bk-accent);
+  --cobalt-deep: var(--bk-accent-hover);
+  --fleck-rust: var(--bk-line-strong);
+  --fleck-ochre: var(--bk-line-strong);
+  --fleck-moss: var(--bk-line-strong);
+  --fleck-blue: var(--bk-line-strong);
+  --c-positive: var(--bk-ok);
+  --c-warning: var(--bk-warn);
+  --c-danger: var(--bk-danger);
+  --ink-secondary: var(--bk-ink-2);
+  --text-faint: var(--bk-ink-3);
+  --tint-select: var(--bk-accent-soft);
+  --tint-active: var(--bk-ok-soft);
+  --surface-pop: var(--bk-surface);
+  --well: #ffffff;
+  --accent-contrast: var(--bk-on-accent);
+  /* upstream keeps its calibration prompt's border warm on purpose; Brink has no warm tones */
+  --hairline-warm: var(--bk-line);
+  --divider-soft: var(--bk-line);
+  --scrim: var(--bk-scrim);
+  --shadow-pop: var(--bk-shadow-lg);
+  --shadow-1: var(--bk-shadow-sm);
+  --shadow-2: var(--bk-shadow-lg);
+  --grain-rgb: 0, 0, 0;
+  --grain-inverse-rgb: 255, 255, 255;
+  --ring: 0 0 0 2px var(--bk-focus);
+  --glow: none;
+  --stage: var(--bk-surface-2);
+  --tint-08: color-mix(in srgb, var(--bk-accent) 7%, transparent);
+  --tint-14: color-mix(in srgb, var(--bk-accent) 13%, transparent);
+  --status-bg: var(--bk-surface);
+  --status-fg: var(--bk-ink-2);
+  --status-acc: var(--bk-accent);
+
+  /* type: Roboto everywhere; numerals stay tabular where upstream asks for them */
+  --f-display: var(--font-ui);
+  --f-body: var(--font-ui);
+  --f-mono: var(--font-ui);
+  --f-mono-draft: var(--font-ui);
+
+  --rule: 1px solid var(--bk-ink);
+  --rule-soft: 1px solid var(--bk-line);
+  --rule-thick: 2px solid var(--bk-ink);
+
+  --t-fast: 0.12s;
+  --t: 0.2s;
+  --t-slow: 0.35s;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* upstream's scales, unchanged (its layout math reads them) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --fs-2xs: 10px;
+  --fs-xs: 11px;
+  --fs-s: 12px;
+  --fs-m: 13px;
+  --fs-l: 15px;
+  --fs-xl: 18px;
+  --fs-2xl: 22px;
+  /* the Brink radius: 4 px controls (upstream's one floating-chrome radius) */
+  --r-0: 0;
+  --r-1: 4px;
+  --ctl-s: 26px;
+  --ctl-m: 32px;
+  --ctl-l: 36px;
+  --topbar-h: 44px;
+  --rail-w: 56px;
+  --props-w: 264px;
+  --status-h: 28px;
+
+  color-scheme: light;
+  color: var(--bk-ink);
+  font-family: var(--font-ui);
+}
+
+:root.dark .bk-ot {
+  color-scheme: dark;
+  --stage: var(--bk-canvas);
+  --scrim: rgb(0 0 0 / 0.6);
+}
+
+@media screen {
+  /* The canvas fills the tab, not the viewport (upstream's shell is a 100vh column). */
+  .bk-ot .app-shell {
+    height: 100% !important;
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow: clip;
+    background: var(--bk-surface-2);
+  }
+
+  /* Upstream chrome the Brink toolbar, sheets panel, right panel and status bar replace. */
+  .bk-ot [data-tool-rail],
+  .bk-ot [data-panel-rail],
+  .bk-ot .app-shell > footer.ink-panel,
+  .bk-ot [data-canvas-workspace] div[style*="left: 14px"][style*="bottom: 14px"][style*="flex-direction: column"] {
+    display: none !important;
+  }
+}
+
+/* ── upstream's global classes (app.css), inside the canvas only ───────────── */
+.bk-ot .app-shell button {
+  font-family: var(--font-ui);
+}
+.bk-ot .app-shell a {
+  color: var(--bk-accent);
+}
+.bk-ot .app-shell .btn-primary,
+.bk-ot .app-shell .btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+.bk-ot .app-shell .btn-primary {
+  background: var(--bk-primary);
+  color: var(--bk-on-primary);
+  border: 1px solid transparent;
+}
+.bk-ot .app-shell .btn-primary:hover {
+  background: var(--bk-primary-hover);
+}
+.bk-ot .app-shell .btn-ghost {
+  background: var(--bk-surface);
+  color: var(--bk-ink);
+  border: 1px solid var(--bk-line-strong);
+}
+.bk-ot .app-shell .btn-ghost:hover {
+  background: var(--bk-hover);
+}
+.bk-ot .app-shell .btn-primary:focus-visible,
+.bk-ot .app-shell .btn-ghost:focus-visible,
+.bk-ot .app-shell button:focus-visible,
+.bk-ot .app-shell input:focus-visible,
+.bk-ot .app-shell select:focus-visible {
+  outline: 2px solid var(--bk-focus);
+  outline-offset: 2px;
+}
+.bk-ot .app-shell .btn-primary:disabled,
+.bk-ot .app-shell .btn-ghost:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.bk-ot .app-shell .field-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--bk-ink-3);
+}
+.bk-ot .app-shell .text-input,
+.bk-ot .app-shell .field-input {
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 1px solid var(--bk-line-strong);
+  border-radius: 4px;
+  background: var(--bk-surface);
+  color: var(--bk-ink);
+  font: inherit;
+  font-size: 14px;
+}
+.bk-ot .app-shell .text-input:focus,
+.bk-ot .app-shell .field-input:focus {
+  outline: none;
+  border-color: var(--bk-accent);
+  box-shadow: var(--ring);
+}
+.bk-ot .app-shell .card {
+  background: var(--bk-surface);
+  border: 1px solid var(--bk-line);
+  border-radius: 6px;
+}
+.bk-ot .app-shell .card.is-clickable:hover {
+  border-color: var(--bk-line-strong);
+  box-shadow: var(--bk-shadow-sm);
+}
+.bk-ot .app-shell .panel {
+  background: var(--bk-surface);
+  border: 1px solid var(--bk-line);
+}
+.bk-ot .app-shell .row:hover {
+  background: var(--bk-hover);
+}
+.bk-ot .app-shell .badge,
+.bk-ot .app-shell .tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.4;
+}
+.bk-ot .app-shell .status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bk-ink-3);
+}
+.bk-ot .app-shell .skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--bk-hover);
+  color: transparent;
+}
+.bk-ot .app-shell .fade-in {
+  animation: bk-ot-fade var(--t) var(--ease);
+}
+.bk-ot .app-shell .paper-cream,
+.bk-ot .app-shell .paper-bright,
+.bk-ot .app-shell .paper-terrazzo {
+  background-color: var(--bk-surface);
+  background-image: none;
+}
+.bk-ot .app-shell .ink-panel {
+  background-color: var(--bk-surface);
+  background-image: none;
+  color: var(--bk-ink-2);
+}
+.bk-ot .app-shell .ticks {
+  background-image: none;
+}
+.bk-ot .app-shell .t-display,
+.bk-ot .app-shell .t-display-italic {
+  font-family: var(--font-ui);
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.bk-ot .app-shell .t-mono,
+.bk-ot .app-shell .t-label {
+  font-family: var(--font-ui);
+}
+.bk-ot .app-shell .t-mono-data {
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.bk-ot .app-shell .pip,
+.bk-ot .app-shell .pip-sm {
+  display: inline-block;
+  vertical-align: middle;
+  background: var(--bk-accent);
+  border-radius: 999px;
+}
+.bk-ot .app-shell .pip {
+  width: 7px;
+  height: 7px;
+}
+.bk-ot .app-shell .pip-sm {
+  width: 5px;
+  height: 5px;
+}
+.bk-ot .app-shell .dot-leader {
+  flex: 1;
+  border-bottom: 1px dotted var(--bk-line);
+  margin: 0 8px;
+  align-self: end;
+  height: 0.8em;
+}
+/* the canvas's own docked panels (quantities, markups, report) take the Brink panel look */
+.bk-ot [data-canvas-workspace] > div[style*="border-left"],
+.bk-ot [data-canvas-workspace] > div[style*="border-right"] {
+  background: var(--bk-surface-2);
+}
+/* upstream's quantities panel header is an inverse bar; in the app it is a Brink panel header with tabs */
+.bk-ot [data-takeoffs-header] {
+  background: var(--bk-surface-2) !important;
+  color: var(--bk-ink) !important;
+  border-bottom: 1px solid var(--bk-line);
+}
+.bk-ot [data-takeoffs-header] button {
+  color: var(--bk-ink-3) !important;
+  border-color: var(--bk-line-strong) !important;
+  opacity: 1 !important;
+  font-weight: 500 !important;
+}
+.bk-ot [data-takeoffs-header] button[aria-pressed="true"] {
+  color: var(--bk-ink) !important;
+  border-bottom: 2px solid var(--bk-ink) !important;
+}
+/* upstream's report can contribute the takeoff's derived data to an outside open-data endpoint: not from an
+   internal Brink project */
+.bk-ot .report-toolbar button[title^="Optionally contribute"] {
+  display: none !important;
+}
+/* the report's toolbar wraps inside the tab rather than running past the right panel */
+.bk-ot .report-toolbar {
+  flex-wrap: wrap !important;
+  row-gap: 6px;
+}
+
+@keyframes bk-ot-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sourceFlashPulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+  100% {
+    opacity: 0.5;
+  }
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ── print: upstream prints its report subtree only; the Brink frame steps aside ── */
+@media print {
+  body.report-open header,
+  body.report-open [data-bk-chrome],
+  body.report-open [data-print-hide] {
+    display: none !important;
+  }
+  body.report-open #root,
+  body.report-open #root * {
+    overflow: visible !important;
+  }
+  body.report-open #root div:has(> .bk-ot),
+  body.report-open .bk-ot,
+  body.report-open .bk-ot-stage {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  /* the report prints in upstream's light palette, as upstream prints it */
+  .bk-ot {
+    --paper-cream: #ffffff;
+    --paper-bright: #ffffff;
+    --ink: #0d161f;
+    --ink-muted: #4e5b67;
+    --ink-faint: #d5dbe1;
+  }
+}
