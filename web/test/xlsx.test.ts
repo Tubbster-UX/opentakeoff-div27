@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { unzipSync, strFromU8 } from "fflate";
 // xlsx.js is plain JS (allowJs); the tsx loader resolves it from the .ts test.
-import { escXml, colLetter, sanitizeSheetName, sheetXml, buildXlsx, reportWorkbook } from "../src/lib/xlsx.js";
+import { escXml, colLetter, sanitizeSheetName, sheetXml, buildXlsx, reportWorkbook, xlsxProvenance } from "../src/lib/xlsx.js";
 import { conditionTotals, sheetTotals, sheetLabelGroupedRows } from "../src/lib/totals.js";
 import { CSV_PROFILE, customColProfile, specColProfile, visibleCols } from "../src/lib/reportColumns.js";
 import { shapesDetail } from "../src/lib/shapesExport.js";
@@ -313,4 +313,40 @@ test("buildXlsx: hostile tab names are sanitized and deduped in workbook.xml", a
     assert.ok(!/[[\]:*?/\\]/.test(n), `forbidden char survived: ${n}`);
   }
   assert.equal(new Set(names.map((n) => n.toLowerCase())).size, 3, "names must be unique");
+});
+
+test("buildXlsx: no producer (the canvas download) writes no docProps parts — the package it always was", async () => {
+  const parts = unzipSync(await buildXlsx([{ name: "Conditions", rows: [["x"]] }]));
+  assert.deepEqual(Object.keys(parts).sort(), ["[Content_Types].xml", "_rels/.rels", "xl/_rels/workbook.xml.rels", "xl/styles.xml", "xl/workbook.xml", "xl/worksheets/sheet1.xml"]);
+  assert.ok(!strFromU8(parts["[Content_Types].xml"]).includes("docProps"));
+  assert.ok(!strFromU8(parts["_rels/.rels"]).includes("docProps"));
+});
+
+test("buildXlsx producer: docProps carry the stamp, with content types and root relationships; xlsxProvenance reads it back", async () => {
+  const sheets = [{ name: "Conditions", rows: [["x", 1]] }];
+  const bytes = await buildXlsx(sheets, { producer: "OpenTakeoff" });
+  const parts = unzipSync(bytes);
+  const core = strFromU8(parts["docProps/core.xml"]);
+  const app = strFromU8(parts["docProps/app.xml"]);
+  assertBalanced(core);
+  assertBalanced(app);
+  assert.ok(core.includes("<dc:creator>OpenTakeoff</dc:creator>"));
+  assert.ok(app.includes("<Application>OpenTakeoff</Application>"));
+  const ct = strFromU8(parts["[Content_Types].xml"]);
+  assertBalanced(ct);
+  assert.ok(ct.includes('<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'));
+  assert.ok(ct.includes('<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>'));
+  const rels = strFromU8(parts["_rels/.rels"]);
+  assertBalanced(rels);
+  assert.ok(rels.includes('Target="docProps/core.xml"') && rels.includes('Target="docProps/app.xml"'));
+  // the workbook parts are the same with or without the stamp
+  const plain = unzipSync(await buildXlsx(sheets));
+  for (const name of Object.keys(plain).filter((n) => n.startsWith("xl/"))) assert.deepEqual(parts[name], plain[name], name);
+
+  assert.deepEqual(await xlsxProvenance(bytes), { creator: "OpenTakeoff", lastModifiedBy: null, application: "OpenTakeoff" });
+  assert.deepEqual(await xlsxProvenance(await buildXlsx(sheets)), { creator: null, lastModifiedBy: null, application: null });
+  assert.equal(await xlsxProvenance(new TextEncoder().encode("not a zip")), null);
+  // a producer name is XML-escaped like any cell
+  const odd = unzipSync(await buildXlsx(sheets, { producer: "A & B" }));
+  assert.ok(strFromU8(odd["docProps/core.xml"]).includes("<dc:creator>A &amp; B</dc:creator>"));
 });

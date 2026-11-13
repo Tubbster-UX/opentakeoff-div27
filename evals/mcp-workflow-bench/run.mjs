@@ -75,7 +75,7 @@ async function openClient(staged, dir) {
     command: process.execPath,
     args: [serverPath],
     cwd: root,
-    env: { ...process.env, OPENTAKEOFF_ONE_CLICK: "0", OPENTAKEOFF_MCP_STAGED_TOOLS: staged ? "1" : "0" },
+    env: { ...process.env, OPENTAKEOFF_ONE_CLICK: "0", OPENTAKEOFF_MCP_STAGED_TOOLS: staged ? "1" : "0", OPENTAKEOFF_AUTOSAVE: "0" },
     stderr: "pipe",
   });
   transport.stderr?.on("data", (chunk) => stderrChunks.push(String(chunk)));
