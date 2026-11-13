@@ -41,6 +41,29 @@ branch → local checks → PR → CI checks → squash-merge
   production deployment follows the protected-branch review and required CI
   checks.
 
+## Hosting a copy on Vercel
+
+The production pipeline above is Netlify. A fork can host the same static app
+on Vercel instead; `web/vercel.json` carries the Vercel version of the recipe,
+because Vercel reads neither `netlify.toml` nor `web/public/_headers`:
+
+- **Build:** the same command as `netlify.toml` (voice model, OCR model, then
+  `npm run build`), output `dist`. Node comes from `web/package.json`
+  `engines` (24).
+- **Routes:** `/privacy` and `/terms` serve their own pages; every other path
+  falls back to the SPA's `index.html`.
+- **Headers:** the six security headers from `web/public/_headers`, the CSP
+  included, on every path. `_headers` stays the one place the policy is
+  written; `web/test/vercelConfig.test.ts` fails if `vercel.json` drifts from
+  it or from the `netlify.toml` build command.
+
+To set one up: import the repository in Vercel, set **Root Directory** to
+`web`, leave the framework preset as "Other" (the build settings come from
+`vercel.json`), and choose the production branch. Pushes to other branches get
+preview URLs. The canonical and Open Graph URLs in `web/index.html` still name
+this repository's production domain, and its Cloudflare Web Analytics beacon
+reports to this repository's account; a fork with its own domain changes both.
+
 ## MCP releases and recovery
 
 MCP publication is separate from the browser deploy. Pushing an `mcp-v*` tag
