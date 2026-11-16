@@ -84,6 +84,8 @@ export interface ProjectFile {
   textError?: string;
   /** Characters of extracted text (0 when none). */
   textChars?: number;
+  /** Hex sha256 of the bytes (duplicate detection, unchanged-output skips). */
+  sha256?: string;
 }
 
 export interface UploadRecord {
