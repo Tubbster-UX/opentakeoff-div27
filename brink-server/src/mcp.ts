@@ -39,6 +39,7 @@ import {
   LINK_TTL_SEC, PROJECT_INSTRUCTIONS, PROJECT_TOOL_NAMES, UserError, fail, linksForPushed, registerProjectTools,
   type OpenState, type ToolReply,
 } from "./projectTools.ts";
+import { BID_INSTRUCTIONS, registerBidTools } from "./bidTools.ts";
 
 type Core = typeof import("opentakeoff-core");
 type BrinkMcp = typeof import("brink-merge-mcp");
@@ -225,6 +226,7 @@ export function createMountMcp(opts: McpMountOptions = {}): MountMcp {
       const session = new core.Session();
       const server = core.buildServer(session);
       appendInstructions(server, PROJECT_INSTRUCTIONS);
+      appendInstructions(server, BID_INSTRUCTIONS);
       const live: Live = {
         id: null, project: null, autosave: null, session, server,
         transport: null as unknown as StreamableHTTPServerTransport,
@@ -248,6 +250,7 @@ export function createMountMcp(opts: McpMountOptions = {}): MountMcp {
         },
         resourcesChanged: () => { try { server.sendResourceListChanged(); } catch { /* not connected */ } },
       });
+      registerBidTools(server, { deps, session, state: live, linkTtlSec: ttl, pushOutputs: (project) => syncNow(live, project) });
       inner = wrapTools(server, (name, h, hasInput) => async (...a: unknown[]): Promise<ToolReply> => {
         live.inflight++;
         live.lastUsed = Date.now();

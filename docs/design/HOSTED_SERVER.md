@@ -34,6 +34,9 @@ crops through tools, so a 300 MB plan set is no different from a 3 MB one.
 | `src/auth.ts` | Owner login (scrypt password, signed cookie), OAuth 2.1 authorization server for the Claude connector (dynamic client registration, PKCE, rotating refresh tokens), bearer guard. |
 | `src/http.ts`, `public/` | Express app: login, upload page and its JSON API, downloads, health. |
 | `src/mcp.ts`, `src/projectTools.ts` | `/mcp` (OpenTakeoff session per MCP session + project tools) and `/mcp/brink`. |
+| `src/bidTypes.ts` | Bid contracts (settings, price book, `BidDraft`). Change only by agreement. |
+| `src/settings.ts`, `src/pricebook.ts` | Owner settings + playbook (`system/settings.json`, `system/playbook.md`; percentages are fractions) and the append-only price book (`system/pricebook.json`). |
+| `src/bid/price.ts`, `src/bidTools.ts` | `priceBid` (takeoff + settings + price book → `BidDraft`, using `web/src/lib/cable.js` and `totals.js` at runtime) and the bid MCP tools (`price_bid` writes `outputs/bid/bid.json`). |
 | `src/main.ts` | Wiring. |
 | `Dockerfile`, `docs/HOSTED.md` | Image and deploy guide. |
 
