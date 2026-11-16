@@ -1,0 +1,52 @@
+# Fly.io config for brink-server. Copy it to fly.toml at the REPOSITORY ROOT
+# (the image is built from the whole repository), then change the three
+# CHANGE-ME values. Step-by-step guide: docs/HOSTED.md.
+#
+#   cp brink-server/fly.toml.example fly.toml
+#
+# Secrets (R2 keys, OWNER_PASSWORD_HASH, SESSION_SECRET) never go in this
+# file: set them with `fly secrets set`.
+
+app = "brink-CHANGE-ME"          # must be unique on Fly.io
+primary_region = "ord"           # CHANGE-ME: a region near you (`fly platform regions`)
+kill_timeout = 30                # seconds to finish open work on deploy/restart
+
+[build]
+  dockerfile = "brink-server/Dockerfile"
+
+[env]
+  PUBLIC_URL = "https://brink.example.com"   # CHANGE-ME: your address, or https://<app>.fly.dev
+  PORT = "8080"
+  DATA_DIR = "/data"
+
+# Local disk: workspace cache and temp files (and the parts database when
+# DATABASE_URL is not set). The bid files themselves live in R2.
+[[mounts]]
+  source = "brink_data"
+  destination = "/data"
+  initial_size = "10gb"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Always on: Claude can reach the connector at any hour.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  [[http_service.checks]]
+    grace_period = "60s"
+    interval = "30s"
+    timeout = "5s"
+    method = "GET"
+    path = "/api/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  cpus = 1
+  memory = "2gb"
