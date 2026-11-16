@@ -89,6 +89,10 @@ declare module "opentakeoff-core" {
     filePath: string | null;
     readonly files: string[];
     loadPlan(filePath: string, opts?: { merge?: boolean }): Promise<LoadPlanResult>;
+    /** The takeoff as an "opentakeoff.takeoff_canvas.v1" document (what auto-save writes); throws before a plan is loaded. */
+    exportPayload(): Record<string, unknown>;
+    /** Private in the engine; read only for sheet numbers in bid messages (src/bidTools.ts). */
+    readonly sheets?: Map<string, { key: string; sheetNumber?: string | null }>;
     /** Private in the engine; read only to release PDF documents when an MCP session closes. */
     readonly docs?: Map<string, { doc: { destroy(): Promise<void> }; path: string }>;
   }
