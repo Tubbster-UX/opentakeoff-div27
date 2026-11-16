@@ -207,3 +207,32 @@ export function registerBidExportTools(server: McpServer, ctx: BidExportToolsCtx
     return reply(m, bid, files, ttl, why ? { incomplete: `${why}. The price reads INCOMPLETE — not for submission.` } : {});
   }));
 }
+
+/**
+ * After the owner approves (src/approval.ts), make the final files: the
+ * workbook always, and each proposal whose content Claude stored. The approved
+ * bid's file names drop DRAFT. Returns the project paths written. Never called
+ * by a tool: only the owner's approval route reaches it.
+ */
+export async function rerenderApproved(deps: AppDeps, project: ProjectId, ttl = LINK_TTL_SEC): Promise<string[]> {
+  const m = await requireProject(deps, project);
+  const bid = await loadBid(deps, m.id);
+  if (!isApproved(bid)) throw new UserError(`Revision ${bid.revision} of ${project} is not approved.`);
+  const logo = await loadLogo(deps, bid);
+  const files: { name: string; bytes: Uint8Array }[] = [{ name: bidFileName(m.name, "bid", bid, "xlsx"), bytes: await renderBidWorkbook(bid, m) }];
+  if (await readBidFile(deps, m.id, CONTENT_FILE.gc)) {
+    const content = await loadContent(deps, m.id, "gc");
+    files.push({ name: bidFileName(m.name, "quote", bid, "pdf"), bytes: await renderGcProposalPdf({ bid, project: m, content, logo }) });
+  }
+  if (await readBidFile(deps, m.id, CONTENT_FILE.federal)) {
+    const content = await loadContent(deps, m.id, "federal");
+    const out = await renderFederalPackage({ bid, project: m, content, logo });
+    files.push(
+      { name: bidFileName(m.name, "cover letter", bid, "docx"), bytes: out.coverDocx },
+      { name: bidFileName(m.name, "cover letter", bid, "pdf"), bytes: out.coverPdf },
+      { name: bidFileName(m.name, "technical package", bid, "docx"), bytes: out.technicalDocx },
+      { name: bidFileName(m.name, "technical package", bid, "pdf"), bytes: out.technicalPdf },
+    );
+  }
+  return (await publish(deps, m.id, files, ttl)).map((f) => f.path);
+}

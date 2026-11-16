@@ -40,6 +40,7 @@ import {
   type OpenState, type ToolReply,
 } from "./projectTools.ts";
 import { BID_INSTRUCTIONS, registerBidTools } from "./bidTools.ts";
+import { registerBidExportTools } from "./bidExportTools.ts";
 
 type Core = typeof import("opentakeoff-core");
 type BrinkMcp = typeof import("brink-merge-mcp");
@@ -251,6 +252,7 @@ export function createMountMcp(opts: McpMountOptions = {}): MountMcp {
         resourcesChanged: () => { try { server.sendResourceListChanged(); } catch { /* not connected */ } },
       });
       registerBidTools(server, { deps, session, state: live, linkTtlSec: ttl, pushOutputs: (project) => syncNow(live, project) });
+      registerBidExportTools(server, { deps, linkTtlSec: ttl });
       inner = wrapTools(server, (name, h, hasInput) => async (...a: unknown[]): Promise<ToolReply> => {
         live.inflight++;
         live.lastUsed = Date.now();

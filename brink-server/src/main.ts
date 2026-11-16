@@ -10,6 +10,7 @@ import { StoreSearch } from "./search.ts";
 import { DiskWorkspace } from "./workspace.ts";
 import { buildApp } from "./http.ts";
 import { mountMcp } from "./mcp.ts";
+import { rerenderApproved } from "./bidExportTools.ts";
 import type { AppDeps } from "./types.ts";
 
 const config = loadConfig();
@@ -32,7 +33,8 @@ const deps: AppDeps = {
   workspace: new DiskWorkspace({ storage, projects, dataDir: config.dataDir }),
 };
 
-const { app, close } = buildApp(deps, mountMcp);
+// The owner's Approve (phone page) re-makes the documents without DRAFT.
+const { app, close } = buildApp(deps, mountMcp, { bidHooks: { onApproved: (project) => rerenderApproved(deps, project) } });
 const server = app.listen(config.port, () => {
   console.error(`brink-server listening on :${config.port} (${config.publicUrl}, store ${storage.label})`);
 });

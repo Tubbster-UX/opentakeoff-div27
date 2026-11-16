@@ -9,7 +9,8 @@ import type { ProjectManifest } from "../src/types.ts";
 import { GcProposalContentSchema, type GcProposalContent } from "../src/bid/proposal.ts";
 import { FederalContentSchema, type FederalContent } from "../src/bid/federal.ts";
 
-const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+// The same cent rounding as src/bid/price.ts (a float-obscured half cent rounds up, as Excel's ROUND does).
+const r2 = (n: number) => Math.round(n * 100 + (n >= 0 ? 1e-7 : -1e-7)) / 100;
 
 export function fixtureSettings(): BidSettings {
   return {
@@ -32,14 +33,14 @@ export function fixtureSettings(): BidSettings {
       trueCostRate: 48,
       crewSize: 2,
       hoursPerDay: 8,
-      pmPctOfField: 10,
+      pmPctOfField: 0.1,
       defaultUnitSet: "standard",
       unitSets: [{ id: "standard", label: "Standard", units: [
         { id: "wall_first", label: "Wall location, first cable", hours: 1.2, per: "location_first" },
         { id: "wall_add", label: "Wall, additional cable", hours: 0.45, per: "cable_additional" },
       ] }],
     },
-    markup: { materialPct: 15, overheadPct: 10, profitPct: 15, excisePct: 2.041, bondPct: 1.5 },
+    markup: { materialPct: 0.15, overheadPct: 0.1, profitPct: 0.15, excisePct: 0.02041, bondPct: 0.015 },
     travel: { mileageRate: 0.7 },
     proposal: {
       validityDays: 30,
@@ -57,7 +58,7 @@ function line(p: Omit<BidLine, "extended">): BidLine {
   return { ...p, extended: p.unitPrice == null || p.laborOnly ? (p.laborOnly ? 0 : null) : r2(p.qty * p.unitPrice) };
 }
 function hour(p: Omit<HourLine, "hours">): HourLine {
-  return { ...p, hours: Math.round(p.qty * p.hoursPer * 10000) / 10000 };
+  return { ...p, hours: r2(p.qty * p.hoursPer) };
 }
 
 /** A complete (no gaps) draft, revision 3. Percent settings are whole percents (15 = 15 %). */
@@ -90,8 +91,8 @@ export function fixtureBid(over: { fractions?: boolean; gap?: boolean; manyLines
     hour({ id: "h-wap", label: "WAP location, first cable", qty: 8, unit: "locations", hoursPer: 1.4, unitId: "wap_first", kind: "field" }),
     hour({ id: "h-cert", label: "Certify and label", qty: 96, unit: "links", hoursPer: 0.1, unitId: "cert", kind: "field" }),
   ];
-  const fieldHours = field.reduce((a, h) => a + h.qty * h.hoursPer, 0);
-  const siteDays = Math.ceil(Math.round((fieldHours / (crew * hpd)) * 1e9) / 1e9);
+  const fieldHours = r2(field.reduce((a, h) => a + h.hours, 0));
+  const siteDays = Math.ceil(fieldHours / (crew * hpd) - 1e-9);
   const pmFrac = 0.1;
   const hours: HourLine[] = [
     ...field,
@@ -105,19 +106,21 @@ export function fixtureBid(over: { fractions?: boolean; gap?: boolean; manyLines
     { id: "lift", label: "Lift rental", qty: 1, unit: "week", unitCost: 450, extended: 450 },
   ];
 
-  const material = lines.reduce((a, l) => a + (l.laborOnly || l.unitPrice == null ? 0 : l.qty * l.unitPrice), 0);
-  const laborHours = hours.reduce((a, h) => a + h.qty * h.hoursPer, 0);
+  // The rules of src/bid/price.ts: cents at every money step, hours per line,
+  // the material markup on material and on expenses (equipment) alike.
+  const material = r2(lines.reduce((a, l) => a + (l.extended ?? 0), 0));
+  const laborHours = r2(hours.reduce((a, h) => a + h.hours, 0));
   const chain = 1.1 * 1.15 * 1.02041;
-  const laborCostRate = 95 / chain;
-  const laborCost = laborHours * laborCostRate;
-  const exp = expenses.reduce((a, e) => a + (e.unitCost ?? 0) * e.qty, 0);
-  const markup = material * 0.15;
-  const subtotal = material + markup + exp + laborCost;
-  const overhead = subtotal * 0.1;
-  const profit = (subtotal + overhead) * 0.15;
-  const excise = (subtotal + overhead + profit) * 0.02041;
-  const baseBid = subtotal + overhead + profit + excise;
-  const bond = baseBid * 0.015;
+  const laborCostRate = r2(95 / chain);
+  const laborCost = r2(laborHours * laborCostRate);
+  const exp = r2(expenses.reduce((a, e) => a + (e.extended ?? 0), 0));
+  const markup = r2(material * 0.15) + r2(exp * 0.15);
+  const subtotal = r2(material + markup + exp + laborCost);
+  const overhead = r2(subtotal * 0.1);
+  const profit = r2((subtotal + overhead) * 0.15);
+  const excise = r2((subtotal + overhead + profit) * 0.02041);
+  const baseBid = r2(subtotal + overhead + profit + excise);
+  const bond = r2(baseBid * 0.015);
   const links = 96;
   const gaps = over.gap ? [{ ref: "L7", description: "Firestop sleeve kit", reason: "no price in the price book" }] : [];
 
@@ -138,7 +141,7 @@ export function fixtureBid(over: { fractions?: boolean; gap?: boolean; manyLines
       material: r2(material), materialMarkup: r2(markup), expenses: r2(exp), laborHours: r2(laborHours),
       laborCostRate: r2(laborCostRate), laborCost: r2(laborCost), subtotal: r2(subtotal), overhead: r2(overhead),
       profit: r2(profit), excise: r2(excise), baseBid: r2(baseBid), bond: r2(bond), totalWithBond: r2(baseBid + bond),
-      trueCost: r2(material + exp + laborHours * 48), effectiveSellRate: r2((laborCost * chain) / laborHours), chain: Math.round(chain * 1e6) / 1e6,
+      trueCost: r2(material + exp + r2(laborHours * 48)), effectiveSellRate: r2((laborCost * chain) / laborHours), chain: Math.round(chain * 1e6) / 1e6,
     },
     ratios: { links, dollarsPerLink: r2(baseBid / links), hoursPerLink: r2(laborHours / links) },
     flags: [

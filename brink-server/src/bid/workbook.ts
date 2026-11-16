@@ -11,6 +11,9 @@
 import ExcelJS from "exceljs";
 import type { BidDraft, BidLine, ExpenseLine, HourLine } from "../bidTypes.ts";
 import type { ProjectManifest } from "../types.ts";
+
+/** Round to cents (half away from zero), as price.ts does at each money step. */
+const c2 = (n: number): number => Math.round(n * 100 + (n >= 0 ? 1e-7 : -1e-7)) / 100;
 import { approvedDate, isApproved, pctFraction, usDate } from "./format.ts";
 
 type WS = ExcelJS.Worksheet;
@@ -56,8 +59,9 @@ type LeverName = (typeof LEVERS)[number]["name"];
 /** Which job HourLine the Labor tab replaces with its own formula. */
 function hourRole(h: HourLine): "pm" | "travel" | null {
   const keys = [h.id, h.unitId ?? ""].map((s) => s.toLowerCase());
-  if (keys.some((k) => k === "pm" || /^pm[_-]/.test(k) || k === "project_management")) return "pm";
-  if (keys.some((k) => k === "travel" || /^travel[_-]/.test(k))) return "travel";
+  // price.ts writes "h-pm" and "h-travel".
+  if (keys.some((k) => k === "pm" || k === "h-pm" || /^pm[_-]/.test(k) || k === "project_management")) return "pm";
+  if (keys.some((k) => k === "travel" || k === "h-travel" || /^travel[_-]/.test(k))) return "travel";
   if (h.kind === "job" && /\bproject management\b|^pm\b/i.test(h.label)) return "pm";
   if (h.kind === "job" && /\btravel\b/i.test(h.label)) return "travel";
   return null;
@@ -96,40 +100,44 @@ export function workbookModel(bid: BidDraft) {
 
   const fieldLines = bid.hours.filter((h) => h.kind === "field");
   const jobLines = bid.hours.filter((h) => h.kind === "job" && !hourRole(h));
-  const fieldHours = fieldLines.reduce((a, h) => a + h.qty * h.hoursPer, 0);
-  const jobHours = jobLines.reduce((a, h) => a + h.qty * h.hoursPer, 0);
-  const pmHours = v("PmPct") * fieldHours;
+  // Hours round to 0.01 per line and per sum, as price.ts does.
+  const fieldHours = c2(fieldLines.reduce((a, h) => a + c2(h.qty * h.hoursPer), 0));
+  const jobHours = c2(jobLines.reduce((a, h) => a + c2(h.qty * h.hoursPer), 0));
+  const pmHours = c2(v("PmPct") * fieldHours);
   const perDay = v("CrewSize") * v("HoursPerDay");
-  const siteDays = perDay > 0 ? Math.ceil(Number((fieldHours / perDay).toFixed(9))) : 0;
-  const travelHours = siteDays * v("CrewSize") * v("DriveHoursPerDay");
-  const laborHours = fieldHours + jobHours + pmHours + travelHours;
+  const siteDays = perDay > 0 ? Math.ceil(fieldHours / perDay - 1e-9) : 0;
+  const travelHours = c2(siteDays * v("CrewSize") * v("DriveHoursPerDay"));
+  const laborHours = c2(fieldHours + jobHours + pmHours + travelHours);
   const chain = (1 + v("OverheadPct")) * (1 + v("ProfitPct")) * (1 + v("ExcisePct") * v("ExciseOn"));
-  const laborCostRate = chain ? v("BillRate") / chain : 0;
-  const laborCost = laborHours * laborCostRate;
+  // Money rounds to cents at each step, exactly as price.ts does (the cost
+  // entry too: the owner types it to the cent, e.g. 85.22).
+  const laborCostRate = chain ? c2(v("BillRate") / chain) : 0;
+  const laborCost = c2(laborHours * laborCostRate);
 
   const otherExpenses = bid.expenses.filter((e) => !isMileage(e));
   const mileageQty = siteDays * v("Vehicles") * v("MilesPerDay");
   const mileage = mileageQty * v("MileageRate");
   const expenses = mileage + otherExpenses.reduce((a, e) => a + (e.unitCost == null ? 0 : e.qty * e.unitCost), 0);
 
-  const materialMarkup = material * v("MaterialMarkupPct");
-  const subtotal = material + materialMarkup + expenses + laborCost;
-  const overhead = subtotal * v("OverheadPct");
-  const profit = (subtotal + overhead) * v("ProfitPct");
-  const excise = (subtotal + overhead + profit) * v("ExcisePct") * v("ExciseOn");
-  const baseBid = subtotal + overhead + profit + excise;
-  const bond = baseBid * v("BondPct") * v("BondOn");
-  const totalWithBond = baseBid + bond;
-  const trueCost = material + expenses + laborHours * v("TrueCostRate");
-  const effectiveSellRate = laborHours ? (laborCost * chain) / laborHours : 0;
+  // Material AND equipment/expenses carry the markup at the line (the playbook's chain).
+  const materialMarkup = c2(material * v("MaterialMarkupPct")) + c2(expenses * v("MaterialMarkupPct"));
+  const subtotal = c2(material + materialMarkup + expenses + laborCost);
+  const overhead = c2(subtotal * v("OverheadPct"));
+  const profit = c2((subtotal + overhead) * v("ProfitPct"));
+  const excise = c2((subtotal + overhead + profit) * v("ExcisePct") * v("ExciseOn"));
+  const baseBid = c2(subtotal + overhead + profit + excise);
+  const bond = c2(baseBid * v("BondPct") * v("BondOn"));
+  const totalWithBond = c2(baseBid + bond);
+  const trueCost = c2(material + expenses + c2(laborHours * v("TrueCostRate")));
+  const effectiveSellRate = laborHours ? c2((laborCost * chain) / laborHours) : 0;
   const links = v("Links");
   return {
     lever, lineExt, fieldLines, jobLines, otherExpenses,
     material, fieldHours, jobHours, pmHours, siteDays, travelHours, laborHours, chain, laborCostRate, laborCost,
     mileageQty, mileage, expenses, materialMarkup, subtotal, overhead, profit, excise, baseBid, bond, totalWithBond,
     trueCost, margin: baseBid - trueCost, effectiveSellRate,
-    dollarsPerLink: links ? baseBid / links : null,
-    hoursPerLink: links ? laborHours / links : null,
+    dollarsPerLink: links ? c2(baseBid / links) : null,
+    hoursPerLink: links ? c2(laborHours / links) : null,
   };
 }
 export type WorkbookModel = ReturnType<typeof workbookModel>;
@@ -354,7 +362,7 @@ export async function renderBidWorkbook(bid: BidDraft, project: ProjectManifest)
     put(labor, `D${r}`, h.qty, FMT.num);
     put(labor, `E${r}`, h.unit);
     put(labor, `F${r}`, h.hoursPer, FMT.hours);
-    fx(labor, `G${r}`, `D${r}*F${r}`, h.qty * h.hoursPer, FMT.hours);
+    fx(labor, `G${r}`, `ROUND(D${r}*F${r},2)`, c2(h.qty * h.hoursPer), FMT.hours);
     put(labor, `H${r}`, h.unitId ?? "");
     r++;
   };
@@ -362,7 +370,7 @@ export async function renderBidWorkbook(bid: BidDraft, project: ProjectManifest)
   for (const h of m.fieldLines) hourRow(h);
   const fieldLast = r - 1;
   put(labor, `B${r}`, "Field hours");
-  fx(labor, `G${r}`, fieldLast >= fieldFirst ? `SUM(G${fieldFirst}:G${fieldLast})` : "0", m.fieldHours, FMT.hours);
+  fx(labor, `G${r}`, fieldLast >= fieldFirst ? `ROUND(SUM(G${fieldFirst}:G${fieldLast}),2)` : "0", m.fieldHours, FMT.hours);
   totalRow(labor, r, 8);
   name(labor, `G${r}`, "FieldHours");
   r += 2;
@@ -370,18 +378,18 @@ export async function renderBidWorkbook(bid: BidDraft, project: ProjectManifest)
   for (const h of m.jobLines) hourRow(h);
   const jobLast = r - 1;
   put(labor, `B${r}`, "Job hours (mobilization, submittals, cleanup, ...)");
-  fx(labor, `G${r}`, jobLast >= jobFirst ? `SUM(G${jobFirst}:G${jobLast})` : "0", m.jobHours, FMT.hours);
+  fx(labor, `G${r}`, jobLast >= jobFirst ? `ROUND(SUM(G${jobFirst}:G${jobLast}),2)` : "0", m.jobHours, FMT.hours);
   totalRow(labor, r, 8);
   name(labor, `G${r}`, "JobHours");
   r += 2;
   const computed: [string, string, string, number, string][] = [
-    ["PmHours", "Project management (PM % × field hours)", "PmPct*FieldHours", m.pmHours, FMT.hours],
+    ["PmHours", "Project management (PM % × field hours)", "ROUND(PmPct*FieldHours,2)", m.pmHours, FMT.hours],
     ["SiteDays", "Site days = ROUNDUP(field ÷ (crew × hours/day))", "IFERROR(ROUNDUP(FieldHours/(CrewSize*HoursPerDay),0),0)", m.siteDays, FMT.int],
-    ["TravelHours", "Travel hours = site days × crew × drive hours", "SiteDays*CrewSize*DriveHoursPerDay", m.travelHours, FMT.hours],
-    ["LaborHours", "Total labor hours", "FieldHours+JobHours+PmHours+TravelHours", m.laborHours, FMT.hours],
+    ["TravelHours", "Travel hours = site days × crew × drive hours", "ROUND(SiteDays*CrewSize*DriveHoursPerDay,2)", m.travelHours, FMT.hours],
+    ["LaborHours", "Total labor hours", "ROUND(FieldHours+JobHours+PmHours+TravelHours,2)", m.laborHours, FMT.hours],
     ["Chain", "Chain = (1+overhead)(1+profit)(1+excise × on)", "(1+OverheadPct)*(1+ProfitPct)*(1+ExcisePct*ExciseOn)", m.chain, FMT.mult],
-    ["LaborCostRate", "Labor cost entry = bill rate ÷ chain", "IFERROR(BillRate/Chain,0)", m.laborCostRate, FMT.rate],
-    ["LaborCost", "Labor cost = hours × cost entry", "LaborHours*LaborCostRate", m.laborCost, FMT.money],
+    ["LaborCostRate", "Labor cost entry = bill rate ÷ chain", "IFERROR(ROUND(BillRate/Chain,2),0)", m.laborCostRate, FMT.rate],
+    ["LaborCost", "Labor cost = hours × cost entry", "ROUND(LaborHours*LaborCostRate,2)", m.laborCost, FMT.money],
   ];
   for (const [nm, label, f, val, fmt] of computed) {
     put(labor, `B${r}`, label);
@@ -442,24 +450,24 @@ export async function renderBidWorkbook(bid: BidDraft, project: ProjectManifest)
   const rowOf: Record<string, number> = {};
   const sumRows: [string, string, string, number | null, string, boolean?][] = [
     ["material", "Material", "MaterialTotal", m.material, FMT.money],
-    ["markup", "Material markup", "MaterialTotal*MaterialMarkupPct", m.materialMarkup, FMT.money],
+    ["markup", "Material + equipment markup", "ROUND(MaterialTotal*MaterialMarkupPct,2)+ROUND(ExpensesTotal*MaterialMarkupPct,2)", m.materialMarkup, FMT.money],
     ["expenses", "Expenses", "ExpensesTotal", m.expenses, FMT.money],
     ["hours", "Labor hours", "LaborHours", m.laborHours, FMT.hours],
     ["rate", "Labor cost entry ($/h)", "LaborCostRate", m.laborCostRate, FMT.rate],
     ["labor", "Labor cost", "LaborCost", m.laborCost, FMT.money],
-    ["subtotal", "Subtotal", "B{material}+B{markup}+B{expenses}+B{labor}", m.subtotal, FMT.money, true],
-    ["overhead", "Overhead", "B{subtotal}*OverheadPct", m.overhead, FMT.money],
-    ["profit", "Profit", "(B{subtotal}+B{overhead})*ProfitPct", m.profit, FMT.money],
-    ["excise", "Excise", "(B{subtotal}+B{overhead}+B{profit})*ExcisePct*ExciseOn", m.excise, FMT.money],
-    ["base", "BASE BID", "B{subtotal}+B{overhead}+B{profit}+B{excise}", m.baseBid, FMT.money, true],
-    ["bond", "Bond (separate add)", "BaseBid*BondPct*BondOn", m.bond, FMT.money],
-    ["withbond", "Total with bond", "BaseBid+B{bond}", m.totalWithBond, FMT.money],
-    ["truecost", "True cost (labor at true cost rate)", "MaterialTotal+ExpensesTotal+LaborHours*TrueCostRate", m.trueCost, FMT.money],
+    ["subtotal", "Subtotal", "ROUND(B{material}+B{markup}+B{expenses}+B{labor},2)", m.subtotal, FMT.money, true],
+    ["overhead", "Overhead", "ROUND(B{subtotal}*OverheadPct,2)", m.overhead, FMT.money],
+    ["profit", "Profit", "ROUND((B{subtotal}+B{overhead})*ProfitPct,2)", m.profit, FMT.money],
+    ["excise", "Excise", "ROUND((B{subtotal}+B{overhead}+B{profit})*ExcisePct*ExciseOn,2)", m.excise, FMT.money],
+    ["base", "BASE BID", "ROUND(B{subtotal}+B{overhead}+B{profit}+B{excise},2)", m.baseBid, FMT.money, true],
+    ["bond", "Bond (separate add)", "ROUND(BaseBid*BondPct*BondOn,2)", m.bond, FMT.money],
+    ["withbond", "Total with bond", "ROUND(BaseBid+B{bond},2)", m.totalWithBond, FMT.money],
+    ["truecost", "True cost (labor at true cost rate)", "ROUND(MaterialTotal+ExpensesTotal+ROUND(LaborHours*TrueCostRate,2),2)", m.trueCost, FMT.money],
     ["margin", "Margin over true cost", "BaseBid-B{truecost}", m.margin, FMT.money],
-    ["sell", "Effective sell rate ($/h)", "IFERROR(LaborCost*Chain/LaborHours,0)", m.effectiveSellRate, FMT.rate],
+    ["sell", "Effective sell rate ($/h)", "IFERROR(ROUND(LaborCost*Chain/LaborHours,2),0)", m.effectiveSellRate, FMT.rate],
     ["links", "Links", "Links", m.lever.Links ?? 0, FMT.num],
-    ["perlink", "$ per link", "IFERROR(BaseBid/Links,\"\")", m.dollarsPerLink, FMT.money],
-    ["hperlink", "Hours per link", "IFERROR(LaborHours/Links,\"\")", m.hoursPerLink, FMT.hours],
+    ["perlink", "$ per link", "IFERROR(ROUND(BaseBid/Links,2),\"\")", m.dollarsPerLink, FMT.money],
+    ["hperlink", "Hours per link", "IFERROR(ROUND(LaborHours/Links,2),\"\")", m.hoursPerLink, FMT.hours],
   ];
   for (const [key, , ] of sumRows) rowOf[key] = r++;
   for (const [key, label, f0, val, fmt, strong] of sumRows) {

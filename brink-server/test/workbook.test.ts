@@ -58,7 +58,7 @@ function summaryValue(wb: ExcelJS.Workbook, label: string): ExcelJS.Cell {
 
 const SUMMARY: [string, (b: BidDraft) => number | null][] = [
   ["Material", (b) => b.totals.material],
-  ["Material markup", (b) => b.totals.materialMarkup],
+  ["Material + equipment markup", (b) => b.totals.materialMarkup],
   ["Expenses", (b) => b.totals.expenses],
   ["Labor hours", (b) => b.totals.laborHours],
   ["Labor cost entry ($/h)", (b) => b.totals.laborCostRate],
@@ -122,20 +122,20 @@ describe("renderBidWorkbook", () => {
     }
     // the dependency chain from the levers to the base bid
     assert.equal(formulaOf(named(wb, "Chain")), "(1+OverheadPct)*(1+ProfitPct)*(1+ExcisePct*ExciseOn)");
-    assert.equal(formulaOf(named(wb, "LaborCostRate")), "IFERROR(BillRate/Chain,0)");
-    assert.equal(formulaOf(named(wb, "LaborCost")), "LaborHours*LaborCostRate");
-    assert.equal(formulaOf(named(wb, "LaborHours")), "FieldHours+JobHours+PmHours+TravelHours");
+    assert.equal(formulaOf(named(wb, "LaborCostRate")), "IFERROR(ROUND(BillRate/Chain,2),0)");
+    assert.equal(formulaOf(named(wb, "LaborCost")), "ROUND(LaborHours*LaborCostRate,2)");
+    assert.equal(formulaOf(named(wb, "LaborHours")), "ROUND(FieldHours+JobHours+PmHours+TravelHours,2)");
     assert.equal(formulaOf(named(wb, "SiteDays")), "IFERROR(ROUNDUP(FieldHours/(CrewSize*HoursPerDay),0),0)");
-    assert.equal(formulaOf(named(wb, "TravelHours")), "SiteDays*CrewSize*DriveHoursPerDay");
-    assert.equal(formulaOf(named(wb, "PmHours")), "PmPct*FieldHours");
+    assert.equal(formulaOf(named(wb, "TravelHours")), "ROUND(SiteDays*CrewSize*DriveHoursPerDay,2)");
+    assert.equal(formulaOf(named(wb, "PmHours")), "ROUND(PmPct*FieldHours,2)");
     assert.equal(resultOf(named(wb, "SiteDays")), 6);
     assert.match(names(wb).get("BaseBid")!, /^Summary!/);
     const sum = wb.getWorksheet("Summary")!;
     const rows = rowsByLabel(sum);
-    assert.equal(formulaOf(summaryValue(wb, "Material markup")), "MaterialTotal*MaterialMarkupPct");
-    assert.equal(formulaOf(summaryValue(wb, "BASE BID")), `B${rows.get("Subtotal")}+B${rows.get("Overhead")}+B${rows.get("Profit")}+B${rows.get("Excise")}`);
-    assert.equal(formulaOf(summaryValue(wb, "Excise")), `(B${rows.get("Subtotal")}+B${rows.get("Overhead")}+B${rows.get("Profit")})*ExcisePct*ExciseOn`);
-    assert.equal(formulaOf(summaryValue(wb, "Bond (separate add)")), "BaseBid*BondPct*BondOn");
+    assert.equal(formulaOf(summaryValue(wb, "Material + equipment markup")), "ROUND(MaterialTotal*MaterialMarkupPct,2)+ROUND(ExpensesTotal*MaterialMarkupPct,2)");
+    assert.equal(formulaOf(summaryValue(wb, "BASE BID")), `ROUND(B${rows.get("Subtotal")}+B${rows.get("Overhead")}+B${rows.get("Profit")}+B${rows.get("Excise")},2)`);
+    assert.equal(formulaOf(summaryValue(wb, "Excise")), `ROUND((B${rows.get("Subtotal")}+B${rows.get("Overhead")}+B${rows.get("Profit")})*ExcisePct*ExciseOn,2)`);
+    assert.equal(formulaOf(summaryValue(wb, "Bond (separate add)")), "ROUND(BaseBid*BondPct*BondOn,2)");
 
     // Material: unit price read from the Assumptions price list, extended = qty × price, subtotal sums them
     const mat = wb.getWorksheet("Material")!;
@@ -157,7 +157,7 @@ describe("renderBidWorkbook", () => {
     const lab = wb.getWorksheet("Labor")!;
     const labRows = rowsByLabel(lab);
     const w = labRows.get("h-wall-first")!;
-    assert.equal(formulaOf(lab.getCell(`G${w}`)), `D${w}*F${w}`);
+    assert.equal(formulaOf(lab.getCell(`G${w}`)), `ROUND(D${w}*F${w},2)`);
     assert.equal(labRows.has("pm"), false, "the PM line is replaced by the PM % formula");
     assert.equal(labRows.has("travel"), false, "the travel line is replaced by the travel formula");
     const exp = wb.getWorksheet("Expenses")!;
