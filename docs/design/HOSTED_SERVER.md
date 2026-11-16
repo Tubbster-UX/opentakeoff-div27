@@ -69,10 +69,52 @@ crops through tools, so a 300 MB plan set is no different from a 3 MB one.
   (NOTICE makes that line a request, not a license condition). The
   attribution the license does require, in the app's legal notice, stays.
 
+### Owner's quoting playbook (2026-11-16)
+
+The owner's playbook (how a Division 27 job is quoted: intake, takeoff rules,
+labor units, markup chain, proposal formats) is stored on the server as a
+settings document Claude reads at the start of every bid. It is not committed
+here: it carries rates, prices, competitor data and company identifiers.
+Decisions taken from it:
+
+- Pricing chain: material × (1 + material markup) at the line, + labor hours ×
+  labor cost entry → subtotal × (1 + overhead) × (1 + profit) × (1 + SD
+  contractor's excise, SD work only, off with an exemption certificate), + bond
+  as a separate add. Default material markup 15%.
+- Labor cost entry is back-solved from a target bill rate: cost entry = bill
+  rate ÷ the chain, so labor sells at the bill rate after the markups.
+- Pull labor is per pull, not per cable: a first-cable unit per location plus an
+  additional-cable unit (default set 1.20 / 0.45 h wall, 1.40 / 0.50 h ceiling;
+  the lowered set only when Claude states open ceilings and short runs). Job
+  hours on top: certification and labeling per link, mobilization, travel (site
+  days × crew × drive hours), PM % of field hours, submittals, cleanup; mileage
+  per vehicle.
+- One flat number by default, no priced adds.
+- Bid workbook in the owner's form: formulas with the levers on an Assumptions
+  tab, each price with source and date, a status per line (live / estimate /
+  allowance), a Quotes Needed tab, a Price As Sent row.
+- Two proposal formats: the 3-page GC/EC sub-bid, and for federal work the
+  cover letter + technical package (compliance matrix, BOM by room) as .docx
+  and PDF. The owner fills and signs the forms.
+- Claude traces cable routes as well as counting. The phone review opens with
+  every link over 250 ft or crossing floors. Before the first live bid, a past
+  job (North Rapid PD) is traced on the server and compared against the
+  owner's Bluebeam averages (2-port 52.1 ft, APs 65.1 ft, cameras 90.7 ft);
+  the difference is reported before the traced lengths are trusted. Its plans
+  are private and stay on the server.
+
 ### Work after the first build lands
 
-1. Estimate engine: labor hours × rate; cable footage priced from the cable
-   order (box/reel counts or $/ft per cable type).
-2. Price book tools (record / look up, with source and date).
-3. Company profile, letterhead proposal, DRAFT until approved, no watermark.
-4. Phone project page: outputs, bid status, Approve.
+1. Pricing engine on the chain above (labor units per pull and per cable, job
+   hours, excise, bond, back-solved labor), cable footage priced from the cable
+   order.
+2. Price book tools (record / look up, with source and date, live / estimate /
+   allowance).
+3. Settings on the server: company profile, labor units, rates, markups,
+   playbook document; a tool Claude reads them with.
+4. Bid workbook export in the owner's form.
+5. Proposals: GC sub-bid layout and federal cover letter + technical package
+   (.docx + PDF), DRAFT until approved, no watermark.
+6. Phone project page: long-link and floor-crossing flags first, outputs, bid
+   status, Approve.
+7. Calibration run on North Rapid PD before the first live bid.
