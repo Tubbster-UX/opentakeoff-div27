@@ -14,6 +14,7 @@ import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { buildAuth, type Auth, type BuildAuthDeps } from "./auth.ts";
 import { FsStorage } from "./storage.ts";
+import { bidRoutes, type BidHooks } from "./approval.ts";
 import type { AppDeps, MountMcp, ProjectManifest, UploadRecord } from "./types.ts";
 
 const MiB = 1024 * 1024;
@@ -166,6 +167,8 @@ export interface BuildAppOptions {
   auth?: Omit<BuildAuthDeps, "config" | "storage">;
   /** Re-queue uploads left "received"/"processing" at startup (default true). */
   resumeIngest?: boolean;
+  /** What happens after the owner approves a bid (re-render the final documents). */
+  bidHooks?: BidHooks;
 }
 
 /** fsstore:// links (local store) are served by the app itself at /_local-store. */
@@ -525,6 +528,9 @@ export function buildApp(
     const url = localStoreUrl(await storage.presignGet(key, DOWNLOAD_EXPIRES_SEC, { filename }));
     res.redirect(302, url);
   });
+
+  // The owner's bid review and approval (owner cookie + CSRF, like the rest of /api).
+  api.use(bidRoutes(deps, opts.bidHooks));
 
   api.use((_req, _res, next) => next(notFound("No such API route.")));
   app.use("/api", api);

@@ -211,6 +211,7 @@ export async function startServer(opts: BuildAppOptions & { config?: Partial<Con
   const deps: AppDeps = { config, storage, projects, ingest, search: fakeSearch, workspace: fakeWorkspace };
   const built = buildApp(deps, fakeMountMcp, {
     resumeIngest: opts.resumeIngest ?? false,
+    bidHooks: opts.bidHooks,
     auth: { sweepTimer: false, redirectHosts: ["claude.ai", "claude.com"], ...opts.auth },
   });
   server.on("request", built.app);

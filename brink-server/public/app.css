@@ -116,3 +116,16 @@ body.auth { display: flex; align-items: flex-start; justify-content: center; pad
 .auth-card .brand { display: block; font-size: 1.6rem; margin-bottom: 1rem; }
 .auth-card button.primary { width: 100%; margin-top: 1rem; }
 .auth-card .row button { flex: 1; margin-top: 1rem; }
+
+/* bid review card */
+.bid .price { font-size: 2rem; font-weight: 700; margin: .25rem 0; }
+.badge.draft { background: #fff4d6; color: #7a5200; }
+.badge.ok { background: #e3f5e8; color: #1f6b35; }
+.flags { padding-left: 1.1rem; margin: .25rem 0 .75rem; }
+.flags.review li { color: #8a3b00; }
+.flags.gaps li { color: #9b1c1c; }
+.stats { display: grid; grid-template-columns: auto 1fr; gap: .2rem 1rem; margin: .5rem 0 1rem; }
+.stats dt { color: #5b6472; }
+.stats dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.bid .row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+.bid h3 { font-size: 1rem; margin: .75rem 0 .25rem; }

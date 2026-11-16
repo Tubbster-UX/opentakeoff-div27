@@ -690,11 +690,13 @@ async function showProject(id) {
   const unfinishedBox = h("div");
   const historyBox = h("div");
   const filesBox = h("div");
-  view = { id, title, infoBox, uploadRows, unfinishedBox, historyBox, filesBox, notesDirty: false, manifest: null };
+  const bidBox = h("div");
+  view = { id, title, infoBox, bidBox, uploadRows, unfinishedBox, historyBox, filesBox, notesDirty: false, manifest: null };
   $app.replaceChildren(
     h("p", null, h("a", { href: "#/" }, "‹ All projects")),
     title,
     infoBox,
+    bidBox,
     h(
       "section",
       { class: "card" },
@@ -747,6 +749,7 @@ async function refreshProject() {
   renderUnfinished(v, m);
   renderHistory(v, m);
   renderFiles(v, m);
+  await refreshBid(v, m);
   const busy = m.uploads.some((u) => u.status === "received" || u.status === "processing");
   pollTimer = setTimeout(refreshProject, busy ? 3000 : 30000);
 }
@@ -931,3 +934,117 @@ document.getElementById("logout").addEventListener("click", async () => {
 
 window.addEventListener("hashchange", route);
 route();
+
+// ── the bid: review first, then approve (only the owner can; Claude cannot) ──
+
+const money = (n) => (n == null ? "—" : n.toLocaleString("en-US", { style: "currency", currency: "USD" }));
+const REVIEW_FIRST = new Set(["long_link", "over_295", "floor_crossing"]);
+
+async function refreshBid(v, m) {
+  let bid = null;
+  try {
+    bid = await api("GET", `/api/projects/${v.id}/bid`);
+  } catch (e) {
+    if (e.status !== 404) {
+      v.bidBox.replaceChildren(h("section", { class: "card" }, h("h2", null, "Bid"), h("p", { class: "error" }, e.message)));
+      return;
+    }
+  }
+  if (view !== v) return;
+  renderBid(v, m, bid);
+}
+
+function renderBid(v, m, bid) {
+  if (!bid) {
+    v.bidBox.replaceChildren(h("section", { class: "card" }, h("h2", null, "Bid"), h("p", { class: "muted" }, "No bid yet. Ask Claude to take off and price this project.")));
+    return;
+  }
+  const approved = bid.status === "approved" && bid.approved && bid.approved.revision === bid.revision;
+  const t = bid.totals || {};
+  const review = (bid.flags || []).filter((f) => REVIEW_FIRST.has(f.kind));
+  const other = (bid.flags || []).filter((f) => !REVIEW_FIRST.has(f.kind));
+  const gaps = bid.gaps || [];
+  const docs = m.files.filter((f) => f.kind === "output" && /^(outputs\/)?bid\//.test(f.path) && !/\.json$/.test(f.path));
+  const msg = h("p", { class: "small", role: "status" });
+
+  const list = (items, cls) =>
+    h("ul", { class: `flags ${cls}` }, ...items.map((f) => h("li", null, f.message || f.description || String(f))));
+
+  const approveBtn = h(
+    "button",
+    {
+      type: "button",
+      class: "primary",
+      disabled: approved || t.baseBid == null || gaps.length > 0,
+      onclick: async () => {
+        if (!confirm(`Approve revision ${bid.revision} at ${money(t.baseBid)}?\n\nThe documents are re-made without DRAFT. If Claude re-prices later, that is a new draft for you to approve again.`)) return;
+        approveBtn.disabled = true;
+        msg.textContent = "Approving…";
+        try {
+          const r = await api("POST", `/api/projects/${v.id}/bid/approve`, { revision: bid.revision });
+          msg.textContent = r.warning || `Approved revision ${bid.revision}.${r.rerendered && r.rerendered.length ? " Final documents are ready below." : ""}`;
+          refreshProjectSoon();
+        } catch (e) {
+          msg.textContent = e.message;
+          approveBtn.disabled = false;
+        }
+      },
+    },
+    approved ? "Approved" : "Approve this bid",
+  );
+  const withdraw = approved
+    ? h(
+        "button",
+        {
+          type: "button",
+          class: "link",
+          onclick: async () => {
+            if (!confirm(`Withdraw your approval of revision ${bid.revision}? The bid goes back to draft.`)) return;
+            try {
+              await api("POST", `/api/projects/${v.id}/bid/withdraw`, { revision: bid.revision });
+              refreshProjectSoon();
+            } catch (e) {
+              msg.textContent = e.message;
+            }
+          },
+        },
+        "Withdraw approval",
+      )
+    : null;
+  const why = approved
+    ? null
+    : t.baseBid == null || gaps.length
+      ? h("p", { class: "small warn" }, `Can't approve yet: ${gaps.length} unpriced item${gaps.length === 1 ? "" : "s"}${t.baseBid == null ? " and no base bid" : ""}. Ask Claude to fill the gaps and re-price.`)
+      : null;
+
+  v.bidBox.replaceChildren(
+    h(
+      "section",
+      { class: "card bid" },
+      h("h2", null, "Bid ", h("span", { class: `badge ${approved ? "ok" : "draft"}` }, approved ? `Approved · r${bid.revision}` : `Draft · r${bid.revision}`)),
+      h("p", { class: "price" }, money(t.baseBid)),
+      t.bond ? h("p", { class: "small muted" }, `Bond ${money(t.bond)} · with bond ${money(t.totalWithBond)}`) : null,
+      approved ? h("p", { class: "small muted" }, `Approved ${fmtDate(bid.approved.at)}`) : null,
+      review.length
+        ? h("div", null, h("h3", null, `Check these first (${review.length})`), list(review, "review"))
+        : h("p", { class: "small muted" }, "No links over 250 ft and no floor crossings."),
+      gaps.length ? h("div", null, h("h3", null, `Unpriced (${gaps.length})`), list(gaps.map((g) => ({ message: `${g.description}: ${g.reason}` })), "gaps")) : null,
+      h(
+        "dl",
+        { class: "stats" },
+        h("dt", null, "Labor hours"), h("dd", null, String(t.laborHours ?? "—")),
+        h("dt", null, "Links"), h("dd", null, String(bid.ratios?.links ?? "—")),
+        h("dt", null, "$ per link"), h("dd", null, money(bid.ratios?.dollarsPerLink)),
+        h("dt", null, "Hours per link"), h("dd", null, String(bid.ratios?.hoursPerLink ?? "—")),
+        h("dt", null, "Sell rate / hr"), h("dd", null, money(t.effectiveSellRate)),
+      ),
+      other.length ? h("details", null, h("summary", null, `Other notes (${other.length})`), list(other, "other")) : null,
+      docs.length
+        ? h("div", null, h("h3", null, "Documents"), h("ul", { class: "files" }, ...docs.map((f) => h("li", null, h("a", { href: `/api/projects/${v.id}/download?path=${encodeURIComponent(f.path)}` }, f.path.replace(/^(outputs\/)?bid\//, ""))))))
+        : h("p", { class: "small muted" }, "No bid documents yet. Ask Claude to export the workbook and proposal."),
+      why,
+      h("div", { class: "row" }, approveBtn, withdraw),
+      msg,
+    ),
+  );
+}
