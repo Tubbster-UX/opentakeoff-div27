@@ -13,6 +13,12 @@ import { applyStagedTools, STAGED_INSTRUCTIONS } from "./src/staging.ts";
 import { oneClickEnabled, GATE_NOTE } from "./src/gate.ts";
 import pkg from "./package.json" with { type: "json" };
 
+// Embedding hosts (brink-server's hosted /mcp) build one Session per MCP
+// connection and attach their own auto-save; additive re-exports, nothing here
+// changes the stdio server.
+export { Session } from "./src/session.ts";
+export { Autosave, installExitFlush } from "./src/autosave.ts";
+
 export function buildServer(
   session: Session = new Session(),
   // #230 — staged exposure is opt-in: every published client expects the flat
