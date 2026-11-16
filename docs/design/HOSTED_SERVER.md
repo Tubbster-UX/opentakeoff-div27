@@ -48,3 +48,31 @@ crops through tools, so a 300 MB plan set is no different from a 3 MB one.
   and total uncompressed size, and nesting depth.
 - No secrets in files. Config comes from the environment.
 - Test fixtures are invented. No real plans in the repository.
+
+## Owner decisions (2026-11-16 quiz)
+
+- One user: the owner. One login.
+- Chat happens in the regular Claude apps through this server's connector; no
+  chat UI of our own.
+- Claude does the whole bid as a draft: takeoff → pricing → Excel workbook →
+  proposal PDF → marked plans + schematic. Nothing is final until the owner
+  presses Approve on the project page; MCP tools cannot approve.
+- Review is on the phone: the owner looks at the marked sheets and numbers and
+  tells Claude what to fix. No phone editing UI.
+- Work is mostly federal (SAM.gov). The owner fills and signs the federal
+  forms; the system does not draft them.
+- Material prices: Claude's own lookups and the owner's past bids. Every price
+  is kept with its source and date in a price book and reused on later bids.
+- Labor: hours per item × the owner's rate. Markup: overhead % + profit %.
+- Proposal: the owner's letterhead (name, address, UEI, CAGE, logo), stamped
+  DRAFT until approved, without the OpenTakeoff watermark or footer line
+  (NOTICE makes that line a request, not a license condition). The
+  attribution the license does require, in the app's legal notice, stays.
+
+### Work after the first build lands
+
+1. Estimate engine: labor hours × rate; cable footage priced from the cable
+   order (box/reel counts or $/ft per cable type).
+2. Price book tools (record / look up, with source and date).
+3. Company profile, letterhead proposal, DRAFT until approved, no watermark.
+4. Phone project page: outputs, bid status, Approve.
