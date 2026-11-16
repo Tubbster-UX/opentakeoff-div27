@@ -3,7 +3,7 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { loadConfig } from "./config.ts";
-import { storageFromConfig } from "./storage.ts";
+import { FsStorage, storageFromConfig } from "./storage.ts";
 import { StoreProjects } from "./projects.ts";
 import { StoreIngest } from "./ingest.ts";
 import { StoreSearch } from "./search.ts";
@@ -15,6 +15,13 @@ import type { AppDeps } from "./types.ts";
 const config = loadConfig();
 mkdirSync(config.dataDir, { recursive: true });
 const storage = storageFromConfig(config.storage);
+if (storage instanceof FsStorage) {
+  // Local runs: fsstore:// links are served by the app (owner-only) at
+  // /_local-store, so the download links Claude hands out open in a browser.
+  const presign = storage.presignGet.bind(storage);
+  storage.presignGet = async (key, expiresSec, opts) =>
+    `${config.publicUrl}/_local-store?u=${encodeURIComponent(await presign(key, expiresSec, opts))}`;
+}
 const projects = new StoreProjects(storage);
 const deps: AppDeps = {
   config,

@@ -891,7 +891,7 @@ function renderFiles(v, m) {
       h(
         "section",
         { class: "card" },
-        h("h2", null, `${KIND_LABELS[kind] || kind} `, h("span", { class: "badge" }, `${list.length}${pages ? ` · ${pages} pages` : ""}`)),
+        h("h2", null, `${KIND_LABELS[kind] || kind} `, h("span", { class: "badge" }, `${list.length} ${list.length === 1 ? "file" : "files"}${pages ? ` · ${pages} ${pages === 1 ? "page" : "pages"}` : ""}`)),
         h(
           "ul",
           { class: "files" },
@@ -904,8 +904,9 @@ function renderFiles(v, m) {
                 "span",
                 { class: "meta" },
                 [fmtBytes(f.size), f.pages ? `${f.pages} p` : null].filter(Boolean).join(" · "),
-                h("br"),
-                h("span", { class: f.text === "error" ? "error" : f.text === "none" ? "warn" : "", title: f.textError || "" }, TEXT_STATUS[f.text] || f.text),
+                f.kind === "output" ? null : h("br"),
+                // Claude's outputs are not read back, so their text status means nothing to the owner.
+                f.kind === "output" ? null : h("span", { class: f.text === "error" ? "error" : f.text === "none" ? "warn" : "", title: f.textError || "" }, f.text === "none" ? "no text (scanned)" : TEXT_STATUS[f.text] || f.text),
               ),
             ),
           ),

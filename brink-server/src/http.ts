@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { buildAuth, type Auth, type BuildAuthDeps } from "./auth.ts";
+import { FsStorage } from "./storage.ts";
 import type { AppDeps, MountMcp, ProjectManifest, UploadRecord } from "./types.ts";
 
 const MiB = 1024 * 1024;
@@ -165,6 +166,14 @@ export interface BuildAppOptions {
   auth?: Omit<BuildAuthDeps, "config" | "storage">;
   /** Re-queue uploads left "received"/"processing" at startup (default true). */
   resumeIngest?: boolean;
+}
+
+/** fsstore:// links (local store) are served by the app itself at /_local-store. */
+function localStoreUrl(u: string): string {
+  return u.startsWith("fsstore://") ? `/_local-store?u=${encodeURIComponent(u)}` : u;
+}
+function forBrowser<T extends { url: string }>(parts: T[]): T[] {
+  return parts.map((p) => ({ ...p, url: localStoreUrl(p.url) }));
 }
 
 export function buildApp(
@@ -391,7 +400,7 @@ export function buildApp(
     await storage.put(pendingKey(id, uploadId), JSON.stringify(p), { contentType: "application/json" });
     pending.set(`${id}/${uploadId}`, p);
     const first = Array.from({ length: Math.min(partCount, PRESIGN_BATCH) }, (_, i) => i + 1);
-    const parts = await storage.presignParts(key, multipartId, first, PRESIGN_EXPIRES_SEC);
+    const parts = forBrowser(await storage.presignParts(key, multipartId, first, PRESIGN_EXPIRES_SEC));
     res.status(201).json({ uploadId, name, partSize, partCount, parts, expiresInSec: PRESIGN_EXPIRES_SEC });
   });
 
@@ -408,7 +417,7 @@ export function buildApp(
       if (seen.has(n)) throw bad(`part ${n} is listed twice.`);
       seen.add(n);
     }
-    const parts = await storage.presignParts(p.key, p.multipartId, [...seen], PRESIGN_EXPIRES_SEC);
+    const parts = forBrowser(await storage.presignParts(p.key, p.multipartId, [...seen], PRESIGN_EXPIRES_SEC));
     res.json({ parts, expiresInSec: PRESIGN_EXPIRES_SEC });
   });
 
@@ -513,12 +522,44 @@ export function buildApp(
       }
     }
     if (!key) throw notFound("That file is not in this project.");
-    const url = await storage.presignGet(key, DOWNLOAD_EXPIRES_SEC, { filename });
+    const url = localStoreUrl(await storage.presignGet(key, DOWNLOAD_EXPIRES_SEC, { filename }));
     res.redirect(302, url);
   });
 
   api.use((_req, _res, next) => next(notFound("No such API route.")));
   app.use("/api", api);
+
+  // Local file store (STORE_DIR, for local runs and tests): the browser cannot
+  // PUT to an fsstore:// URL, so the server stands in for R2 at /_local-store,
+  // owner-only and same-origin. With R2 these routes are never mounted.
+  if (storage instanceof FsStorage) {
+    const fs = storage;
+    const parse = (u: unknown) => {
+      if (typeof u !== "string") throw bad("missing u");
+      const at = FsStorage.parsePresignedUrl(u);
+      if (!(at.expires > Date.now() / 1000)) throw bad("This link has expired.");
+      return at;
+    };
+    app.put("/_local-store", auth.requireOwner, express.raw({ type: () => true, limit: "200mb" }), async (req, res, next) => {
+      try {
+        if (req.get("origin") !== publicUrl) throw new HttpError(403, "cross_origin", "cross-origin request refused");
+        const at = parse(req.query.u);
+        if (!at.uploadId || !at.partNumber) throw bad("not a part upload link");
+        const { etag } = await fs.putPart(at.key, at.uploadId, at.partNumber, new Uint8Array(req.body as Buffer));
+        res.set("ETag", etag).set("Access-Control-Expose-Headers", "ETag").status(200).end();
+      } catch (e) { next(e); }
+    });
+    app.get("/_local-store", auth.requireOwner, async (req, res, next) => {
+      try {
+        const at = parse(req.query.u);
+        const stream = await fs.getStream(at.key);
+        if (!stream) throw notFound("That file is not in the store.");
+        if (at.disposition) res.set("Content-Disposition", at.disposition);
+        res.set("Cache-Control", "no-store");
+        stream.pipe(res);
+      } catch (e) { next(e); }
+    });
+  }
 
   // ── pages (owner) ──
   app.use(auth.requireOwner);
