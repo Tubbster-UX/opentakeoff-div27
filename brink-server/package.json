@@ -1,0 +1,35 @@
+{
+  "name": "brink-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Brink hosted server: phone uploads of bid packages to Cloudflare R2, a searchable project store, and the OpenTakeoff + Brink MCP tools over HTTP for Claude, behind an owner login.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --import tsx src/main.ts",
+    "dev": "node --import tsx --watch src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test --test-timeout=60000 test/*.test.ts",
+    "check": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "aws4fetch": "^1.0.20",
+    "express": "^5.1.0",
+    "pdfjs-dist": "^4.10.38",
+    "tsx": "^4.19.2",
+    "yauzl": "^3.2.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.0.0",
+    "@types/yauzl": "^2.10.3",
+    "fflate": "^0.8.3",
+    "pdf-lib": "^1.17.1",
+    "typescript": "^5.7.2"
+  }
+}
