@@ -106,6 +106,12 @@ Decisions taken from it:
   the difference is reported before the traced lengths are trusted. Its plans
   are private and stay on the server.
 
+### Status (2026-11-16)
+
+Items 1–6 below are built and tested (`test/fullbid.test.ts` runs one invented
+bid through all of them). Item 7 needs the deployed server and the owner's
+North Rapid PD plans.
+
 ### Work after the first build lands
 
 1. Pricing engine on the chain above (labor units per pull and per cable, job

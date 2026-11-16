@@ -243,6 +243,36 @@ then run `/mcp` inside Claude Code and choose the server to sign in.
 Claude stays connected: its access renews itself in the background. If you
 remove the connector or change your password hash, connect again the same way.
 
+## 9. Your first bid
+
+Do this once, in any Claude chat with the Brink connector on:
+
+1. **Give Claude your playbook and settings.** Paste your quoting playbook and
+   say: "Save this as my playbook with set_playbook, then fill my settings from
+   it with update_settings: company (name, address, UEI, CAGE), labor units,
+   target bill rate, true cost rate, crew size, hours per day, PM %, material
+   markup, overhead, profit, SD excise, bond, mileage rate, validity, payment
+   terms, warranty, standard exclusions and clarifications." Percentages are
+   stored as fractions (15% is 0.15). Check the result with get_settings.
+   Anything left unset shows up later as a gap in the bid, never as a guess.
+2. **Calibrate before trusting traced lengths.** Upload a past job whose
+   Bluebeam lengths you know, have Claude trace it, and compare the averages
+   per device type before the first live bid.
+
+Then for every bid: upload the package on your phone, and in Claude say which
+project to bid. Claude reads the SOW and specs, takes off, prices it
+(price_bid), looks up and records missing prices with their source and date,
+re-prices until nothing is unpriced, writes the proposal words
+(set_proposal_content) and exports the workbook and the quote (GC sub-bid) or
+the federal cover letter and technical package. Everything says DRAFT.
+
+On your phone, open the project: the **Bid** card shows the price, the links
+over 250 ft and floor crossings to check first, and the documents. Tell
+Claude what to fix; each re-price is a new draft revision. When it is right,
+press **Approve this bid**: the final files are made without DRAFT and appear
+under Documents. Only you can approve; if Claude re-prices afterwards, that is
+a new draft to approve again. You fill and sign the federal forms yourself.
+
 ## Everyday care
 
 - **Update the server** after pulling new code: `fly deploy` from the
