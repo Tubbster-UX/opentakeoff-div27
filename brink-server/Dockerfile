@@ -40,6 +40,10 @@ COPY brink-merge/bin brink-merge/bin
 COPY brink-merge/data brink-merge/data
 COPY brink-merge/supabase brink-merge/supabase
 
+# The cable and totals libraries the bid pricing loads at runtime (pure
+# JS/TS, no packages of their own; tsx runs the .ts ones).
+COPY web/src/lib web/src/lib
+
 # The server itself.
 COPY brink-server/package.json brink-server/package-lock.json brink-server/
 RUN cd brink-server && npm ci --omit=dev && npm cache clean --force
