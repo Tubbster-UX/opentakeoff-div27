@@ -127,3 +127,32 @@ North Rapid PD plans.
 6. Phone project page: long-link and floor-crossing flags first, outputs, bid
    status, Approve.
 7. Calibration run on North Rapid PD before the first live bid.
+
+## Install phase (2026-11-23)
+
+After a bid is approved and won, the owner moves the project to the install
+phase on the project page. Claude then drafts the install design from the
+takeoff (`src/installTypes.ts`), the owner reviews it on the phone and
+approves it for construction, and the server exports the install package for
+the crews. Owner decisions:
+
+- **Sheets (all in the first version):** cover with drawing index and system
+  summary; device plans (every device tagged, legend with model and mounting
+  height); pull-label plans (cable labels, colored by the rack they home-run
+  to); pull schedule tables by destination room; rack elevations with power
+  and heat; signal flow per rack and per room; typical mounting details.
+- **Equipment design** (rack layouts, port assignments, signal flow): Claude
+  drafts it from the takeoff, SOW and equipment spec sheets; the owner
+  reviews on the phone. Only the owner approves; any later change is a new
+  draft revision.
+- **Cable labels:** each job's spec labeling section (27 05 53 / TIA-606)
+  when it has one, recorded with its reference; otherwise type letter + number
+  (D01, V01, S01, F01).
+- **Paper:** 11x17 tabloid, landscape. A pull schedule CSV / XLSX goes with it
+  for label printing.
+- Lengths are the takeoff's measured per-cable lengths; rack sizes, mounting
+  heights and equipment watts come from the spec, the legend or the
+  manufacturer's sheet, never invented: an unknown is an issue on the review.
+- The sample package the owner shared is another firm's work; the package
+  has its own layout and the owner's title block, and the sample is not in the
+  repository.
