@@ -41,6 +41,7 @@ import {
 } from "./projectTools.ts";
 import { BID_INSTRUCTIONS, registerBidTools } from "./bidTools.ts";
 import { registerBidExportTools } from "./bidExportTools.ts";
+import { INSTALL_INSTRUCTIONS, registerInstallTools } from "./installTools.ts";
 
 type Core = typeof import("opentakeoff-core");
 type BrinkMcp = typeof import("brink-merge-mcp");
@@ -228,6 +229,7 @@ export function createMountMcp(opts: McpMountOptions = {}): MountMcp {
       const server = core.buildServer(session);
       appendInstructions(server, PROJECT_INSTRUCTIONS);
       appendInstructions(server, BID_INSTRUCTIONS);
+      appendInstructions(server, INSTALL_INSTRUCTIONS);
       const live: Live = {
         id: null, project: null, autosave: null, session, server,
         transport: null as unknown as StreamableHTTPServerTransport,
@@ -253,6 +255,7 @@ export function createMountMcp(opts: McpMountOptions = {}): MountMcp {
       });
       registerBidTools(server, { deps, session, state: live, linkTtlSec: ttl, pushOutputs: (project) => syncNow(live, project) });
       registerBidExportTools(server, { deps, linkTtlSec: ttl });
+      registerInstallTools(server, { deps, session, state: live, linkTtlSec: ttl, pushOutputs: (project) => syncNow(live, project) });
       inner = wrapTools(server, (name, h, hasInput) => async (...a: unknown[]): Promise<ToolReply> => {
         live.inflight++;
         live.lastUsed = Date.now();
