@@ -154,12 +154,27 @@ export function sequenceNumbers(cables: InstallCable[], ctx: LabelContext): numb
       || natural(ca.to.port ?? "", cb.to.port ?? "")
       || a - b;
   });
+  // A number once given is kept (InstallCable.seq): printed labels must not
+  // move when the takeoff changes. New cables continue after the highest
+  // number in use for their kind; a removed cable's number is not reused.
   const counters = new Map<CableKind, number>();
+  for (const c of cables) {
+    if (Number.isInteger(c.seq) && (c.seq as number) >= 1) counters.set(c.kind, Math.max(counters.get(c.kind) ?? 0, c.seq as number));
+  }
+  const taken = new Map<CableKind, Set<number>>();
   const out = new Array<number>(cables.length);
   for (const i of idx) {
-    const k = cables[i].kind;
-    const n = (counters.get(k) ?? 0) + 1;
-    counters.set(k, n);
+    const c = cables[i];
+    const set = taken.get(c.kind) ?? new Set<number>();
+    taken.set(c.kind, set);
+    if (Number.isInteger(c.seq) && (c.seq as number) >= 1 && !set.has(c.seq as number)) {
+      out[i] = c.seq as number;
+      set.add(out[i]);
+      continue;
+    }
+    const n = (counters.get(c.kind) ?? 0) + 1;
+    counters.set(c.kind, n);
+    set.add(n);
     out[i] = n;
   }
   return out;

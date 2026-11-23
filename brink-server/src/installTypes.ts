@@ -89,6 +89,12 @@ export interface InstallCable {
   notes?: string;
   /** true when the label was set by hand (update_install_design set_cable): relabeling by the scheme keeps it. */
   labelOverride?: boolean;
+  /**
+   * The cable's running number for {seq}, assigned once and kept across
+   * revisions so a printed label never changes when the takeoff does; a
+   * removed cable's number is retired, new cables take the next one per kind.
+   */
+  seq?: number;
 }
 
 // ── equipment and signal flow ───────────────────────────────────────────────

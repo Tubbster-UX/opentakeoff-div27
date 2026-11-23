@@ -161,3 +161,32 @@ test("baseline: re-draft with previous keeps what was set, adds new items, lists
   assert.ok(!again.issues.some((i) => i.code === "mounting_height_unset" && i.ref === "wall_outlet"));
   assert.ok(!again.issues.some((i) => i.code === "rack_size_unknown" && i.ref === "RK-101"));
 });
+
+test("labels keep their numbers across revisions: a removed cable's number is retired, new cables take the next one", () => {
+  const first = draft();
+  const before = new Map(first.cables.map((c) => [`${c.runId}|${c.to.equipment}|${c.to.port}`, c.label]));
+  const removed = first.cables.filter((c) => c.runId === "run-b").map((c) => c.label);
+  assert.ok(removed.length > 0, "run-b has cables to remove");
+  const maxData = Math.max(...first.cables.filter((c) => c.kind === "data").map((c) => c.seq!));
+
+  // the takeoff changes: outlet d2 and its run go, a new WAP w3 is linked
+  const t = installTakeoff();
+  t.shapes = (t.shapes as { id: string }[]).filter((s) => s.id !== "d2");
+  t.cable_runs = (t.cable_runs as { id: string }[]).filter((r) => r.id !== "run-b");
+  (t.shapes as unknown[]).push(
+    { id: "w3", condition_id: "WAP", sheet_id: S1, measure_role: "count", verts_norm: [[0.75, 0.25]], computed: { count: 1 } },
+    { id: "r8", condition_id: "ROUTE", sheet_id: S1, measure_role: "linear", verts_norm: [[0, 0], [1, 0]], computed: { perimeter_lf: 20 } },
+  );
+  (t.cable_runs as unknown[]).push({ id: "run-h", device_shape_ids: ["w3"], route_shape_ids: ["r8"], tr_id: "t1", provenance: { method: "manual", created_at: NOW } });
+  const again = draft(t, { previous: first });
+
+  for (const c of again.cables) {
+    const was = before.get(`${c.runId}|${c.to.equipment}|${c.to.port}`);
+    if (was) assert.equal(c.label, was, `${c.to.equipment} kept its printed label`);
+  }
+  for (const l of removed) assert.ok(!again.cables.some((c) => c.label === l), `${l} is retired, not reused`);
+  const fresh = again.cables.filter((c) => c.runId === "run-h");
+  assert.ok(fresh.length > 0);
+  for (const c of fresh) assert.ok(c.kind !== "data" || c.seq! > maxData, `new cable ${c.label} continues after the highest number`);
+  assert.equal(new Set(again.cables.map((c) => c.label)).size, again.cables.length, "labels stay unique");
+});

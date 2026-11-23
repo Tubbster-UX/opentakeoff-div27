@@ -20,7 +20,7 @@
 import type {
   CableKind, Connection, EquipmentPort, InstallCable, InstallDesign, InstallDevice, InstallEquipment, InstallIssue, MountingDetail, Rack, RackItem,
 } from "../installTypes.ts";
-import { applyLabelScheme, defaultLabelScheme } from "./labels.ts";
+import { applyLabelScheme, defaultLabelScheme, sequenceNumbers } from "./labels.ts";
 import { checkInstallDesign, panelTags, sortIssues } from "./check.ts";
 
 type CableLib = typeof import("opentakeoff-web-cable");
@@ -196,6 +196,9 @@ export function refreshDesign(design: InstallDesign): InstallDesign {
     const r = c.from.rack ? rackById.get(c.from.rack) : undefined;
     if (r) c.from.location = `${r.id} ${r.name}`.trim();
   }
+  // Fix each cable's running number before labelling (kept across revisions).
+  const seqs = sequenceNumbers(design.cables, design);
+  design.cables.forEach((c, i) => { c.seq = seqs[i]; });
   const labels = applyLabelScheme(design.labelScheme, design.cables, design);
   design.cables.forEach((c, i) => { if (!c.labelOverride) c.label = labels[i]; });
   const manual = design.connections.filter((c) => !c.id.startsWith("fc-"));
@@ -403,6 +406,7 @@ export function draftInstallDesign(args: DraftArgs): InstallDesign {
       };
       if (p) {
         if (p.labelOverride) { cab.label = p.label; cab.labelOverride = true; }
+        if (p.seq !== undefined && p.kind === kind) cab.seq = p.seq;
         if (p.spare !== undefined) cab.spare = p.spare;
         if (p.notes !== undefined) cab.notes = p.notes;
         if (p.from.rack === d.rack && p.from.equipment && p.from.port) { cab.from.equipment = p.from.equipment; cab.from.port = p.from.port; }
