@@ -47,18 +47,26 @@ const SUBST: Record<string, string> = {
   "●": "•", "▪": "•", "◦": "•", "⁃": "-", "­": "",
 };
 
-export interface FlowMeta { title: string; author: string; subject?: string; keywords?: string[] }
+export interface FlowMeta {
+  title: string;
+  author: string;
+  subject?: string;
+  keywords?: string[];
+  /** Page size in points; Letter portrait (612 x 792) when absent. The install package uses tabloid landscape (1224 x 792). */
+  pageSize?: [number, number];
+}
 
 export class PdfFlow {
-  readonly W = 612;
-  readonly H = 792;
+  readonly W: number;
+  readonly H: number;
   readonly M = { top: 54, bottom: 62, left: 54, right: 54 };
   pages: PDFPage[] = [];
   page!: PDFPage;
   y = 0;
   private readonly chars: Set<number>;
 
-  private constructor(readonly doc: PDFDocument, readonly regular: PDFFont, readonly bold: PDFFont, readonly italic: PDFFont) {
+  private constructor(readonly doc: PDFDocument, readonly regular: PDFFont, readonly bold: PDFFont, readonly italic: PDFFont, size: [number, number] = [612, 792]) {
+    [this.W, this.H] = size;
     this.chars = new Set(regular.getCharacterSet());
   }
 
@@ -73,7 +81,7 @@ export class PdfFlow {
     const [regular, bold, italic] = await Promise.all([
       doc.embedFont(StandardFonts.Helvetica), doc.embedFont(StandardFonts.HelveticaBold), doc.embedFont(StandardFonts.HelveticaOblique),
     ]);
-    const f = new PdfFlow(doc, regular, bold, italic);
+    const f = new PdfFlow(doc, regular, bold, italic, meta.pageSize);
     f.newPage();
     return f;
   }
