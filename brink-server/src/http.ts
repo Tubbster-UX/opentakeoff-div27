@@ -15,6 +15,7 @@ import type { Request, Response, NextFunction } from "express";
 import { buildAuth, type Auth, type BuildAuthDeps } from "./auth.ts";
 import { FsStorage } from "./storage.ts";
 import { bidRoutes, type BidHooks } from "./approval.ts";
+import { installRoutes, type InstallHooks } from "./installApproval.ts";
 import type { AppDeps, MountMcp, ProjectManifest, UploadRecord } from "./types.ts";
 
 const MiB = 1024 * 1024;
@@ -169,6 +170,8 @@ export interface BuildAppOptions {
   resumeIngest?: boolean;
   /** What happens after the owner approves a bid (re-render the final documents). */
   bidHooks?: BidHooks;
+  /** What happens after the owner approves an install design (re-render the package for construction). */
+  installHooks?: InstallHooks;
 }
 
 /** fsstore:// links (local store) are served by the app itself at /_local-store. */
@@ -531,6 +534,8 @@ export function buildApp(
 
   // The owner's bid review and approval (owner cookie + CSRF, like the rest of /api).
   api.use(bidRoutes(deps, opts.bidHooks));
+  // The install phase: start it, review the install design, approve it for construction.
+  api.use(installRoutes(deps, opts.installHooks));
 
   api.use((_req, _res, next) => next(notFound("No such API route.")));
   app.use("/api", api);

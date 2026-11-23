@@ -691,12 +691,14 @@ async function showProject(id) {
   const historyBox = h("div");
   const filesBox = h("div");
   const bidBox = h("div");
-  view = { id, title, infoBox, bidBox, uploadRows, unfinishedBox, historyBox, filesBox, notesDirty: false, manifest: null };
+  const installBox = h("div");
+  view = { id, title, infoBox, bidBox, installBox, uploadRows, unfinishedBox, historyBox, filesBox, notesDirty: false, manifest: null };
   $app.replaceChildren(
     h("p", null, h("a", { href: "#/" }, "‹ All projects")),
     title,
     infoBox,
     bidBox,
+    installBox,
     h(
       "section",
       { class: "card" },
@@ -749,7 +751,8 @@ async function refreshProject() {
   renderUnfinished(v, m);
   renderHistory(v, m);
   renderFiles(v, m);
-  await refreshBid(v, m);
+  const bid = await refreshBid(v, m);
+  await refreshInstall(v, m, bid);
   const busy = m.uploads.some((u) => u.status === "received" || u.status === "processing");
   pollTimer = setTimeout(refreshProject, busy ? 3000 : 30000);
 }
@@ -950,8 +953,9 @@ async function refreshBid(v, m) {
       return;
     }
   }
-  if (view !== v) return;
+  if (view !== v) return bid;
   renderBid(v, m, bid);
+  return bid;
 }
 
 function renderBid(v, m, bid) {
@@ -1044,6 +1048,91 @@ function renderBid(v, m, bid) {
         : h("p", { class: "small muted" }, "No bid documents yet. Ask Claude to export the workbook and proposal."),
       why,
       h("div", { class: "row" }, approveBtn, withdraw),
+      msg,
+    ),
+  );
+}
+
+// ── install phase: start it, review the install design, approve for construction ──
+
+async function refreshInstall(v, m, bid) {
+  const phase = m.phase || "bid";
+  const bidApproved = bid && bid.status === "approved" && bid.approved && bid.approved.revision === bid.revision;
+  if (phase === "bid") {
+    if (!bidApproved) { v.installBox.replaceChildren(); return; }
+    const msg = h("p", { class: "small", role: "status" });
+    const start = h("button", {
+      type: "button", class: "primary",
+      onclick: async () => {
+        if (!confirm("Start the install phase for this project?\n\nClaude can then draft the install design (tags, labels, racks, signal flow) for your review.")) return;
+        start.disabled = true;
+        try { await api("POST", `/api/projects/${v.id}/phase`, { phase: "install" }); refreshProjectSoon(); }
+        catch (e) { msg.textContent = e.message; start.disabled = false; }
+      },
+    }, "Start install phase");
+    v.installBox.replaceChildren(h("section", { class: "card" }, h("h2", null, "Install"), h("p", { class: "small muted" }, "The bid is approved. When the job is won, start the install phase so Claude can draft the install package for the crews."), start, msg));
+    return;
+  }
+  let data = null;
+  try {
+    data = await api("GET", `/api/projects/${v.id}/install`);
+  } catch (e) {
+    if (view !== v) return;
+    v.installBox.replaceChildren(h("section", { class: "card" }, h("h2", null, "Install ", h("span", { class: "badge" }, phase)), h("p", { class: e.status === 404 ? "muted" : "error" }, e.message)));
+    return;
+  }
+  if (view !== v) return;
+  renderInstall(v, m, data.design);
+}
+
+function renderInstall(v, m, d) {
+  const approved = d.status === "approved" && d.approved && d.approved.revision === d.revision;
+  const errors = (d.issues || []).filter((i) => i.severity === "error");
+  const warnings = (d.issues || []).filter((i) => i.severity !== "error");
+  const docs = m.files.filter((f) => f.kind === "output" && /^(outputs\/)?install\//.test(f.path) && !/\.json$/.test(f.path));
+  const msg = h("p", { class: "small", role: "status" });
+  const list = (items, cls) => h("ul", { class: `flags ${cls}` }, ...items.map((i) => h("li", null, i.message)));
+  const c = d.counts || {};
+  const approve = h("button", {
+    type: "button", class: "primary", disabled: approved || errors.length > 0,
+    onclick: async () => {
+      if (!confirm(`Approve install revision ${d.revision} for construction?\n\nThe package is re-made as ISSUED FOR CONSTRUCTION. Any later change by Claude is a new draft for you to approve again.`)) return;
+      approve.disabled = true;
+      msg.textContent = "Approving…";
+      try {
+        const r = await api("POST", `/api/projects/${v.id}/install/approve`, { revision: d.revision });
+        msg.textContent = r.warning || `Approved revision ${d.revision} for construction.`;
+        refreshProjectSoon();
+      } catch (e) { msg.textContent = e.message; approve.disabled = false; }
+    },
+  }, approved ? "Issued for construction" : "Approve for construction");
+  const withdraw = approved ? h("button", {
+    type: "button", class: "link",
+    onclick: async () => {
+      if (!confirm(`Withdraw the construction approval of revision ${d.revision}?`)) return;
+      try { await api("POST", `/api/projects/${v.id}/install/withdraw`, { revision: d.revision }); refreshProjectSoon(); }
+      catch (e) { msg.textContent = e.message; }
+    },
+  }, "Withdraw approval") : null;
+  v.installBox.replaceChildren(
+    h("section", { class: "card bid" },
+      h("h2", null, "Install ", h("span", { class: `badge ${approved ? "ok" : "draft"}` }, approved ? `For construction · r${d.revision}` : `Draft · r${d.revision}`)),
+      approved ? h("p", { class: "small muted" }, `Approved ${fmtDate(d.approved.at)}`) : null,
+      errors.length
+        ? h("div", null, h("h3", null, `Fix before approving (${errors.length})`), list(errors, "gaps"))
+        : h("p", { class: "small muted" }, "No blocking issues."),
+      h("dl", { class: "stats" },
+        h("dt", null, "Devices"), h("dd", null, String(c.devices ?? "—")),
+        h("dt", null, "Cables"), h("dd", null, String(c.cables ?? "—")),
+        h("dt", null, "Measured cable"), h("dd", null, d.cableFt ? `${d.cableFt.measured.toLocaleString("en-US")} ft` : "—"),
+        h("dt", null, "Racks"), h("dd", null, String(c.racks ?? "—")),
+        h("dt", null, "Labels"), h("dd", null, d.labelScheme ? `${d.labelScheme.pattern}${d.labelScheme.reference ? ` (${d.labelScheme.reference})` : " (default)"}` : "—"),
+      ),
+      warnings.length ? h("details", null, h("summary", null, `Warnings (${warnings.length})`), list(warnings, "review")) : null,
+      docs.length
+        ? h("div", null, h("h3", null, "Install package"), h("ul", { class: "files" }, ...docs.map((f) => h("li", null, h("a", { href: `/api/projects/${v.id}/download?path=${encodeURIComponent(f.path)}` }, f.path.replace(/^(outputs\/)?install\//, ""))))))
+        : h("p", { class: "small muted" }, "No install package yet. Ask Claude to export it."),
+      h("div", { class: "row" }, approve, withdraw),
       msg,
     ),
   );
