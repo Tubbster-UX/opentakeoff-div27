@@ -37,6 +37,10 @@ crops through tools, so a 300 MB plan set is no different from a 3 MB one.
 | `src/bidTypes.ts` | Bid contracts (settings, price book, `BidDraft`). Change only by agreement. |
 | `src/settings.ts`, `src/pricebook.ts` | Owner settings + playbook (`system/settings.json`, `system/playbook.md`; percentages are fractions) and the append-only price book (`system/pricebook.json`). |
 | `src/bid/price.ts`, `src/bidTools.ts` | `priceBid` (takeoff + settings + price book → `BidDraft`, using `web/src/lib/cable.js` and `totals.js` at runtime) and the bid MCP tools (`price_bid` writes `outputs/bid/bid.json`). |
+| `src/installTypes.ts` | Install-phase contracts (`InstallDesign`, equipment library). Change only by agreement. |
+| `src/install/labels.ts`, `baseline.ts`, `check.ts`, `ops.ts`, `summary.ts` | Cable label schemes (spec 27 05 53 / TIA-606 pattern, else `{type}{seq:2}`), the install draft from the takeoff (tags, rooms, racks, panels, ports, measured lengths; `previous` keeps edits), the design check, `update_install_design`'s ops. |
+| `src/equipmentLib.ts`, `src/installTools.ts` | Equipment library (`system/equipment.json`, spec-sheet facts with source and date) and the install MCP tools (`install_draft` writes `outputs/install/design.json`; every change is a new draft revision). |
+| `src/installApproval.ts` | Owner routes: install design view / approve / withdraw, and the project phase (install needs an approved bid). |
 | `src/main.ts` | Wiring. |
 | `Dockerfile`, `docs/HOSTED.md` | Image and deploy guide. |
 

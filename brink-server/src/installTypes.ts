@@ -87,6 +87,8 @@ export interface InstallCable {
   to: CableEnd;
   spare?: boolean;
   notes?: string;
+  /** true when the label was set by hand (update_install_design set_cable): relabeling by the scheme keeps it. */
+  labelOverride?: boolean;
 }
 
 // ── equipment and signal flow ───────────────────────────────────────────────
