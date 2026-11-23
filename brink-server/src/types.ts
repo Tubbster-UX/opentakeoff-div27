@@ -113,6 +113,8 @@ export interface ProjectManifest {
   updated: string;
   files: ProjectFile[];
   uploads: UploadRecord[];
+  /** Where the job stands; absent means "bid". Only the owner changes it (the phone page). */
+  phase?: "bid" | "install" | "closeout";
 }
 
 /** Text of one file, page by page (one "page" for non-paged formats; one per sheet for Excel). */
