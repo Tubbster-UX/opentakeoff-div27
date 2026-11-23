@@ -1126,7 +1126,7 @@ function renderInstall(v, m, d) {
         h("dt", null, "Cables"), h("dd", null, String(c.cables ?? "—")),
         h("dt", null, "Measured cable"), h("dd", null, d.cableFt ? `${d.cableFt.measured.toLocaleString("en-US")} ft` : "—"),
         h("dt", null, "Racks"), h("dd", null, String(c.racks ?? "—")),
-        h("dt", null, "Labels"), h("dd", null, d.labelScheme ? `${d.labelScheme.pattern}${d.labelScheme.reference ? ` (${d.labelScheme.reference})` : " (default)"}` : "—"),
+        h("dt", null, "Labels"), h("dd", null, d.labelScheme ? `${d.labelScheme.description || d.labelScheme.pattern}${d.labelScheme.reference ? ` (spec ${d.labelScheme.reference})` : " (default)"}` : "—"),
       ),
       warnings.length ? h("details", null, h("summary", null, `Warnings (${warnings.length})`), list(warnings, "review")) : null,
       docs.length

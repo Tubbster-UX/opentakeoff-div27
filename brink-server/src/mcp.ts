@@ -40,6 +40,7 @@ import {
   type OpenState, type ToolReply,
 } from "./projectTools.ts";
 import { BID_INSTRUCTIONS, registerBidTools } from "./bidTools.ts";
+import { registerInstallExportTools } from "./installExportTools.ts";
 import { registerBidExportTools } from "./bidExportTools.ts";
 import { INSTALL_INSTRUCTIONS, registerInstallTools } from "./installTools.ts";
 
@@ -256,6 +257,7 @@ export function createMountMcp(opts: McpMountOptions = {}): MountMcp {
       registerBidTools(server, { deps, session, state: live, linkTtlSec: ttl, pushOutputs: (project) => syncNow(live, project) });
       registerBidExportTools(server, { deps, linkTtlSec: ttl });
       registerInstallTools(server, { deps, session, state: live, linkTtlSec: ttl, pushOutputs: (project) => syncNow(live, project) });
+      registerInstallExportTools(server, { deps, linkTtlSec: ttl });
       inner = wrapTools(server, (name, h, hasInput) => async (...a: unknown[]): Promise<ToolReply> => {
         live.inflight++;
         live.lastUsed = Date.now();

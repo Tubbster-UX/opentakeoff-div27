@@ -273,6 +273,29 @@ press **Approve this bid**: the final files are made without DRAFT and appear
 under Documents. Only you can approve; if Claude re-prices afterwards, that is
 a new draft to approve again. You fill and sign the federal forms yourself.
 
+## 10. When you win: the install package
+
+1. On the project page, once the bid is approved, press **Start install
+   phase**.
+2. In Claude: "Draft the install design for <project>." Claude tags every
+   device by room (DO-101, WAP-102…), puts a rack at each telecom room with
+   patch panels and port assignments, labels every cable by the job's spec
+   labeling section (or D01, V01, S01, F01 when the spec has none), and lists
+   what it could not know. Then ask it to fill the gaps: rack sizes and
+   circuits, mounting heights from the spec or legend, and the rack gear
+   (switches, amps, recorders) from the manufacturers' spec sheets, which it
+   records with their source.
+3. Ask for the package: "Export the install package." You get the 11x17
+   drawings (cover, device plans, pull-label plans, pull schedule by room,
+   rack elevations with power and heat, signal flow, mounting details) and the
+   pull schedule as CSV for your label printer and as Excel. All marked
+   DRAFT.
+4. On your phone the **Install** card lists what must be fixed before
+   approval first, then the counts, the label scheme and the files. When it
+   is right, press **Approve for construction**: the package is re-made as
+   ISSUED FOR CONSTRUCTION. A later change by Claude is a new draft to
+   approve again; cable labels already given never change.
+
 ## Everyday care
 
 - **Update the server** after pulling new code: `fly deploy` from the
