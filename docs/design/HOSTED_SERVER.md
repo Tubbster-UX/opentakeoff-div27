@@ -41,6 +41,10 @@ crops through tools, so a 300 MB plan set is no different from a 3 MB one.
 | `src/install/labels.ts`, `baseline.ts`, `check.ts`, `ops.ts`, `summary.ts` | Cable label schemes (spec 27 05 53 / TIA-606 pattern, else `{type}{seq:2}`), the install draft from the takeoff (tags, rooms, racks, panels, ports, measured lengths; `previous` keeps edits), the design check, `update_install_design`'s ops. |
 | `src/equipmentLib.ts`, `src/installTools.ts` | Equipment library (`system/equipment.json`, spec-sheet facts with source and date) and the install MCP tools (`install_draft` writes `outputs/install/design.json`; every change is a new draft revision). |
 | `src/installApproval.ts` | Owner routes: install design view / approve / withdraw, and the project phase (install needs an approved bid). |
+| `src/dtools/config.ts`, `client.ts` | D-Tools Cloud settings from the environment (`DTOOLS_*`; null without the API key) and the typed API client (X-API-Key + published Basic auth, timeouts, 429/5xx retries honoring Retry-After, page/pageSize pagination, errors that never echo a secret). |
+| `src/dtools/store.ts`, `sync.ts` | `manifest.dtools` links, cached reads (`projects/<p>/dtools/{opportunity,project,quote}.json`), the takeoff → product / room → location mapping (`dtools/mapping.json`), the append-only change log (`system/dtools-log.jsonl`), proposed price changes (`system/dtools-pending-prices.json`); re-read + change report. |
+| `src/dtools/reconcile.ts`, `quoteInputs.ts` | Pure: takeoff facts (EA, cable feet, device rooms) vs a D-Tools quote, ordered by money; the catalog import CSV (D-Tools' sample columns) and the scope-by-location text. |
+| `src/dtoolsTools.ts`, `src/dtoolsRoutes.ts` | The `dtools_*` MCP tools (record writes logged; price changes only queued) and the owner's price approvals + the Bearer-token D-Tools webhook (`mountDtools`). |
 | `src/main.ts` | Wiring. |
 | `Dockerfile`, `docs/HOSTED.md` | Image and deploy guide. |
 
