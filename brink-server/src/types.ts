@@ -115,6 +115,8 @@ export interface ProjectManifest {
   uploads: UploadRecord[];
   /** Where the job stands; absent means "bid". Only the owner changes it (the phone page). */
   phase?: "bid" | "install" | "closeout";
+  /** Links to D-Tools Cloud records (src/dtools/store.ts); absent until linked. */
+  dtools?: { clientId?: string; opportunityId?: string; projectId?: string; quoteId?: string; linkedAt: string; lastSync?: string };
 }
 
 /** Text of one file, page by page (one "page" for non-paged formats; one per sheet for Excel). */

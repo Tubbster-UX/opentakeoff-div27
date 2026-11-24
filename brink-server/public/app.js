@@ -692,11 +692,13 @@ async function showProject(id) {
   const filesBox = h("div");
   const bidBox = h("div");
   const installBox = h("div");
-  view = { id, title, infoBox, bidBox, installBox, uploadRows, unfinishedBox, historyBox, filesBox, notesDirty: false, manifest: null };
+  const dtoolsBox = h("div");
+  view = { id, title, infoBox, bidBox, installBox, dtoolsBox, uploadRows, unfinishedBox, historyBox, filesBox, notesDirty: false, manifest: null };
   $app.replaceChildren(
     h("p", null, h("a", { href: "#/" }, "‹ All projects")),
     title,
     infoBox,
+    dtoolsBox,
     bidBox,
     installBox,
     h(
@@ -753,6 +755,7 @@ async function refreshProject() {
   renderFiles(v, m);
   const bid = await refreshBid(v, m);
   await refreshInstall(v, m, bid);
+  await refreshDtools(v);
   const busy = m.uploads.some((u) => u.status === "received" || u.status === "processing");
   pollTimer = setTimeout(refreshProject, busy ? 3000 : 30000);
 }
@@ -1136,4 +1139,53 @@ function renderInstall(v, m, d) {
       msg,
     ),
   );
+}
+
+// ── D-Tools: catalog price changes Claude proposed wait for the owner's OK ──
+
+async function refreshDtools(v) {
+  let data = null;
+  try {
+    data = await api("GET", "/api/dtools/pending-prices?status=pending");
+  } catch {
+    v.dtoolsBox.replaceChildren(); // D-Tools not mounted on this server
+    return;
+  }
+  if (view !== v) return;
+  const entries = (data && data.entries) || [];
+  if (!entries.length) { v.dtoolsBox.replaceChildren(); return; }
+  const fmt = (n) => (n == null ? "—" : money(n));
+  const FIELDS = [["unitPrice", "Price"], ["unitCost", "Cost"], ["msrp", "MSRP"]];
+  const row = (e) => {
+    const msg = h("p", { class: "small", role: "status" });
+    const name = [e.brand, e.model].filter(Boolean).join(" ") || e.partNumber || e.productId;
+    const decide = (what) => async () => {
+      if (what === "approve" && !confirm(`Change ${name} in the D-Tools catalog?`)) return;
+      approve.disabled = reject.disabled = true;
+      msg.textContent = what === "approve" ? "Applying in D-Tools…" : "Rejecting…";
+      try {
+        await api("POST", `/api/dtools/pending-prices/${e.id}/${what}`, {});
+        refreshProjectSoon();
+      } catch (err) {
+        msg.textContent = err.message;
+        approve.disabled = reject.disabled = false;
+      }
+    };
+    const approve = h("button", { type: "button", class: "primary", onclick: decide("approve") }, "Approve");
+    const reject = h("button", { type: "button", class: "link", onclick: decide("reject") }, "Reject");
+    const changes = FIELDS.filter(([k]) => e.new && e.new[k] !== undefined).map(([k, label]) => `${label} ${fmt(e.old ? e.old[k] : null)} → ${fmt(e.new[k])}`);
+    return h("li", null,
+      h("strong", null, name),
+      h("p", { class: "small" }, changes.join(" · ")),
+      h("p", { class: "small muted" }, `${e.source} (${e.date})`),
+      e.error ? h("p", { class: "small warn" }, `Last try failed: ${e.error}`) : null,
+      h("div", { class: "row" }, approve, reject),
+      msg,
+    );
+  };
+  v.dtoolsBox.replaceChildren(h("section", { class: "card" },
+    h("h2", null, "D-Tools price changes ", h("span", { class: "badge draft" }, String(entries.length))),
+    h("p", { class: "small muted" }, "Claude proposed these catalog prices. Nothing changes in D-Tools until you approve."),
+    h("ul", { class: "flags" }, ...entries.map(row)),
+  ));
 }

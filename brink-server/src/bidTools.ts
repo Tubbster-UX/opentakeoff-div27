@@ -298,7 +298,7 @@ export function registerBidTools(server: McpServer, ctx: BidToolsCtx): void {
 
 /** The server instructions' bid section (src/mcp.ts appends it). */
 export const BID_INSTRUCTIONS = [
-  "BIDS: Claude prices the owner's bids as drafts. Workflow:",
+  "BIDS: the owner now prices and proposes in D-Tools Cloud (see D-TOOLS CLOUD below); use these bid tools only when the owner asks for a bid priced on this server. Then Claude prices the owner's bids as drafts. Workflow:",
   "1. get_playbook and get_settings first, every bid; follow the playbook. Fill unset settings only from the playbook or the owner (update_settings; percentages are fractions, 0.15 = 15%).",
   "2. Take off in the project (open_project, counts, cable_setup, routes, link_run) as the playbook says.",
   "3. price_bid {project, inputs}: it writes outputs/bid/bid.json and returns the base bid, gaps and flags.",

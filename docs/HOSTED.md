@@ -296,6 +296,59 @@ a new draft to approve again. You fill and sign the federal forms yourself.
    ISSUED FOR CONSTRUCTION. A later change by Claude is a new draft to
    approve again; cable labels already given never change.
 
+## 11. Connect D-Tools Cloud
+
+D-Tools Cloud is where you keep the catalog, pricing, proposals and project
+management. Brink keeps what D-Tools does not do (bid-package intake, the plan
+takeoff with measured cable, reading specs, federal documents) and stays in
+sync with D-Tools, so Claude can work across both.
+
+1. **Make an API key in D-Tools:** Settings → Integration → Developer →
+   generate a key. Copy it.
+2. **Get the two Basic-auth values.** Every D-Tools API call also carries an
+   HTTP Basic username and password that D-Tools publishes for all API users
+   in its Postman collection for the D-Tools Cloud API (they are the same for
+   everyone, not your login). Copy both from that collection.
+3. **Make a webhook token:** any long random text, for example
+   `openssl rand -hex 32`.
+4. **Give the server all four** (one line, from the repository's top folder):
+
+   ```sh
+   fly secrets set DTOOLS_API_KEY=<YOUR-KEY> DTOOLS_BASIC_USER=<USER-FROM-POSTMAN> DTOOLS_BASIC_PASSWORD=<PASSWORD-FROM-POSTMAN> DTOOLS_WEBHOOK_TOKEN=<RANDOM-TOKEN>
+   ```
+
+   The server restarts by itself. Never put these values in a file in the
+   repository. Until `DTOOLS_API_KEY` is set, Claude's D-Tools tools answer
+   "D-Tools is not connected".
+5. **Create the webhook in D-Tools** (**New Webhook**, in its integration
+   settings): URL `https://<YOUR-HOST>/webhooks/dtools`, auth type **Bearer
+   Token**, token = the `DTOOLS_WEBHOOK_TOKEN` from step 3, and choose the
+   changes it offers for opportunities, projects, quotes and clients. When something changes in
+   D-Tools, Brink re-reads it through the API (it never trusts what the
+   webhook says) and refreshes the projects linked to it.
+
+**What Claude can and cannot change in D-Tools**
+
+| Claude may, on its own (every change is logged) | Waits for you | The API cannot do it |
+|---|---|---|
+| Create and update clients; create opportunities and change their header (client, name, number, addresses, quote template, budget, owner, close date, contacts); change project details (dates, project manager, budget, contacts) | Catalog price changes (MSRP, cost, price): Claude only proposes them with a source and date; they appear as **D-Tools price changes** on the project page and change D-Tools only when you press **Approve** | Write quote items. Quotes are read-only in the D-Tools API |
+
+**Getting the takeoff into a quote.** Because quote items cannot be written
+through the API, ask Claude for the quote inputs ("make the D-Tools quote
+inputs for <project>"). You get two files:
+
+- `catalog-import.csv`: only the products the takeoff needs that your catalog
+  does not have yet, in D-Tools' own import columns. Import it in D-Tools
+  (Catalog → My Products → Import/Export → Import products).
+- `scope-by-location.txt`: "Office 101: 2 x Data outlet, 2-port (CAT6A) ..."
+  room by room, with the cable footage. Paste it into Quote Assist, or build
+  the quote from it.
+
+When the quote exists, tell Claude which one it is (or let it find it) and ask
+it to **reconcile**: it compares the quote with the takeoff (device counts per
+product and per room, cable feet, items only on one side) and lists the
+differences, biggest money first.
+
 ## Everyday care
 
 - **Update the server** after pulling new code: `fly deploy` from the
