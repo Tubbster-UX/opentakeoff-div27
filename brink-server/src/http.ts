@@ -16,6 +16,7 @@ import { buildAuth, type Auth, type BuildAuthDeps } from "./auth.ts";
 import { FsStorage } from "./storage.ts";
 import { bidRoutes, type BidHooks } from "./approval.ts";
 import { installRoutes, type InstallHooks } from "./installApproval.ts";
+import { mountDtools } from "./dtoolsRoutes.ts";
 import type { AppDeps, MountMcp, ProjectManifest, UploadRecord } from "./types.ts";
 
 const MiB = 1024 * 1024;
@@ -536,6 +537,9 @@ export function buildApp(
   api.use(bidRoutes(deps, opts.bidHooks));
   // The install phase: start it, review the install design, approve it for construction.
   api.use(installRoutes(deps, opts.installHooks));
+  // D-Tools Cloud: owner routes (pending price changes, status) on /api, and the
+  // webhook D-Tools calls at /webhooks/dtools (its own Bearer token, not the owner cookie).
+  const dtools = mountDtools(app, api, deps);
 
   api.use((_req, _res, next) => next(notFound("No such API route.")));
   app.use("/api", api);
@@ -630,7 +634,7 @@ export function buildApp(
     queue,
     async close() {
       auth.close();
-      await Promise.allSettled([mcp.close(), queue.stop(20_000)]);
+      await Promise.allSettled([mcp.close(), queue.stop(20_000), dtools.webhook.idle()]);
     },
   };
 }
