@@ -160,3 +160,31 @@ the crews. Owner decisions:
 - The sample package the owner shared is another firm's work; the package
   has its own layout and the owner's title block, and the sample is not in the
   repository.
+
+## D-Tools Cloud (2026-11-24)
+
+The owner moved to D-Tools Cloud. What D-Tools already does is no longer
+developed here: the pricing engine, price book, GC proposal and bid workbook
+stay in the code but get no new work, and Claude prices and proposes in
+D-Tools. This system keeps what D-Tools lacks (bid-package intake, automated
+plan takeoff with measured cable, spec reading, federal documents) and stays
+in sync with D-Tools through its public API (`src/dtools/`).
+
+What D-Tools' published Cloud API (v1) allows, checked against its OpenAPI
+spec and Postman collection on 2026-11-24: create/update clients; create and
+update opportunity headers (no line items); update project headers; update
+product prices, statuses and barcodes; read quotes in full (items, locations,
+systems, labor, lengths), projects, change orders, purchase orders, files,
+time entries; webhooks on change. **Quote items cannot be written** by any
+outside system, and D-Tools documents CSV import only for the product catalog.
+
+Owner decisions:
+- Claude creates and updates D-Tools records (clients, opportunities, project
+  details) on its own; every write is logged. Price changes are queued and
+  applied only after the owner approves them on the phone page.
+- Takeoff into a quote: the system writes a catalog import CSV for products
+  the job needs that are not in the catalog, and a scope-by-location text for
+  D-Tools' Quote Assist; then `dtools_reconcile` reads the quote back and
+  lists every difference from the measured takeoff by room, ordered by money.
+- If the owner finds an item import in the quote editor, the file is matched
+  to it; a request for write access to quote items goes to D-Tools.
